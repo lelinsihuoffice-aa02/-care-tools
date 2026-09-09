@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>長照工作系統入口</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#3f3a33;
+    --paper:#f3ede0;
+    --panel:#fffcf5;
+    --line:#e2d9c4;
+    --teal:#748a6f;
+    --teal-dark:#455943;
+    --gold:#c08a3e;
+    --gold-soft:#f2e3c4;
+    --muted:#8a8172;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:"Noto Sans TC",sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.5;
+    min-height:100vh;
+  }
+  header.top{
+    background:var(--teal-dark);
+    color:#f4f1e6;
+    padding:34px 24px 30px;
+    border-radius:0 0 28px 28px;
+  }
+  header.top h1{
+    font-family:"Noto Serif TC",serif;
+    font-weight:700;
+    font-size:26px;
+    margin:0 0 8px;
+    letter-spacing:.5px;
+  }
+  header.top p{
+    margin:0;
+    font-size:13.5px;
+    color:#cfcabb;
+    max-width:640px;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:24px 20px 40px;}
+  .hint{font-size:13px;color:var(--muted);margin:0 0 18px;}
+
+  .grid{display:flex;flex-direction:column;gap:16px;}
+
+  a.card{
+    display:flex;
+    gap:16px;
+    align-items:center;
+    text-decoration:none;
+    color:var(--ink);
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:22px;
+    box-shadow:0 2px 14px rgba(18,51,48,.06);
+    padding:22px 22px;
+    transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  a.card:active{transform:scale(.985);}
+  a.card:hover{border-color:var(--teal);box-shadow:0 4px 18px rgba(18,51,48,.1);}
+
+  .card .icon{
+    flex:none;
+    width:52px;height:52px;
+    border-radius:16px;
+    background:var(--gold-soft);
+    display:flex;align-items:center;justify-content:center;
+    font-family:"Noto Serif TC",serif;
+    font-weight:700;
+    font-size:20px;
+    color:var(--gold);
+  }
+  .card.b .icon{background:#e6ebe0;color:var(--teal-dark);}
+
+  .card .body{flex:1;min-width:0;}
+  .card h2{
+    font-family:"Noto Serif TC",serif;
+    font-size:17px;
+    margin:0 0 4px;
+    color:var(--teal-dark);
+  }
+  .card p{
+    margin:0;
+    font-size:13px;
+    color:var(--muted);
+  }
+  .card .arrow{
+    flex:none;
+    font-size:20px;
+    color:var(--line);
+  }
+
+  footer.foot{
+    max-width:720px;margin:8px auto 0;padding:0 20px 24px;
+    font-size:12px;color:var(--muted);text-align:center;
+  }
+
+  @media (max-width:600px){
+    header.top{padding:26px 18px 24px;border-radius:0 0 20px 20px;}
+    header.top h1{font-size:21px;}
+    .wrap{padding:20px 14px 32px;}
+    a.card{padding:18px 16px;border-radius:18px;gap:14px;}
+    .card .icon{width:46px;height:46px;font-size:18px;border-radius:14px;}
+    .card h2{font-size:16px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>長照工作系統</h1>
+  <p>請選擇要使用的系統，點選卡片即可前往。</p>
+</header>
+
+<div class="wrap">
+  <p class="hint">共 2 個系統</p>
+  <div class="grid">
+    <a class="card a" href="https://lelinsihuoffice-aa02.github.io/care-app/">
+      <div class="icon">個</div>
+      <div class="body">
+        <h2>個管服務系統</h2>
+        <p>個案管理相關作業</p>
+      </div>
+      <div class="arrow">›</div>
+    </a>
+
+    <a class="card b" href="https://lelinsihuoffice-aa02.github.io/-care-tools/長照額度試算系統.html">
+      <div class="icon">額</div>
+      <div class="body">
+        <h2>長照額度試算系統</h2>
+        <p>依長照 2.0 給付基準試算各項服務額度</p>
+      </div>
+      <div class="arrow">›</div>
+    </a>
+  </div>
+</div>
+
+<footer class="foot">如連結無法開啟，請確認網路連線或聯繫系統管理者。</footer>
+
+</body>
+</html>
