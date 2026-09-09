@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>長照額度試算系統</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#3f3a33;
+    --paper:#f3ede0;
+    --panel:#fffcf5;
+    --line:#e2d9c4;
+    --teal:#748a6f;
+    --teal-dark:#455943;
+    --gold:#c08a3e;
+    --gold-soft:#f2e3c4;
+    --red:#b35a45;
+    --red-soft:#f5e2da;
+    --green-soft:#e6ebe0;
+    --muted:#8a8172;
+    --remain:#5f7f92;
+    --remain-soft:#e2ebee;
+    --owed:#8a5a72;
+    --owed-soft:#f1e2e9;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:"Noto Sans TC",sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.5;
+    padding-bottom:120px;
+  }
+  header.top{
+    background:var(--teal-dark);
+    color:#f4f1e6;
+    padding:30px 24px 26px;
+    border-radius:0 0 28px 28px;
+  }
+  header.top h1{
+    font-family:"Noto Serif TC",serif;
+    font-weight:700;
+    font-size:26px;
+    margin:0 0 6px;
+    letter-spacing:.5px;
+  }
+  header.top p{
+    margin:0;
+    font-size:13.5px;
+    color:#cfcabb;
+    max-width:760px;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:20px 20px 0;}
+
+  .basic-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:22px;
+    box-shadow:0 2px 14px rgba(18,51,48,.06);
+    padding:24px 26px;
+    margin:20px auto 0;
+    max-width:1040px;
+  }
+  .basic-card h2, .panel h2{
+    font-family:"Noto Serif TC",serif;
+    font-size:17px;
+    margin:0 0 14px;
+    color:var(--teal-dark);
+    display:inline-flex;align-items:center;gap:9px;
+  }
+  .basic-card h2::before, .panel h2::before{
+    content:"";width:9px;height:9px;border-radius:50%;background:var(--gold);flex:none;
+  }
+  .field-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:18px 26px;
+    align-items:flex-end;
+  }
+  .field{display:flex;flex-direction:column;gap:5px;min-width:150px;}
+  .field label{font-size:12.5px;color:var(--muted);font-weight:500;}
+  select, input[type=number], input[type=date], input[type=text]{
+    font-family:inherit;
+    font-size:14px;
+    padding:8px 12px;
+    border:1px solid var(--line);
+    border-radius:12px;
+    background:#fff;
+    color:var(--ink);
+  }
+  select:focus, input:focus{outline:2px solid var(--teal);outline-offset:1px;}
+  .toggle-group{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;padding:3px;background:#f2efe4;gap:2px;}
+  .toggle-group button{
+    border:none;background:transparent;padding:7px 16px;font-size:13.5px;cursor:pointer;
+    font-family:inherit;color:var(--muted);border-radius:999px;
+  }
+  .toggle-group button.active{background:var(--teal);color:#fff;box-shadow:0 1px 4px rgba(18,51,48,.25);}
+  .toggle-group button+button{border-left:none;}
+
+  .prorate-box{
+    margin-top:18px;padding-top:16px;border-top:1px dashed var(--line);
+    display:flex;flex-wrap:wrap;gap:16px 26px;align-items:flex-end;
+  }
+  .prorate-result{
+    font-size:13px;color:var(--teal-dark);background:var(--green-soft);
+    border-radius:14px;padding:9px 14px;min-width:220px;
+  }
+
+  nav.tabs{
+    max-width:1040px;margin:24px auto 0;display:flex;gap:8px;flex-wrap:wrap;
+    padding:6px;background:#efece1;border-radius:999px;
+  }
+  nav.tabs button{
+    font-family:"Noto Sans TC",sans-serif;
+    font-size:14px;font-weight:500;
+    background:transparent;border:none;
+    padding:10px 18px;cursor:pointer;color:var(--muted);
+    border-radius:999px;
+  }
+  nav.tabs button.active{color:#fff;background:var(--teal-dark);font-weight:700;box-shadow:0 2px 8px rgba(18,51,48,.25);}
+
+  .panel{
+    max-width:1040px;margin:18px auto 0;
+    background:var(--panel);border:1px solid var(--line);border-radius:22px;
+    box-shadow:0 2px 14px rgba(18,51,48,.06);
+    padding:24px 26px 28px;display:none;
+  }
+  .panel.active{display:block;}
+  .subhead{font-size:13px;color:var(--muted);margin:18px 0 8px;font-weight:700;}
+  .subhead:first-of-type{margin-top:0;}
+
+  nav.subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;}
+  nav.subtabs button{
+    font-family:"Noto Sans TC",sans-serif;font-size:13px;font-weight:500;
+    background:#f2efe4;border:1px solid transparent;color:var(--muted);
+    padding:8px 15px;border-radius:999px;cursor:pointer;
+  }
+  nav.subtabs button.active{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:700;}
+  .caresub{display:none;}
+  .caresub.active{display:block;}
+  .note{font-size:12px;color:var(--muted);background:#f2efe4;border-radius:14px;padding:10px 14px;margin:6px 0 14px;}
+
+  .table-wrap{border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-bottom:14px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:0;}
+  .table-wrap table{margin-bottom:0;}
+  th,td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;}
+  thead th{background:#f4f2ea;}
+  tbody tr:last-child td{border-bottom:none;}
+  th{font-size:11.5px;color:var(--muted);font-weight:700;text-transform:none;}
+  td.num, th.num{text-align:right;font-variant-numeric:tabular-nums;}
+  td.code{font-family:monospace;color:var(--teal-dark);font-weight:700;white-space:nowrap;}
+  input.qty{width:64px;text-align:right;padding:6px 8px;border-radius:10px;}
+  tr.disabled td{color:#b9b6a9;}
+  tr.disabled input{background:#f1efe6;}
+
+  .bucket-summary{
+    display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;
+  }
+  .bucket-summary .card{
+    flex:1;min-width:230px;background:#faf9f5;border:1px solid var(--line);
+    border-radius:16px;padding:16px 18px;
+  }
+  .bucket-summary .card .k{font-size:12px;color:var(--muted);}
+  .bucket-summary .card .v{font-size:20px;font-weight:700;color:var(--teal-dark);font-variant-numeric:tabular-nums;}
+  .bucket-summary .card.over .v{color:var(--red);}
+  .bucket-summary .card.over{background:var(--red-soft);border-color:#dcb6a8;}
+  .bucket-summary .card.remain .v{color:var(--remain);}
+  .bucket-summary .card.remain{background:var(--remain-soft);border-color:#c3d3d9;}
+  .bucket-summary .card.owed .v{color:var(--owed);}
+  .bucket-summary .card.owed{background:var(--owed-soft);border-color:#d9bfcb;}
+
+  footer.bar{
+    position:fixed;left:12px;right:12px;bottom:12px;
+    background:var(--teal-dark);color:#f4f1e6;
+    padding:14px 24px;
+    display:flex;justify-content:center;
+    border-radius:22px;
+    box-shadow:0 8px 24px rgba(18,51,48,.3);
+  }
+  footer.bar .inner{
+    max-width:1040px;width:100%;display:flex;flex-wrap:wrap;gap:10px 28px;align-items:center;
+  }
+  footer.bar .item{font-size:13px;}
+  footer.bar .item b{display:block;font-size:17px;font-variant-numeric:tabular-nums;}
+  footer.bar .item.warn b{color:#f2b6a3;}
+  footer.bar .item.ok b{color:#bfe0c9;}
+
+  .grp-select{display:flex;gap:10px;flex-wrap:wrap;}
+  .grp-select label{
+    border:1px solid var(--line);border-radius:18px;padding:10px 16px;font-size:13px;
+    display:flex;gap:7px;align-items:center;cursor:pointer;background:#fff;
+  }
+  .grp-select input{margin:0;}
+  .grp-select label.sel{border-color:var(--teal);background:var(--green-soft);}
+
+  .pool-cards{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0 18px;}
+  .pool-cards .p{flex:1;min-width:210px;border:1px solid var(--line);border-radius:16px;padding:14px 16px;background:#faf9f5;}
+  .pool-cards .p .k{font-size:12px;color:var(--muted);}
+  .pool-cards .p .bar{height:8px;background:#e7e3d5;border-radius:999px;margin:8px 0 6px;overflow:hidden;}
+  .pool-cards .p .bar i{display:block;height:100%;background:var(--teal);border-radius:999px;}
+  .pool-cards .p .v{font-size:13.5px;font-variant-numeric:tabular-nums;}
+  .pool-cards .p.over .bar i{background:var(--red);}
+
+  .assist-controls{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end;margin-bottom:10px;}
+
+  .final-table td, .final-table th{padding:10px 12px;}
+  .final-table tr.total td{font-weight:700;border-top:2px solid var(--teal-dark);}
+  .flag-over{color:var(--red);font-weight:700;background:var(--red-soft);padding:2px 9px;border-radius:999px;font-size:12px;}
+  .flag-ok{color:var(--teal);font-weight:700;background:var(--green-soft);padding:2px 9px;border-radius:999px;font-size:12px;}
+
+  /* ============================ 手機版（主要使用情境） ============================ */
+  @media (max-width: 600px){
+    body{padding-bottom:150px;}
+    .wrap{padding:14px 12px 0;}
+
+    header.top{padding:20px 16px 18px;border-radius:0 0 20px 20px;}
+    header.top h1{font-size:20px;}
+    header.top p{font-size:12.5px;}
+
+    .basic-card{padding:18px 16px;border-radius:18px;margin-top:14px;}
+    .field-row{flex-direction:column;align-items:stretch;gap:14px;}
+    .field{min-width:0;width:100%;}
+    .field select, .field input[type=number], .field input[type=date], .field input[type=text]{width:100%;}
+    .prorate-box{flex-direction:column;align-items:stretch;gap:14px;}
+    .toggle-group{width:100%;}
+    .toggle-group button{flex:1;padding:10px 10px;font-size:13px;}
+
+    /* 主分頁／子分頁改為可橫向滑動，避免擠壓成多行 */
+    nav.tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;justify-content:flex-start;margin:18px 0 0;padding:5px;}
+    nav.tabs button{flex:none;white-space:nowrap;padding:10px 15px;font-size:13.5px;}
+    nav.subtabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+    nav.subtabs button{flex:none;white-space:nowrap;}
+
+    .panel{padding:18px 14px 22px;border-radius:18px;margin-top:14px;}
+
+    /* 表格改為橫向捲動，欄位維持可讀寬度而不被壓縮 */
+    .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:14px;}
+    table{min-width:600px;}
+
+    /* 結果字卡在手機上改為單欄、與容器同寬，方便閱讀與加寬顯示 */
+    .bucket-summary{gap:10px;}
+    .bucket-summary .card{flex:1 1 100%;min-width:0;}
+    .pool-cards{gap:10px;}
+    .pool-cards .p{flex:1 1 100%;min-width:0;}
+
+    .grp-select{flex-direction:column;gap:8px;}
+    .grp-select label{width:100%;}
+    .assist-controls{flex-direction:column;align-items:stretch;}
+
+    input.qty{width:56px;padding:8px 6px;}
+
+    /* 底部固定摘要列改為單行橫向捲動，避免佔用過多畫面高度 */
+    footer.bar{left:8px;right:8px;bottom:8px;padding:12px 16px;border-radius:18px;}
+    footer.bar .inner{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;justify-content:flex-start;gap:22px;}
+    footer.bar .item{flex:none;white-space:nowrap;}
+    footer.bar .item b{font-size:16px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>長照額度試算系統</h1>
+  <p>依長照 2.0 給付基準試算：照顧服務（居家 / 日照 / 家托 / 專業服務）、交通接送、喘息與短照、輔具及居家環境改善。各區塊金額為自動加總的參考試算，正式核定金額仍以主管機關核定為準。</p>
+</header>
+
+<div class="wrap">
+  <div class="basic-card">
+    <h2>一、個案基本資料</h2>
+    <div class="field-row">
+      <div class="field">
+        <label for="level">長照需求等級</label>
+        <select id="level" onchange="onBasicChange()">
+          <option value="2">第2級</option>
+          <option value="3">第3級</option>
+          <option value="4">第4級</option>
+          <option value="5">第5級</option>
+          <option value="6">第6級</option>
+          <option value="7">第7級</option>
+          <option value="8">第8級</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="identity">身分別</label>
+        <select id="identity" onchange="onBasicChange()">
+          <option value="g">一般戶（自付16%）</option>
+          <option value="m">中低收入戶（自付5%）</option>
+          <option value="l">低收入戶（全額補助）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>是否聘僱外籍看護</label>
+        <div class="toggle-group" id="foreignToggle">
+          <button data-v="0" class="active" onclick="setForeign(0)">否</button>
+          <button data-v="1" onclick="setForeign(1)">是（僅補助30%）</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="prorate-box">
+      <div class="field">
+        <label>本月是否為初評／出院備案（依比例分算當月額度）</label>
+        <div class="toggle-group" id="prorateToggle">
+          <button data-v="0" class="active" onclick="setProrate(0)">否，全月額度</button>
+          <button data-v="1" onclick="setProrate(1)">是，需按比例分算</button>
+        </div>
+      </div>
+      <div class="field" id="prorateDateField" style="display:none;">
+        <label for="prorateDate">照會 / 出院日期</label>
+        <input type="date" id="prorateDate" onchange="onBasicChange()">
+      </div>
+      <div class="prorate-result" id="prorateResult" style="display:none;"></div>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <button class="active" data-tab="care" onclick="showTab('care')">照顧服務</button>
+    <button data-tab="transport" onclick="showTab('transport')">交通接送</button>
+    <button data-tab="respite" onclick="showTab('respite')">喘息 / 短照</button>
+    <button data-tab="assist" onclick="showTab('assist')">輔具 / 居家環境改善</button>
+    <button data-tab="summary" onclick="showTab('summary')">總結</button>
+  </nav>
+
+  <!-- ============ 照顧服務 ============ -->
+  <section class="panel active" id="panel-care">
+    <h2>照顧服務（居家服務 + 日間照顧 + 家庭托顧 + 專業服務）共用同一額度</h2>
+    <div class="note">居家式基本照顧（BA 碼，不含到宅沐浴車）於「聘僱外籍看護」情況下不可申請，系統將自動鎖定。日照／家托／專業碼別（C 碼）／到宅沐浴車／BD 碼於聘僱外看情況下仍可申請，但總額度僅為原級距 30%。以下各子項共用同一額度池，總額顯示於下方試算結果。</div>
+
+    <nav class="subtabs" id="careSubtabs">
+      <button class="active" data-sub="basic" onclick="showCareSub('basic')">居家基本照顧</button>
+      <button data-sub="bath" onclick="showCareSub('bath')">到宅沐浴車</button>
+      <button data-sub="prof" onclick="showCareSub('prof')">專業碼別</button>
+      <button data-sub="day" onclick="showCareSub('day')">日間照顧</button>
+      <button data-sub="fam" onclick="showCareSub('fam')">家庭托顧</button>
+    </nav>
+
+    <div class="caresub active" id="caresub-basic">
+      <div class="subhead">居家服務－基本照顧（BA 碼）</div>
+      <div class="table-wrap"><table id="tbl-ba"><thead><tr><th>代碼</th><th>項目</th><th class="num">給付價格</th><th class="num">自付額</th><th class="num">核定次數</th><th class="num">補助小計</th></tr></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="caresub" id="caresub-bath">
+      <div class="subhead">到宅沐浴車服務（限第 6 級以上）</div>
+      <div class="table-wrap"><table id="tbl-bath"><thead><tr><th>代碼</th><th>項目</th><th class="num">給付價格</th><th class="num">自付額</th><th class="num">核定次數</th><th class="num">補助小計</th></tr></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="caresub" id="caresub-prof">
+      <div class="subhead">專業碼別（C 碼）</div>
+      <div class="table-wrap"><table id="tbl-c"><thead><tr><th>代碼</th><th>項目</th><th class="num">給付價格 / 單位</th><th class="num">自付額 / 單位</th><th class="num">核定單位數</th><th class="num">補助小計</th></tr></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="caresub" id="caresub-day">
+      <div class="subhead">日間照顧（依所選等級對應型別，全日 / 半日以「天」計）</div>
+      <div class="table-wrap"><table id="tbl-bb"><thead><tr><th>代碼</th><th>項目</th><th class="num">給付價格 / 天</th><th class="num">自付額 / 天</th><th class="num">核定天數</th><th class="num">補助小計</th></tr></thead><tbody></tbody></table></div>
+      <div class="table-wrap"><table id="tbl-bd-day"><thead><tr><th>代碼</th><th>項目</th><th class="num">給付價格</th><th class="num">自付額</th><th class="num">核定次數</th><th class="num">補助小計</th></tr></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="caresub" id="caresub-fam">
+      <div class="subhead">家庭托顧（依所選等級對應型別）</div>
+      <div class="table-wrap"><table id="tbl-bc"><thead><tr><th>代碼</th><th>項目</th><th class="num">給付價格 / 天</th><th class="num">自付額 / 天</th><th class="num">核定天數</th><th class="num">補助小計</th></tr></thead><tbody></tbody></table></div>
+      <div class="table-wrap"><table id="tbl-bd-fam"><thead><tr><th>代碼</th><th>項目</th><th class="num">給付價格</th><th class="num">自付額</th><th class="num">核定次數</th><th class="num">補助小計</th></tr></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="bucket-summary" id="care-summary"></div>
+  </section>
+
+  <!-- ============ 交通接送 ============ -->
+  <section class="panel" id="panel-transport">
+    <h2>交通接送（DA01，第 2 級以上適用，每月上限 20 趟）</h2>
+    <div class="note">交通接送之部分負擔比率與照顧服務不同：低收 0%／中低收 9%／一般戶 27%。核定即為 1 單位＝1,840 元／月（無按使用量計價），差異僅在該月計畫內是否核定交通接送；若勾選按比例分算則以下方基本資料之分算結果為準。</div>
+    <div class="field-row" style="margin-bottom:14px;">
+      <div class="field">
+        <label>本月計畫是否核定交通接送</label>
+        <div class="toggle-group" id="transportToggle">
+          <button data-v="0" class="active" onclick="setTransport(0)">未核定</button>
+          <button data-v="1" onclick="setTransport(1)">已核定（1單位 1,840元）</button>
+        </div>
+      </div>
+    </div>
+    <div class="bucket-summary" id="transport-summary"></div>
+  </section>
+
+  <!-- ============ 喘息/短照 ============ -->
+  <section class="panel" id="panel-respite">
+    <h2>喘息服務（年度）</h2>
+    <div class="table-wrap"><table id="tbl-respite"><thead><tr><th>服務型態</th><th class="num">單位價格</th><th class="num">核定單位數</th><th class="num">補助小計</th></tr></thead><tbody></tbody></table></div>
+    <div class="bucket-summary" id="respite-summary"></div>
+
+    <h2 style="margin-top:26px;">短期照顧 / 短照（年度）</h2>
+    <div class="table-wrap"><table id="tbl-short"><thead><tr><th>服務型態</th><th class="num">單位價格</th><th class="num">核定單位數</th><th class="num">補助小計</th></tr></thead><tbody></tbody></table></div>
+    <div class="bucket-summary" id="short-summary"></div>
+  </section>
+
+  <!-- ============ 輔具 ============ -->
+  <section class="panel" id="panel-assist">
+    <h2>輔具及居家環境改善（3 年一週期）</h2>
+    <div class="note">
+      額度扣抵一律以「第一類（低收入戶）」補助金額計算，與個案實際身分別無關（依需求說明）。<br>
+      第一組（舊制）：3 年最高 4 萬元，單一額度池。<br>
+      第二組（新制）方案一：3 年最高 6 萬元，單一「科技輔具」額度池；標示「一般輔具」之簡易項目（馬桶增高器／單支拐杖／助行器等）另計入 5,000 元子額度（不占用 6 萬元主額度）。<br>
+      第二組（新制）方案二：居家環境改善 2 萬元 + 科技輔具 4 萬元，兩池分開計算；一般輔具比照方案一，另計 5,000 元子額度。<br>
+      選定組別 3 年內不可變更。以上為依現有資料表之試算邏輯，正式認定請依主管機關公告為準。
+    </div>
+
+    <div class="grp-select" id="groupSelect">
+      <label data-v="g1" class="sel"><input type="radio" name="grp" value="g1" checked onchange="onGroupChange()"> 第一組（舊制，4萬）</label>
+      <label data-v="g2p1"><input type="radio" name="grp" value="g2p1" onchange="onGroupChange()"> 第二組・方案一（科技輔具6萬）</label>
+      <label data-v="g2p2"><input type="radio" name="grp" value="g2p2" onchange="onGroupChange()"> 第二組・方案二（環改2萬＋科技4萬）</label>
+    </div>
+
+    <div class="pool-cards" id="poolCards"></div>
+
+    <div class="assist-controls">
+      <div class="field">
+        <label>給付方式</label>
+        <div class="toggle-group" id="assistMode">
+          <button data-v="buy" class="active" onclick="setAssistMode('buy')">購置</button>
+          <button data-v="rent" onclick="setAssistMode('rent')">租賃</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-wrap"><table id="tbl-assist"><thead><tr><th>代碼</th><th>項目</th><th>類別</th><th class="num">第一類額度（扣抵基準）</th><th class="num">本人身分別對應補助</th><th class="num">核定數量</th><th class="num">扣抵小計</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <!-- ============ 總結 ============ -->
+  <section class="panel" id="panel-summary">
+    <h2>試算總結</h2>
+    <div class="table-wrap">
+    <table class="final-table">
+      <thead><tr><th>項目</th><th class="num">額度上限</th><th class="num">已用補助</th><th class="num">正常自付額</th><th class="num">超額自付額</th><th class="num">個案本次應自付合計</th><th>狀態</th></tr></thead>
+      <tbody id="summaryBody"></tbody>
+      <tfoot><tr class="total"><td colspan="5">全部項目應自付總計</td><td class="num" id="grandTotalSelfPay">0</td><td></td></tr></tfoot>
+    </table>
+    </div>
+  </section>
+</div>
+
+<footer class="bar">
+  <div class="inner">
+    <div class="item"><span>照顧服務自付</span><b id="footCare">0</b></div>
+    <div class="item"><span>交通接送自付</span><b id="footTransport">0</b></div>
+    <div class="item"><span>喘息／短照自付</span><b id="footRespite">0</b></div>
+    <div class="item"><span>輔具剩餘額度</span><b id="footAssist">0</b></div>
+    <div class="item" id="footTotalWrap"><span>應自付總計</span><b id="footTotal">0</b></div>
+  </div>
+</footer>
+
+<script>
+/* ============================ 資料表 ============================ */
+const LEVEL_QUOTA = {2:10020,3:15460,4:18580,5:24100,6:28070,7:32090,8:36180};
+
+const BA_ITEMS = [
+ ["BA01","基本身體清潔",260,41,13],
+ ["BA02","基本日常照顧",195,31,9],
+ ["BA03","測量生命徵象",35,5,1],
+ ["BA04","協助進食或管灌餵食",35,20,6],
+ ["BA05","餐食照顧",310,49,15],
+ ["BA07","協助沐浴及洗頭",325,52,16],
+ ["BA08","足部照護",500,80,25],
+ ["BA10","翻身拍背",155,24,7],
+ ["BA11","肢體活動關節",195,31,9],
+ ["BA12","協助上(下)樓梯",130,20,6],
+ ["BA13","陪同外出",195,31,9],
+ ["BA14","陪同就醫",685,109,34],
+ ["BA15","家務協助(自用)",195,31,9],
+ ["BA16","代購或代領或代送(自用)",130,20,6],
+ ["BA17a","人工氣道管內分泌物吸物",75,12,3],
+ ["BA17b","口鼻抽吸",65,10,3],
+ ["BA17c","尿管及鼻胃管之清潔與固定",50,8,2],
+ ["BA17d1","血糖機驗血糖",50,8,2],
+ ["BA17d2","甘油球通便",50,8,2],
+ ["BA17e","依指示置入藥盒",50,8,2],
+ ["BA18","安全看視(限心智障礙)",200,32,10],
+ ["BA20","陪伴服務",175,28,8],
+ ["BA22","巡視服務",130,20,6],
+ ["BA23","協助洗頭",200,32,10],
+ ["BA24","協助排泄",220,35,11],
+];
+
+const BATH_ITEMS = [ // BA09 / BA09a - 限第6級以上, 外看仍可用
+ ["BA09","到宅沐浴車服務-第1型",2200,352,100],
+ ["BA09a","到宅沐浴車服務-第2型",2500,400,125],
+];
+
+const C_ITEMS = [ // 專業服務, 單位計價, 外看仍可用
+ ["CA07","IADLs復能、ADLs復能照護（3次措施為1單位）",4500,720,225],
+ ["CA08","個別化服務計畫(ISP)擬定與執行（4次措施為1單位）",6000,960,300],
+ ["CB01","營養照護（3次措施為1單位）",4500,720,225],
+ ["CB02","進食與吞嚥照護（6次措施為1單位）",9000,1440,450],
+ ["CB03","困擾行為照護（3次措施為1單位）",4500,720,225],
+ ["CB04","臥床或長期活動受限照護（6次措施為1單位）",9000,1440,450],
+ ["CC01","居家環境安全或無障礙空間規劃(含輔具評估)（2次評估為1單位）",2000,320,100],
+ ["CD02","居家護理指導與諮詢（4次措施為1單位）",6000,960,300],
+];
+
+// 日照 BB：依等級對應型別 [level, 型別, 全日代碼, 全日價, 全日一般自付, 全日中低自付, 半日代碼, 半日價, 半日一般自付, 半日中低自付]
+const BB_BY_LEVEL = {
+ 2:["第一型","BB01",675,108,33,"BB02",340,54,17],
+ 3:["第二型","BB03",840,134,42,"BB04",420,67,21],
+ 4:["第三型","BB05",920,147,46,"BB06",460,73,23],
+ 5:["第四型","BB07",1045,167,52,"BB08",525,84,26],
+ 6:["第五型","BB09",1130,180,56,"BB10",565,90,28],
+ 7:["第六型","BB11",1210,193,60,"BB12",605,96,30],
+ 8:["第七型","BB13",1285,205,64,"BB14",645,103,32],
+};
+const BC_BY_LEVEL = {
+ 2:["第一型","BC01",625,100,31,"BC02",315,50,15],
+ 3:["第二型","BC03",760,121,38,"BC04",380,60,19],
+ 4:["第三型","BC05",785,125,39,"BC06",395,63,19],
+ 5:["第四型","BC07",880,140,44,"BC08",440,70,22],
+ 6:["第五型","BC09",960,153,48,"BC10",480,76,24],
+ 7:["第六型","BC11",980,156,49,"BC12",490,78,24],
+ 8:["第七型","BC13",1040,166,52,"BC14",520,83,26],
+};
+
+const BD01 = ["BD01","社區式協助沐浴",200,32,10];
+const BD02 = ["BD02","社區式晚餐",150,24,7.5];
+const BD03 = ["BD03","社區式服務交通接送",115,18,5];
+
+// 喘息/短照：quota 依 2-6級 / 7-8級；三種服務型態單位價不同
+const RESPITE = {
+  lowgrp:{quota:32340, types:[["居家",770,42],["日照",1250,25],["機構",2310,14]]},
+  highgrp:{quota:48510, types:[["居家",770,63],["日照",1250,38],["機構",2310,21]]},
+};
+const SHORTTERM = {
+  lowgrp:{quota:87780, types:[["居家",770,114],["日照",1250,70],["機構",2310,38]]},
+  highgrp:{quota:71610, types:[["居家",770,93],["日照",1250,57],["機構",2310,31]]},
+};
+
+// 輔具：[代碼, 名稱, 大類(FA=環改 / GEN=一般輔具 / TECH=科技輔具), 第一類, 第二類, 第三類, 使用年限, 購/租]
+const ASSIST_BUY = [
+ ["EA01","馬桶增高器、便盆椅或沐浴椅","GEN",1200,1080,840,3],
+ ["EB01","單支拐杖-不鏽鋼製","GEN",1000,900,700,5],
+ ["EB02","單支拐杖-鋁製","GEN",500,450,350,3],
+ ["EB03","助行器","GEN",800,720,560,3],
+ ["EB04","帶輪型助步車(助行椅)","TECH",3000,2700,2100,3],
+ ["EC01","輪椅-A款(非輕量化量產型)","TECH",3500,3150,2450,3],
+ ["EC02","輪椅-B款(輕量化量產型)","TECH",4000,3600,2800,3],
+ ["EC03","輪椅-C款(量身訂製型)","TECH",9000,9000,9000,3],
+ ["EC04","輪椅附加功能-A款(利於移位)","TECH",5000,5000,5000,3],
+ ["EC05","輪椅附加功能-B款(仰躺功能)","TECH",2000,2000,2000,3],
+ ["EC06","輪椅附加功能-C款(空中傾倒)","TECH",4000,4000,4000,3],
+ ["EC07","擺位系統-A款(平面型背靠)","TECH",1000,1000,1000,3],
+ ["EC08","擺位系統-B款(曲面適形背靠)","TECH",6000,6000,6000,3],
+ ["EC09","擺位系統-C款(軀幹側支撐架)","TECH",3000,3000,3000,3],
+ ["EC10","擺位系統-D款(頭靠系統)","TECH",2500,2500,2500,3],
+ ["ED01","移位腰帶","TECH",1500,1350,1050,3],
+ ["ED02","移位板","TECH",2000,1800,1400,5],
+ ["ED03","人力移位吊帶","TECH",4000,3600,2800,3],
+ ["ED04","移位滑墊-A款","TECH",3000,2700,2100,5],
+ ["ED05","移位滑墊-B款","TECH",8000,7200,5600,5],
+ ["ED06","移位轉盤","TECH",2000,1800,1400,3],
+ ["ED07","移位機","TECH",40000,36000,28000,10],
+ ["ED08","移位機吊帶","GEN",6000,5400,4200,3],
+ ["EE01","電話擴音器","GEN",2000,1800,1400,5],
+ ["EE02","電話閃光震動器","GEN",2000,1800,1400,5],
+ ["EE03","火警閃光警示器","GEN",2000,1800,1400,5],
+ ["EE04","門鈴閃光器","GEN",2000,1800,1400,5],
+ ["EE05","無線震動警示器","GEN",2000,1800,1400,5],
+ ["EF01","衣著用輔具","GEN",500,450,350,3],
+ ["EF02","居家用生活輔具","GEN",500,450,350,3],
+ ["EF03","飲食用輔具","GEN",500,450,350,3],
+ ["EG01","氣墊床-A款","TECH",8000,8000,8000,3],
+ ["EG02","氣墊床-B款","TECH",12000,12000,12000,3],
+ ["EG03","輪椅座墊-A款(連通管型/塑膠)","TECH",5000,5000,5000,2],
+ ["EG04","輪椅座墊-B款(連通管型/橡膠)","TECH",10000,10000,10000,2],
+ ["EG05","輪椅座墊-C款(液態凝膠)","TECH",10000,10000,10000,2],
+ ["EG06","輪椅座墊-D款(固態凝膠)","TECH",8000,8000,8000,5],
+ ["EG07","輪椅座墊-E款(填充式氣囊)","TECH",8000,8000,8000,5],
+ ["EG08","輪椅座墊-F款(交替充氣型)","TECH",5000,5000,5000,3],
+ ["EG09","輪椅座墊-G款(量製型)","TECH",10000,10000,10000,3],
+ ["EH01","居家用照顧床","TECH",8000,7200,5600,5],
+ ["EH02","照顧床附加-A款(床面升降)","TECH",5000,4500,3500,5],
+ ["EH03","照顧床附加-B款(電動升降)","TECH",5000,4500,3500,5],
+ // FA 居家無障礙修繕/設備
+ ["FA08","反光貼條或消光處理","FA",3000,2700,2100,3],
+ ["FA13","水龍頭(單處)","FA",3000,2700,2100,10],
+ ["FA15","改善洗臉台(槽)(單處)","FA",3000,2700,2100,10],
+ ["FA17","壁掛式淋浴台(單處)","FA",5000,4500,3500,10],
+ ["FA18","改善流理台(單處)","FA",15000,13500,10500,10],
+ ["FA19","改善抽油煙機(單處)","FA",1000,900,700,10],
+ ["FA22","固定式扶手(每十公分)","FA",160,144,112,10],
+ ["FA23","可動式扶手(單支)","FA",3600,3240,2520,10],
+ ["FA24","床邊扶手(單處)","FA",1000,900,700,10],
+ ["FA25","門檻斜角(單側)","FA",1000,900,700,10],
+ ["FA26","非固定式斜坡板A款","FA",3500,3150,2450,10],
+ ["FA27","非固定式斜坡板B款","FA",5000,4500,3500,10],
+ ["FA28","非固定式斜坡板C款","FA",7000,6300,4900,10],
+ ["FA29","非固定式斜坡板D款","FA",10000,9000,7000,10],
+ ["FA30","改善高低差(10cm以下)","FA",3500,3150,2450,10],
+ ["FA31","改善高低差(20cm以下)","FA",5000,4500,3500,10],
+ ["FA32","改善高低差(30cm以下)","FA",7000,6300,4900,10],
+ ["FA33","改善高低差(超過30cm)","FA",10000,9000,7000,10],
+ ["FA34","防滑地磚(單處)","FA",6000,5400,4200,10],
+ ["FA35","防滑措施","FA",2000,1800,1400,3],
+ ["FA36","隔間(每平方公尺)","FA",800,720,560,10],
+ ["FA37","門簡易型(單處)","FA",7000,6300,4900,10],
+ ["FA38","門進階型(單處)","FA",10000,9000,7000,10],
+ ["FA39","截水槽(單處)","FA",6000,5400,4200,10],
+ ["FA40","改善浴缸(單處)","FA",7000,6300,4900,10],
+ ["FA41","改善馬桶(單處)","FA",5000,4500,3500,10],
+ ["FA42","馬桶背靠(單處)","FA",2000,1800,1400,10],
+ ["FA43","移動式身體清洗槽-局部型","FA",2000,1800,1400,3],
+ ["FA44","移動式身體清洗槽-全身型","FA",5000,4500,3500,3],
+];
+
+const ASSIST_RENT = [
+ ["EB04","帶輪型助步車(助行椅)-租賃","TECH",300,270,210],
+ ["EC02","輪椅-B款(輕量化)-租賃","TECH",450,405,315],
+ ["EC04","輪椅附加功能-A款-租賃","TECH",150,150,150],
+ ["EC05","輪椅附加功能-B款-租賃","TECH",150,150,150],
+ ["EC06","輪椅附加功能-C款-租賃","TECH",150,150,150],
+ ["EC11","電動輪椅-租賃","TECH",2500,2250,1750],
+ ["EC12","電動代步車-租賃","TECH",1200,1080,840],
+ ["ED07","移位機-租賃","TECH",2000,1800,1400],
+ ["EG01","氣墊床-A款-租賃","TECH",300,300,300],
+ ["EG02","氣墊床-B款-租賃","TECH",500,500,500],
+ ["EH01","居家用照顧床-租賃","TECH",1000,900,700],
+ ["EH02","照顧床附加-A款-租賃","TECH",200,180,140],
+ ["EH03","照顧床附加-B款-租賃","TECH",500,450,350],
+ ["EH04","爬梯機(單趟)","TECH",700,630,490],
+ ["EH05","爬梯機(月)","TECH",4000,3600,2800],
+];
+
+/* ============================ 狀態 ============================ */
+let state = {
+  level:2, identity:'g', foreign:0, prorate:0, prorateDate:'',
+  assistGroup:'g1', assistMode:'buy', transportApproved:0,
+};
+
+function fmt(n){ return Math.round(n).toLocaleString('en-US'); }
+function idIdx(identity){ return identity==='g'?0:(identity==='m'?1:2); } // 一般/中低/低收 -> col index into [g,m] pairs (低收=0 always)
+function selfpayOf(identity,g,m){ return identity==='g'?g:(identity==='m'?m:0); }
+
+/* ============================ 上方基本資料 ============================ */
+function setForeign(v){
+  state.foreign=v;
+  document.querySelectorAll('#foreignToggle button').forEach(b=>b.classList.toggle('active', +b.dataset.v===v));
+  onBasicChange();
+}
+function setProrate(v){
+  state.prorate=v;
+  document.querySelectorAll('#prorateToggle button').forEach(b=>b.classList.toggle('active', +b.dataset.v===v));
+  document.getElementById('prorateDateField').style.display = v? 'flex':'none';
+  document.getElementById('prorateResult').style.display = v? 'block':'none';
+  onBasicChange();
+}
+function onBasicChange(){
+  state.level = +document.getElementById('level').value;
+  state.identity = document.getElementById('identity').value;
+  state.prorateDate = document.getElementById('prorateDate').value;
+  renderAll();
+}
+
+function prorateFactor(){
+  if(!state.prorate || !state.prorateDate) return {factor:1, text:''};
+  const d = new Date(state.prorateDate+'T00:00:00');
+  const y=d.getFullYear(), m=d.getMonth();
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const day = d.getDate();
+  const remain = daysInMonth - day + 1; // 含當天
+  const factor = remain/daysInMonth;
+  return {factor, remain, daysInMonth, text:`本月共 ${daysInMonth} 天，自 ${day} 日起（含當日）剩餘 ${remain} 天，分算比例 ${(factor*100).toFixed(1)}%`};
+}
+
+/* ============================ Tabs ============================ */
+function showTab(name){
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+name));
+}
+
+function showCareSub(name){
+  document.querySelectorAll('#careSubtabs button').forEach(b=>b.classList.toggle('active', b.dataset.sub===name));
+  document.querySelectorAll('.caresub').forEach(p=>p.classList.toggle('active', p.id==='caresub-'+name));
+}
+
+/* ============================ 照顧服務渲染 ============================ */
+function buildQtyCell(key, min=0){
+  return `<input type="number" class="qty" min="${min}" value="0" data-key="${key}" oninput="renderCare()">`;
+}
+
+function renderCareTable(tblId, items, unitLabel){
+  const tbody = document.querySelector('#'+tblId+' tbody');
+  tbody.innerHTML='';
+  items.forEach(it=>{
+    const [code,name,price,g,m] = it;
+    const sp = selfpayOf(state.identity,g,m);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="code">${code}</td><td>${name}</td><td class="num">${fmt(price)}</td><td class="num">${fmt(sp)}</td>
+      <td class="num">${buildQtyCell(tblId+'|'+code)}</td><td class="num" data-sub="${tblId}|${code}">0</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderCareStaticTables(){
+  renderCareTable('tbl-ba', BA_ITEMS);
+  renderCareTable('tbl-bath', BATH_ITEMS);
+  renderCareTable('tbl-c', C_ITEMS);
+
+  // BA disabled under foreign caregiver
+  document.querySelectorAll('#tbl-ba tbody tr').forEach(tr=>{
+    tr.classList.toggle('disabled', state.foreign===1);
+    const inp = tr.querySelector('input');
+    inp.disabled = state.foreign===1;
+    if(state.foreign===1) inp.value=0;
+  });
+  // BA09/BA09a disabled under level<6
+  document.querySelectorAll('#tbl-bath tbody tr').forEach(tr=>{
+    const disable = state.level<6;
+    tr.classList.toggle('disabled', disable);
+    const inp = tr.querySelector('input');
+    inp.disabled = disable;
+    if(disable) inp.value=0;
+  });
+
+  // 日照 BB row(s)
+  const bb = BB_BY_LEVEL[state.level];
+  const bbBody = document.querySelector('#tbl-bb tbody'); bbBody.innerHTML='';
+  const [typeName, fCode,fPrice,fG,fM, hCode,hPrice,hG,hM] = bb;
+  [[fCode,`${typeName}-全日`,fPrice,fG,fM],[hCode,`${typeName}-半日`,hPrice,hG,hM]].forEach(row=>{
+    const [code,name,price,g,m]=row;
+    const sp = selfpayOf(state.identity,g,m);
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td class="code">${code}</td><td>${name}</td><td class="num">${fmt(price)}</td><td class="num">${fmt(sp)}</td>
+      <td class="num">${buildQtyCell('tbl-bb|'+code)}</td><td class="num" data-sub="tbl-bb|${code}">0</td>`;
+    bbBody.appendChild(tr);
+  });
+  renderCareTable('tbl-bd-day', [BD01, BD03]);
+
+  // 家托 BC row(s)
+  const bc = BC_BY_LEVEL[state.level];
+  const bcBody = document.querySelector('#tbl-bc tbody'); bcBody.innerHTML='';
+  const [ftypeName, fcCode,fcPrice,fcG,fcM, hcCode,hcPrice,hcG,hcM] = bc;
+  [[fcCode,`${ftypeName}-全日`,fcPrice,fcG,fcM],[hcCode,`${ftypeName}-半日`,hcPrice,hcG,hcM]].forEach(row=>{
+    const [code,name,price,g,m]=row;
+    const sp = selfpayOf(state.identity,g,m);
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td class="code">${code}</td><td>${name}</td><td class="num">${fmt(price)}</td><td class="num">${fmt(sp)}</td>
+      <td class="num">${buildQtyCell('tbl-bc|'+code)}</td><td class="num" data-sub="tbl-bc|${code}">0</td>`;
+    bcBody.appendChild(tr);
+  });
+  renderCareTable('tbl-bd-fam', [BD01, BD02]);
+}
+
+function renderCare(){
+  // compute subsidy per row, sum
+  let totalSubsidy = 0, totalSelfpay = 0;
+  document.querySelectorAll('#panel-care table').forEach(tbl=>{
+    tbl.querySelectorAll('tbody tr').forEach(tr=>{
+      const inp = tr.querySelector('input.qty');
+      if(!inp) return;
+      const qty = +inp.value || 0;
+      const priceCell = tr.children[2], spCell = tr.children[3], subCell = tr.querySelector('[data-sub]');
+      const price = parseFloat(priceCell.textContent.replace(/,/g,''))||0;
+      const sp = parseFloat(spCell.textContent.replace(/,/g,''))||0;
+      const subsidyPerUnit = price - sp;
+      const rowSubsidy = subsidyPerUnit*qty;
+      const rowSelfpay = sp*qty;
+      subCell.textContent = fmt(rowSubsidy);
+      totalSubsidy += rowSubsidy;
+      totalSelfpay += rowSelfpay;
+    });
+  });
+
+  const {factor, text} = prorateFactor();
+  document.getElementById('prorateResult').textContent = text;
+
+  let quota = LEVEL_QUOTA[state.level];
+  if(state.foreign===1) quota = quota*0.3;
+  quota = quota*factor;
+
+  const over = Math.max(0, totalSubsidy - quota);
+  const remain = Math.max(0, quota - totalSubsidy);
+  const totalOwed = totalSelfpay + over;
+
+  const box = document.getElementById('care-summary');
+  box.innerHTML = `
+    <div class="card"><div class="k">本額度上限（已依身分/外看/分算調整）</div><div class="v">${fmt(quota)}</div></div>
+    <div class="card"><div class="k">已用補助金額</div><div class="v">${fmt(totalSubsidy)}</div></div>
+    <div class="card remain"><div class="k">剩餘補助額度</div><div class="v">${fmt(remain)}</div></div>
+    <div class="card ${over>0?'over':''}"><div class="k">超額自付</div><div class="v">${fmt(over)}</div></div>
+    <div class="card owed"><div class="k">個案應自付合計</div><div class="v">${fmt(totalOwed)}</div></div>
+  `;
+
+  state._care = {quota, totalSubsidy, totalSelfpay, over, totalOwed};
+  document.getElementById('footCare').textContent = fmt(totalOwed);
+  renderSummary();
+}
+
+/* ============================ 交通接送 ============================ */
+function setTransport(v){
+  state.transportApproved = v;
+  document.querySelectorAll('#transportToggle button').forEach(b=>b.classList.toggle('active', +b.dataset.v===v));
+  renderTransport();
+}
+function renderTransport(){
+  const approved = state.transportApproved ? 1 : 0;
+  const rate = state.identity==='g'?0.27 : (state.identity==='m'?0.09:0);
+  const {factor} = prorateFactor();
+  const unitAmount = 1840*factor; // 核定 1 單位＝分算後之月額度金額
+
+  // 核定即用滿 1 單位；無按用量增減，故補助=單位金額、額度=單位金額，不會超額
+  const subsidy = approved ? unitAmount*(1-rate) : 0;
+  const selfpay = approved ? unitAmount*rate : 0;
+  const quota = unitAmount;
+  const over = 0; // 每月固定 1 單位，恆不超額
+  const remain = approved ? 0 : quota;
+  const owed = selfpay;
+
+  document.getElementById('transport-summary').innerHTML = `
+    <div class="card"><div class="k">月額度（1單位）</div><div class="v">${fmt(quota)}</div></div>
+    <div class="card"><div class="k">部分負擔比率</div><div class="v">${(rate*100).toFixed(0)}%</div></div>
+    <div class="card"><div class="k">已用補助</div><div class="v">${fmt(subsidy)}</div></div>
+    <div class="card remain"><div class="k">剩餘額度</div><div class="v">${fmt(remain)}</div></div>
+    <div class="card owed"><div class="k">個案應自付合計</div><div class="v">${fmt(owed)}</div></div>
+  `;
+  state._transport = {quota, subsidy, selfpay, over, owed};
+  document.getElementById('footTransport').textContent = fmt(owed);
+  renderSummary();
+}
+
+/* ============================ 喘息/短照 ============================ */
+function renderRespiteShortTable(tblId, dataset){
+  const grp = state.level>=7 ? 'highgrp':'lowgrp';
+  const info = dataset[grp];
+  const tbody = document.querySelector('#'+tblId+' tbody'); tbody.innerHTML='';
+  info.types.forEach(([label,price,maxUnits])=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${label}（每單位 ${fmt(price)} 元，上限約 ${maxUnits} 單位）</td>
+      <td class="num">${fmt(price)}</td>
+      <td class="num">${buildQtyCell(tblId+'|'+label)}</td>
+      <td class="num" data-sub="${tblId}|${label}">0</td>`;
+    tbody.appendChild(tr);
+  });
+  return info.quota;
+}
+
+function renderRespiteShort(){
+  const rQuotaBase = renderRespiteShortTable('tbl-respite', RESPITE);
+  const sQuotaBase = renderRespiteShortTable('tbl-short', SHORTTERM);
+
+  function sumTable(tblId){
+    let subsidy=0, selfpay=0;
+    const rate = state.identity==='g'?0.16:(state.identity==='m'?0.05:0);
+    document.querySelectorAll('#'+tblId+' tbody tr').forEach(tr=>{
+      const inp = tr.querySelector('input.qty');
+      const qty = +inp.value||0;
+      const price = parseFloat(tr.children[1].textContent.replace(/,/g,''))||0;
+      const cost = price*qty;
+      const sp = cost*rate;
+      const sub = cost-sp;
+      tr.querySelector('[data-sub]').textContent = fmt(sub);
+      subsidy+=sub; selfpay+=sp;
+    });
+    return {subsidy, selfpay};
+  }
+
+  const r = sumTable('tbl-respite');
+  const s = sumTable('tbl-short');
+
+  function box(id, quota, res){
+    const over = Math.max(0, res.subsidy-quota);
+    const remain = Math.max(0, quota-res.subsidy);
+    const owed = res.selfpay+over;
+    document.getElementById(id).innerHTML = `
+      <div class="card"><div class="k">年度額度上限</div><div class="v">${fmt(quota)}</div></div>
+      <div class="card"><div class="k">已用補助</div><div class="v">${fmt(res.subsidy)}</div></div>
+      <div class="card remain"><div class="k">剩餘額度</div><div class="v">${fmt(remain)}</div></div>
+      <div class="card ${over>0?'over':''}"><div class="k">超額自付</div><div class="v">${fmt(over)}</div></div>
+      <div class="card owed"><div class="k">個案應自付合計</div><div class="v">${fmt(owed)}</div></div>
+    `;
+    return {quota, over, owed, subsidy:res.subsidy, selfpay:res.selfpay};
+  }
+  state._respite = box('respite-summary', rQuotaBase, r);
+  state._short = box('short-summary', sQuotaBase, s);
+
+  const total = state._respite.owed + state._short.owed;
+  document.getElementById('footRespite').textContent = fmt(total);
+  renderSummary();
+}
+
+/* ============================ 輔具 ============================ */
+function onGroupChange(){
+  state.assistGroup = document.querySelector('input[name=grp]:checked').value;
+  document.querySelectorAll('#groupSelect label').forEach(l=>l.classList.toggle('sel', l.dataset.v===state.assistGroup));
+  renderAssist();
+}
+function setAssistMode(v){
+  state.assistMode=v;
+  document.querySelectorAll('#assistMode button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
+  renderAssist();
+}
+
+function poolsForGroup(){
+  if(state.assistGroup==='g1') return {main:{label:'第一組主額度（3年）', cap:40000}};
+  if(state.assistGroup==='g2p1') return {main:{label:'第二組・方案一 科技輔具（3年）', cap:60000}, gen:{label:'一般輔具子額度（3年）', cap:5000}};
+  return {env:{label:'第二組・方案二 居家環境改善（3年）', cap:20000}, main:{label:'第二組・方案二 科技輔具（3年）', cap:40000}, gen:{label:'一般輔具子額度（3年）', cap:5000}};
+}
+
+function renderAssist(){
+  const items = state.assistMode==='buy' ? ASSIST_BUY : ASSIST_RENT;
+  const tbody = document.querySelector('#tbl-assist tbody'); tbody.innerHTML='';
+  items.forEach(it=>{
+    const [code,name,cat,c1,c2,c3] = it;
+    const personal = state.identity==='l'?c1:(state.identity==='m'?c2:c3);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="code">${code}</td><td>${name}</td><td>${cat==='FA'?'居家環境改善':(cat==='GEN'?'一般輔具':'科技輔具')}</td>
+      <td class="num">${fmt(c1)}</td><td class="num">${fmt(personal)}</td>
+      <td class="num">${buildQtyCell('assist|'+code+'|'+cat)}</td>
+      <td class="num" data-sub="assist|${code}|${cat}">0</td>`;
+    tbody.appendChild(tr);
+    tr.querySelector('input').addEventListener('input', calcAssist);
+  });
+  calcAssist();
+}
+
+function calcAssist(){
+  const pools = poolsForGroup();
+  let used = {env:0, main:0, gen:0};
+  document.querySelectorAll('#tbl-assist tbody tr').forEach(tr=>{
+    const inp = tr.querySelector('input.qty');
+    const qty = +inp.value||0;
+    const c1 = parseFloat(tr.children[3].textContent.replace(/,/g,''))||0;
+    const cat = inp.dataset.key.split('|')[2];
+    const sub = c1*qty;
+    tr.querySelector('[data-sub]').textContent = fmt(sub);
+    if(qty<=0) return;
+    if(cat==='FA' && pools.env){ used.env += sub; }
+    else if(cat==='GEN' && pools.gen){ used.gen += sub; }
+    else { used.main += sub; }
+  });
+
+  const cards = [];
+  let overTotal = 0, remainTotal = 0, capTotal = 0;
+  Object.keys(pools).forEach(k=>{
+    const p = pools[k];
+    const usedAmt = used[k]||0;
+    const pct = Math.min(100, (usedAmt/p.cap)*100);
+    const over = Math.max(0, usedAmt-p.cap);
+    cards.push(`<div class="p ${over>0?'over':''}"><div class="k">${p.label}</div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="v">已用 ${fmt(usedAmt)} / 上限 ${fmt(p.cap)}${over>0?`　<span class="flag-over">超額 ${fmt(over)}</span>`:''}</div></div>`);
+    overTotal += over; capTotal += p.cap; remainTotal += Math.max(0,p.cap-usedAmt);
+  });
+  document.getElementById('poolCards').innerHTML = cards.join('');
+
+  state._assist = {pools, used, overTotal, remainTotal, capTotal};
+  document.getElementById('footAssist').textContent = fmt(remainTotal);
+  renderSummary();
+}
+
+/* ============================ 總結 ============================ */
+function renderSummary(){
+  const rows = [];
+  const c = state._care, t = state._transport, r = state._respite, s = state._short, a = state._assist;
+
+  function row(name, quota, used, selfpay, over, owed){
+    const status = over>0? `<span class="flag-over">超額</span>` : `<span class="flag-ok">額度內</span>`;
+    rows.push(`<tr><td>${name}</td><td class="num">${fmt(quota)}</td><td class="num">${fmt(used)}</td><td class="num">${fmt(selfpay)}</td><td class="num">${fmt(over)}</td><td class="num">${fmt(owed)}</td><td>${status}</td></tr>`);
+  }
+  let grand = 0;
+  if(c){ row('照顧服務（居家/日照/家托/專業）', c.quota, c.totalSubsidy, c.totalSelfpay, c.over, c.totalOwed); grand+=c.totalOwed; }
+  if(t){ row('交通接送', t.quota, t.subsidy, t.selfpay, t.over, t.owed); grand+=t.owed; }
+  if(r){ row('喘息服務（年度）', r.quota, r.subsidy, r.selfpay, r.over, r.owed); grand+=r.owed; }
+  if(s){ row('短期照顧（年度）', s.quota, s.subsidy, s.selfpay, s.over, s.owed); grand+=s.owed; }
+  if(a){ row('輔具及居家環境改善（3年，扣抵額度，非自付試算）', a.capTotal, a.capTotal-a.remainTotal, 0, a.overTotal, a.overTotal); grand+=a.overTotal; }
+
+  document.getElementById('summaryBody').innerHTML = rows.join('');
+  document.getElementById('grandTotalSelfPay').textContent = fmt(grand);
+  document.getElementById('footTotal').textContent = fmt(grand);
+}
+
+/* ============================ 初始化 ============================ */
+function renderAll(){
+  renderCareStaticTables();
+  renderCare();
+  renderTransport();
+  renderRespiteShort();
+  renderAssist();
+}
+renderAll();
+</script>
+</body>
+</html>
