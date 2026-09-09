@@ -46,36 +46,36 @@
     color:#cfcabb;
     max-width:640px;
   }
-  .wrap{max-width:720px;margin:0 auto;padding:24px 20px 40px;}
-  .hint{font-size:13px;color:var(--muted);margin:0 0 18px;}
+  .wrap{max-width:760px;margin:0 auto;padding:28px 20px 44px;}
+  .hint{font-size:14px;color:var(--muted);margin:0 0 22px;}
 
-  .grid{display:flex;flex-direction:column;gap:16px;}
+  .grid{display:flex;flex-direction:column;gap:22px;}
 
   a.card{
     display:flex;
-    gap:16px;
+    gap:22px;
     align-items:center;
     text-decoration:none;
     color:var(--ink);
     background:var(--panel);
     border:1px solid var(--line);
-    border-radius:22px;
-    box-shadow:0 2px 14px rgba(18,51,48,.06);
-    padding:22px 22px;
+    border-radius:26px;
+    box-shadow:0 3px 18px rgba(18,51,48,.08);
+    padding:32px 30px;
     transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
   }
   a.card:active{transform:scale(.985);}
-  a.card:hover{border-color:var(--teal);box-shadow:0 4px 18px rgba(18,51,48,.1);}
+  a.card:hover{border-color:var(--teal);box-shadow:0 6px 22px rgba(18,51,48,.12);}
 
   .card .icon{
     flex:none;
-    width:52px;height:52px;
-    border-radius:16px;
+    width:76px;height:76px;
+    border-radius:20px;
     background:var(--gold-soft);
     display:flex;align-items:center;justify-content:center;
     font-family:"Noto Serif TC",serif;
     font-weight:700;
-    font-size:20px;
+    font-size:28px;
     color:var(--gold);
   }
   .card.b .icon{background:#e6ebe0;color:var(--teal-dark);}
@@ -83,33 +83,36 @@
   .card .body{flex:1;min-width:0;}
   .card h2{
     font-family:"Noto Serif TC",serif;
-    font-size:17px;
-    margin:0 0 4px;
+    font-size:22px;
+    margin:0 0 8px;
     color:var(--teal-dark);
   }
   .card p{
     margin:0;
-    font-size:13px;
+    font-size:14.5px;
     color:var(--muted);
   }
   .card .arrow{
     flex:none;
-    font-size:20px;
+    font-size:28px;
     color:var(--line);
   }
 
   footer.foot{
-    max-width:720px;margin:8px auto 0;padding:0 20px 24px;
+    max-width:760px;margin:8px auto 0;padding:0 20px 24px;
     font-size:12px;color:var(--muted);text-align:center;
   }
 
   @media (max-width:600px){
     header.top{padding:26px 18px 24px;border-radius:0 0 20px 20px;}
     header.top h1{font-size:21px;}
-    .wrap{padding:20px 14px 32px;}
-    a.card{padding:18px 16px;border-radius:18px;gap:14px;}
-    .card .icon{width:46px;height:46px;font-size:18px;border-radius:14px;}
-    .card h2{font-size:16px;}
+    .wrap{padding:22px 14px 36px;}
+    .grid{gap:16px;}
+    a.card{padding:26px 20px;border-radius:22px;gap:16px;align-items:flex-start;}
+    .card .icon{width:60px;height:60px;font-size:22px;border-radius:16px;}
+    .card h2{font-size:19px;}
+    .card p{font-size:14px;}
+    .card .arrow{display:none;}
   }
 </style>
 </head>
@@ -124,9 +127,9 @@
   <p class="hint">共 2 個系統</p>
   <div class="grid">
     <a class="card a" href="https://lelinsihuoffice-aa02.github.io/care-app/">
-      <div class="icon">個</div>
+      <div class="icon">長</div>
       <div class="body">
-        <h2>個管服務系統</h2>
+        <h2>長照服務追蹤系統(AA02)</h2>
         <p>個案管理相關作業</p>
       </div>
       <div class="arrow">›</div>
