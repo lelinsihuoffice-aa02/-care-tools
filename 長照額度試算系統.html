@@ -60,7 +60,7 @@
     color:#cfcabb;
     max-width:760px;
   }
-  .wrap{max-width:1080px;margin:0 auto;padding:14px 14px 0;}
+  .wrap{max-width:1140px;margin:0 auto;padding:14px 14px 0;}
 
   .basic-card{
     background:var(--panel);
@@ -69,11 +69,11 @@
     box-shadow:0 2px 14px rgba(18,51,48,.06);
     padding:20px 20px;
     margin:16px auto 0;
-    max-width:1040px;
+    max-width:1100px;
   }
   .basic-card h2, .panel h2{
     font-family:'Huninn',"Noto Sans TC",sans-serif;
-    font-size:17px;
+    font-size:18px;
     margin:0 0 14px;
     color:var(--teal-dark);
     display:inline-flex;align-items:center;gap:9px;
@@ -88,11 +88,11 @@
     align-items:flex-end;
   }
   .field{display:flex;flex-direction:column;gap:5px;min-width:150px;}
-  .field label{font-size:12.5px;color:var(--muted);font-weight:500;}
+  .field label{font-size:13.5px;color:var(--muted);font-weight:500;}
   select, input[type=number], input[type=date], input[type=text]{
     font-family:inherit;
-    font-size:14px;
-    padding:8px 12px;
+    font-size:15px;
+    padding:9px 13px;
     border:1px solid var(--line);
     border-radius:12px;
     background:#fff;
@@ -101,7 +101,7 @@
   select:focus, input:focus{outline:2px solid var(--teal);outline-offset:1px;}
   .toggle-group{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;padding:3px;background:#f2efe4;gap:2px;}
   .toggle-group button{
-    border:none;background:transparent;padding:7px 16px;font-size:13.5px;cursor:pointer;
+    border:none;background:transparent;padding:8px 18px;font-size:14.5px;cursor:pointer;
     font-family:inherit;color:var(--muted);border-radius:999px;
   }
   .toggle-group button.active{background:var(--teal);color:#fff;box-shadow:0 1px 4px rgba(18,51,48,.25);}
@@ -112,17 +112,17 @@
     display:flex;flex-wrap:wrap;gap:16px 26px;align-items:flex-end;
   }
   .prorate-result{
-    font-size:13px;color:var(--teal-dark);background:var(--green-soft);
+    font-size:14px;color:var(--teal-dark);background:var(--green-soft);
     border-radius:14px;padding:9px 14px;min-width:220px;
   }
 
   nav.tabs{
-    max-width:1040px;margin:24px auto 0;display:flex;gap:8px;flex-wrap:wrap;
+    max-width:1100px;margin:24px auto 0;display:flex;gap:8px;flex-wrap:wrap;
     padding:6px;background:#efece1;border-radius:999px;
   }
   nav.tabs button{
     font-family:'Huninn',"Noto Sans TC",sans-serif;
-    font-size:14px;font-weight:500;
+    font-size:15px;font-weight:500;
     background:transparent;border:none;
     padding:10px 18px;cursor:pointer;color:var(--muted);
     border-radius:999px;
@@ -130,36 +130,36 @@
   nav.tabs button.active{color:#fff;background:var(--teal-dark);font-weight:700;box-shadow:0 2px 8px rgba(18,51,48,.25);}
 
   .panel{
-    max-width:1040px;margin:14px auto 0;
+    max-width:1100px;margin:14px auto 0;
     background:var(--panel);border:1px solid var(--line);border-radius:22px;
     box-shadow:0 2px 14px rgba(18,51,48,.06);
     padding:18px 18px 22px;display:none;
   }
   .panel.active{display:block;}
-  .subhead{font-size:13px;color:var(--muted);margin:18px 0 8px;font-weight:700;}
+  .subhead{font-size:14.5px;color:var(--muted);margin:18px 0 8px;font-weight:700;}
   .subhead:first-of-type{margin-top:0;}
 
   nav.subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;}
   nav.subtabs button{
-    font-family:'Huninn',"Noto Sans TC",sans-serif;font-size:13px;font-weight:500;
+    font-family:'Huninn',"Noto Sans TC",sans-serif;font-size:14.5px;font-weight:500;
     background:#f2efe4;border:1px solid transparent;color:var(--muted);
     padding:8px 15px;border-radius:999px;cursor:pointer;
   }
   nav.subtabs button.active{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:700;}
   .caresub{display:none;}
   .caresub.active{display:block;}
-  .note{font-size:12px;color:var(--muted);background:#f2efe4;border-radius:14px;padding:10px 14px;margin:6px 0 14px;}
+  .note{font-size:13px;color:var(--muted);background:#f2efe4;border-radius:14px;padding:10px 14px;margin:6px 0 14px;}
 
   .table-wrap{border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-bottom:14px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:0;}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;margin-bottom:0;}
   .table-wrap table{margin-bottom:0;}
   th,td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;}
   thead th{background:#f4f2ea;}
   tbody tr:last-child td{border-bottom:none;}
-  th{font-size:11.5px;color:var(--muted);font-weight:700;text-transform:none;}
+  th{font-size:13px;color:var(--muted);font-weight:700;text-transform:none;}
   td.num, th.num{text-align:right;font-variant-numeric:tabular-nums;}
   td.code{font-family:monospace;color:var(--teal-dark);font-weight:700;white-space:nowrap;}
-  input.qty{width:64px;text-align:right;padding:6px 8px;border-radius:10px;}
+  input.qty{width:74px;text-align:right;padding:7px 9px;border-radius:10px;font-size:14px;}
   tr.disabled td{color:#b9b6a9;}
   tr.disabled input{background:#f1efe6;}
 
@@ -167,11 +167,11 @@
     display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;
   }
   .bucket-summary .card{
-    flex:1;min-width:300px;background:#faf9f5;border:1px solid var(--line);
+    flex:1;min-width:330px;background:#faf9f5;border:1px solid var(--line);
     border-radius:20px;padding:20px 20px;
   }
-  .bucket-summary .card .k{font-size:14px;color:var(--muted);margin-bottom:6px;}
-  .bucket-summary .card .v{font-size:28px;font-weight:700;color:var(--teal-dark);font-variant-numeric:tabular-nums;}
+  .bucket-summary .card .k{font-size:15px;color:var(--muted);margin-bottom:6px;}
+  .bucket-summary .card .v{font-size:30px;font-weight:700;color:var(--teal-dark);font-variant-numeric:tabular-nums;}
   .bucket-summary .card.over .v{color:var(--red);}
   .bucket-summary .card.over{background:var(--red-soft);border-color:#dcb6a8;}
   .bucket-summary .card.remain .v{color:var(--remain);}
@@ -188,35 +188,37 @@
     box-shadow:0 8px 24px rgba(18,51,48,.3);
   }
   footer.bar .inner{
-    max-width:1040px;width:100%;display:flex;flex-wrap:wrap;gap:10px 28px;align-items:center;
+    max-width:1100px;width:100%;display:flex;flex-wrap:wrap;gap:10px 28px;align-items:center;
   }
-  footer.bar .item{font-size:13px;}
-  footer.bar .item b{display:block;font-size:17px;font-variant-numeric:tabular-nums;}
+  footer.bar .item{font-size:14px;}
+  footer.bar .item b{display:block;font-size:19px;font-variant-numeric:tabular-nums;}
   footer.bar .item.warn b{color:#f2b6a3;}
   footer.bar .item.ok b{color:#bfe0c9;}
 
   .grp-select{display:flex;gap:10px;flex-wrap:wrap;}
   .grp-select label{
-    border:1px solid var(--line);border-radius:18px;padding:10px 16px;font-size:13px;
+    border:1px solid var(--line);border-radius:18px;padding:11px 18px;font-size:14px;
     display:flex;gap:7px;align-items:center;cursor:pointer;background:#fff;
   }
   .grp-select input{margin:0;}
   .grp-select label.sel{border-color:var(--teal);background:var(--green-soft);}
 
   .pool-cards{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0 18px;}
-  .pool-cards .p{flex:1;min-width:280px;border:1px solid var(--line);border-radius:20px;padding:18px 20px;background:#faf9f5;}
-  .pool-cards .p .k{font-size:14px;color:var(--muted);}
+  .pool-cards .p{flex:1;min-width:300px;border:1px solid var(--line);border-radius:20px;padding:18px 20px;background:#faf9f5;}
+  .pool-cards .p .k{font-size:15px;color:var(--muted);}
   .pool-cards .p .bar{height:10px;background:#e7e3d5;border-radius:999px;margin:10px 0 8px;overflow:hidden;}
   .pool-cards .p .bar i{display:block;height:100%;background:var(--teal);border-radius:999px;}
-  .pool-cards .p .v{font-size:16px;font-variant-numeric:tabular-nums;}
+  .pool-cards .p .v{font-size:17.5px;font-variant-numeric:tabular-nums;}
   .pool-cards .p.over .bar i{background:var(--red);}
 
   .assist-controls{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end;margin-bottom:10px;}
 
   .final-table td, .final-table th{padding:10px 12px;}
   .final-table tr.total td{font-weight:700;border-top:2px solid var(--teal-dark);}
-  .flag-over{color:var(--red);font-weight:700;background:var(--red-soft);padding:2px 9px;border-radius:999px;font-size:12px;}
-  .flag-ok{color:var(--teal);font-weight:700;background:var(--green-soft);padding:2px 9px;border-radius:999px;font-size:12px;}
+  .final-table tr.sub-row td{color:var(--muted);font-size:14px;background:#faf9f5;}
+  .final-table tr.sub-row td:first-child{padding-left:26px;}
+  .flag-over{color:var(--red);font-weight:700;background:var(--red-soft);padding:3px 10px;border-radius:999px;font-size:13px;}
+  .flag-ok{color:var(--teal);font-weight:700;background:var(--green-soft);padding:3px 10px;border-radius:999px;font-size:13px;}
 
   /* ============================ 手機版（主要使用情境） ============================ */
   @media (max-width: 600px){
@@ -226,8 +228,8 @@
     header.top{padding:18px 14px 16px;border-radius:0 0 20px 20px;}
     .brand{gap:10px;}
     .brand .logo{width:42px;height:42px;padding:6px;}
-    header.top h1{font-size:19px;}
-    header.top p{font-size:12.5px;}
+    header.top h1{font-size:20px;}
+    header.top p{font-size:13.5px;}
 
     .basic-card{padding:14px 14px;border-radius:18px;margin-top:12px;}
     .field-row{flex-direction:column;align-items:stretch;gap:14px;}
@@ -236,43 +238,67 @@
     .field select, .field input[type=number], .field input[type=date], .field input[type=text]{width:100%;font-size:16px;padding:10px 12px;}
     .prorate-box{flex-direction:column;align-items:stretch;gap:14px;}
     .toggle-group{width:100%;}
-    .toggle-group button{flex:1;padding:12px 10px;font-size:14px;min-height:44px;}
+    .toggle-group button{flex:1;padding:12px 10px;font-size:15px;min-height:44px;}
 
     /* 主分頁／子分頁改為可橫向滑動，避免擠壓成多行 */
     nav.tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;justify-content:flex-start;margin:18px 0 0;padding:5px;}
-    nav.tabs button{flex:none;white-space:nowrap;padding:12px 16px;font-size:14px;min-height:44px;}
+    nav.tabs button{flex:none;white-space:nowrap;padding:12px 16px;font-size:15px;min-height:44px;}
     nav.subtabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
-    nav.subtabs button{flex:none;white-space:nowrap;padding:10px 14px;min-height:40px;}
+    nav.subtabs button{flex:none;white-space:nowrap;padding:10px 14px;font-size:14.5px;min-height:40px;}
 
     .panel{padding:12px 10px 16px;border-radius:18px;margin-top:12px;}
-    .panel h2{font-size:15.5px;}
+    .panel h2{font-size:17px;}
 
-    /* 表格改為橫向捲動，欄位維持可讀寬度而不被壓縮 */
-    .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:14px;}
-    table{min-width:620px;}
-    input.qty{width:60px;padding:9px 6px;font-size:15px;min-height:38px;}
+    /* 表格在手機上改為「一列一張卡片」，每個欄位自動換行並標示欄位名稱，
+       不用再橫向滑動找核定天數/次數欄位 */
+    .table-wrap{overflow-x:visible;border-radius:14px;}
+    .panel table{min-width:0;width:100%;border-collapse:separate;border-spacing:0;}
+    .panel thead{display:none;}
+    .panel table, .panel tbody, .panel tr, .panel td{display:block;width:100%;}
+    .panel tbody tr{
+      border:1px solid var(--line);border-radius:14px;background:#faf9f5;
+      padding:10px 12px;margin-bottom:10px;
+    }
+    .panel tbody tr:last-child{margin-bottom:0;}
+    .panel td{
+      display:flex;justify-content:space-between;align-items:center;gap:10px;
+      padding:8px 0;border:none;text-align:right;font-size:15.5px;
+    }
+    .panel td:not(:last-child){border-bottom:1px dashed var(--line);}
+    .panel td::before{
+      content:attr(data-label);flex:none;text-align:left;font-size:13.5px;color:var(--muted);
+    }
+    .panel td:first-child{
+      border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:2px;
+      font-weight:700;color:var(--teal-dark);font-size:16.5px;
+    }
+    .panel td.code{font-weight:700;}
+    .panel td input.qty{width:104px;margin-left:auto;}
+    .panel tr.disabled{border-color:var(--line);}
+
+    input.qty{width:70px;padding:9px 6px;font-size:16px;min-height:38px;}
 
     /* 結果字卡在手機上放大加寬：單欄、加大內距與數字字級，方便快速判讀 */
     .bucket-summary{gap:10px;margin-top:14px;}
     .bucket-summary .card{flex:1 1 100%;min-width:0;padding:20px 18px;border-radius:18px;}
-    .bucket-summary .card .k{font-size:14px;margin-bottom:8px;}
-    .bucket-summary .card .v{font-size:27px;}
+    .bucket-summary .card .k{font-size:15.5px;margin-bottom:8px;}
+    .bucket-summary .card .v{font-size:29px;}
 
     .pool-cards{gap:10px;}
     .pool-cards .p{flex:1 1 100%;min-width:0;padding:18px 16px;border-radius:18px;}
-    .pool-cards .p .k{font-size:14px;}
-    .pool-cards .p .v{font-size:15.5px;}
+    .pool-cards .p .k{font-size:15.5px;}
+    .pool-cards .p .v{font-size:17px;}
 
     .grp-select{flex-direction:column;gap:10px;}
-    .grp-select label{width:100%;padding:14px 16px;min-height:44px;}
+    .grp-select label{width:100%;padding:14px 16px;font-size:15px;min-height:44px;}
     .assist-controls{flex-direction:column;align-items:stretch;}
 
     /* 底部固定摘要列改為單行橫向捲動，避免佔用過多畫面高度 */
     footer.bar{left:8px;right:8px;bottom:8px;padding:14px 16px;border-radius:18px;}
     footer.bar .inner{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;justify-content:flex-start;gap:24px;}
     footer.bar .item{flex:none;white-space:nowrap;}
-    footer.bar .item span{font-size:12px;}
-    footer.bar .item b{font-size:17px;}
+    footer.bar .item span{font-size:13px;}
+    footer.bar .item b{font-size:18px;}
   }
 </style>
 </head>
@@ -348,7 +374,6 @@
   <!-- ============ 照顧服務 ============ -->
   <section class="panel active" id="panel-care">
     <h2>照顧服務（居家服務 + 日間照顧 + 家庭托顧 + 專業服務）共用同一額度</h2>
-    <div class="note">居家式基本照顧（BA 碼，不含到宅沐浴車）於「聘僱外籍看護」情況下不可申請，系統將自動鎖定。日照／家托／專業碼別（C 碼）／到宅沐浴車／BD 碼於聘僱外看情況下仍可申請，但總額度僅為原級距 30%。以下各子項共用同一額度池，總額顯示於下方試算結果。</div>
 
     <nav class="subtabs" id="careSubtabs">
       <button class="active" data-sub="basic" onclick="showCareSub('basic')">居家基本照顧</button>
@@ -391,7 +416,6 @@
   <!-- ============ 交通接送 ============ -->
   <section class="panel" id="panel-transport">
     <h2>交通接送（DA01，第 2 級以上適用，每月上限 20 趟）</h2>
-    <div class="note">交通接送之部分負擔比率與照顧服務不同：低收 0%／中低收 9%／一般戶 27%。核定即為 1 單位＝1,840 元／月（無按使用量計價），差異僅在該月計畫內是否核定交通接送；若勾選按比例分算則以下方基本資料之分算結果為準。</div>
     <div class="field-row" style="margin-bottom:14px;">
       <div class="field">
         <label>本月計畫是否核定交通接送</label>
@@ -452,9 +476,9 @@
     <h2>試算總結</h2>
     <div class="table-wrap">
     <table class="final-table">
-      <thead><tr><th>項目</th><th class="num">額度上限</th><th class="num">已用補助</th><th class="num">正常自付額</th><th class="num">超額自付額</th><th class="num">個案本次應自付合計</th><th>狀態</th></tr></thead>
+      <thead><tr><th>項目</th><th class="num">額度上限</th><th class="num">已用補助</th><th class="num">剩餘補助金額</th><th class="num">正常自付額</th><th class="num">超額自付額</th><th class="num">個案本次應自付合計</th><th>狀態</th></tr></thead>
       <tbody id="summaryBody"></tbody>
-      <tfoot><tr class="total"><td colspan="5">全部項目應自付總計</td><td class="num" id="grandTotalSelfPay">0</td><td></td></tr></tfoot>
+      <tfoot><tr class="total"><td colspan="6">全部項目應自付總計</td><td class="num" id="grandTotalSelfPay">0</td><td></td></tr></tfoot>
     </table>
     </div>
   </section>
@@ -979,12 +1003,30 @@ function renderSummary(){
   const rows = [];
   const c = state._care, t = state._transport, r = state._respite, s = state._short, a = state._assist;
 
-  function row(name, quota, used, selfpay, over, owed){
-    const status = over>0? `<span class="flag-over">超額</span>` : `<span class="flag-ok">額度內</span>`;
-    rows.push(`<tr><td>${name}</td><td class="num">${fmt(quota)}</td><td class="num">${fmt(used)}</td><td class="num">${fmt(selfpay)}</td><td class="num">${fmt(over)}</td><td class="num">${fmt(owed)}</td><td>${status}</td></tr>`);
+  function row(name, quota, used, selfpay, over, owed, opts={}){
+    const status = opts.dash ? '－' : (over>0? `<span class="flag-over">超額</span>` : `<span class="flag-ok">額度內</span>`);
+    const remain = opts.dash ? null : Math.max(0, quota-used);
+    rows.push(`<tr class="${opts.total?'total':(opts.sub?'sub-row':'')}"><td data-label="項目">${name}</td><td class="num" data-label="額度上限">${opts.dash?'－':fmt(quota)}</td><td class="num" data-label="已用補助">${fmt(used)}</td><td class="num" data-label="剩餘補助金額">${opts.dash?'－':fmt(remain)}</td><td class="num" data-label="正常自付額">${fmt(selfpay)}</td><td class="num" data-label="超額自付額">${opts.dash?'－':fmt(over)}</td><td class="num" data-label="個案本次應自付合計">${fmt(owed)}</td><td data-label="狀態">${status}</td></tr>`);
   }
   let grand = 0;
-  if(c){ row('照顧服務（居家/日照/家托/專業）', c.quota, c.totalSubsidy, c.totalSelfpay, c.over, c.totalOwed); grand+=c.totalOwed; }
+
+  // 照顧服務：先逐一列出所有已填答（核定數量>0）的項目明細，再列共用額度池小計
+  if(c){
+    document.querySelectorAll('#panel-care table tbody tr').forEach(tr=>{
+      const inp = tr.querySelector('input.qty');
+      if(!inp) return;
+      const qty = +inp.value || 0;
+      if(qty<=0) return;
+      const code = tr.children[0].textContent;
+      const name = tr.children[1].textContent;
+      const subsidy = parseFloat(tr.querySelector('[data-sub]').textContent.replace(/,/g,''))||0;
+      const sp = parseFloat(tr.children[3].textContent.replace(/,/g,''))||0;
+      const selfpay = sp*qty;
+      row(`${code} ${name}（核定 ${qty}）`, 0, subsidy, selfpay, 0, selfpay, {dash:true, sub:true});
+    });
+    row('照顧服務 小計（居家/日照/家托/專業，共用額度）', c.quota, c.totalSubsidy, c.totalSelfpay, c.over, c.totalOwed, {total:true});
+    grand += c.totalOwed;
+  }
   if(t){ row('交通接送', t.quota, t.subsidy, t.selfpay, t.over, t.owed); grand+=t.owed; }
   if(r){ row('喘息服務（年度）', r.quota, r.subsidy, r.selfpay, r.over, r.owed); grand+=r.owed; }
   if(s){ row('短期照顧（年度）', s.quota, s.subsidy, s.selfpay, s.over, s.owed); grand+=s.owed; }
@@ -996,12 +1038,24 @@ function renderSummary(){
 }
 
 /* ============================ 初始化 ============================ */
+function labelizeAll(){
+  // 手機版將表格轉為卡片式排版時，讓每個欄位顯示對應的欄位名稱
+  document.querySelectorAll('.panel table').forEach(tbl=>{
+    const heads = Array.from(tbl.querySelectorAll('thead th')).map(th=>th.textContent.trim());
+    tbl.querySelectorAll('tbody tr').forEach(tr=>{
+      Array.from(tr.children).forEach((td,i)=>{
+        if(heads[i]) td.setAttribute('data-label', heads[i]);
+      });
+    });
+  });
+}
 function renderAll(){
   renderCareStaticTables();
   renderCare();
   renderTransport();
   renderRespiteShort();
   renderAssist();
+  labelizeAll();
 }
 renderAll();
 </script>
