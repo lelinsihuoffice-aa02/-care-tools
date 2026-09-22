@@ -518,8 +518,10 @@
     <div class="item"><span>照顧服務剩餘補助額度</span><b id="footCareRemain">0</b></div>
     <div class="item"><span>交通接送自付</span><b id="footTransport">0</b></div>
     <div class="item"><span>交通接送剩餘補助額度</span><b id="footTransportRemain">0</b></div>
-    <div class="item"><span>喘息／短照自付</span><b id="footRespite">0</b></div>
-    <div class="item"><span>喘息／短照剩餘補助額度</span><b id="footRespiteRemain">0</b></div>
+    <div class="item"><span>喘息自付</span><b id="footRespite">0</b></div>
+    <div class="item"><span>喘息剩餘額度</span><b id="footRespiteRemain">0</b></div>
+    <div class="item"><span>短照自付</span><b id="footShort">0</b></div>
+    <div class="item"><span>短照剩餘額度</span><b id="footShortRemain">0</b></div>
     <div class="item"><span>輔具剩餘額度</span><b id="footAssist">0</b></div>
     <div class="item" id="footTotalWrap"><span>應自付總計</span><b id="footTotal">0</b></div>
   </div>
@@ -957,10 +959,10 @@ function renderRespiteShort(){
   state._respite = box('respite-summary', rQuotaBase, r);
   state._short = box('short-summary', sQuotaBase, s);
 
-  const total = state._respite.owed + state._short.owed;
-  const remainTotal = state._respite.remain + state._short.remain;
-  document.getElementById('footRespite').textContent = fmt(total);
-  document.getElementById('footRespiteRemain').textContent = fmt(remainTotal);
+  document.getElementById('footRespite').textContent = fmt(state._respite.owed);
+  document.getElementById('footRespiteRemain').textContent = fmt(state._respite.remain);
+  document.getElementById('footShort').textContent = fmt(state._short.owed);
+  document.getElementById('footShortRemain').textContent = fmt(state._short.remain);
   renderSummary();
 }
 
