@@ -515,8 +515,11 @@
 <footer class="bar">
   <div class="inner">
     <div class="item"><span>照顧服務自付</span><b id="footCare">0</b></div>
+    <div class="item"><span>照顧服務剩餘補助額度</span><b id="footCareRemain">0</b></div>
     <div class="item"><span>交通接送自付</span><b id="footTransport">0</b></div>
+    <div class="item"><span>交通接送剩餘補助額度</span><b id="footTransportRemain">0</b></div>
     <div class="item"><span>喘息／短照自付</span><b id="footRespite">0</b></div>
+    <div class="item"><span>喘息／短照剩餘補助額度</span><b id="footRespiteRemain">0</b></div>
     <div class="item"><span>輔具剩餘額度</span><b id="footAssist">0</b></div>
     <div class="item" id="footTotalWrap"><span>應自付總計</span><b id="footTotal">0</b></div>
   </div>
@@ -830,8 +833,8 @@ function renderCare(){
       const priceCell = tr.children[2], spCell = tr.children[3], subCell = tr.querySelector('[data-sub]');
       const price = parseFloat(priceCell.textContent.replace(/,/g,''))||0;
       const sp = parseFloat(spCell.textContent.replace(/,/g,''))||0;
-      const subsidyPerUnit = price - sp;
-      const rowSubsidy = subsidyPerUnit*qty;
+      // 補助小計＝給付價格 × 核定次數（未扣自付額，全額計入額度使用量）
+      const rowSubsidy = price*qty;
       const rowSelfpay = sp*qty;
       subCell.textContent = fmt(rowSubsidy);
       totalSubsidy += rowSubsidy;
@@ -859,8 +862,9 @@ function renderCare(){
     <div class="card owed"><div class="k">個案應自付合計</div><div class="v">${fmt(totalOwed)}</div></div>
   `;
 
-  state._care = {quota, totalSubsidy, totalSelfpay, over, totalOwed};
+  state._care = {quota, totalSubsidy, totalSelfpay, over, totalOwed, remain};
   document.getElementById('footCare').textContent = fmt(totalOwed);
+  document.getElementById('footCareRemain').textContent = fmt(remain);
   renderSummary();
 }
 
@@ -876,8 +880,8 @@ function renderTransport(){
   const {factor} = prorateFactor();
   const unitAmount = 1840*factor; // 核定 1 單位＝分算後之月額度金額
 
-  // 核定即用滿 1 單位；無按用量增減，故補助=單位金額、額度=單位金額，不會超額
-  const subsidy = approved ? unitAmount*(1-rate) : 0;
+  // 核定即用滿 1 單位；補助小計＝給付總額（未扣自付額），自付額另依比率計算
+  const subsidy = approved ? unitAmount : 0;
   const selfpay = approved ? unitAmount*rate : 0;
   const quota = unitAmount;
   const over = 0; // 每月固定 1 單位，恆不超額
@@ -891,8 +895,9 @@ function renderTransport(){
     <div class="card remain"><div class="k">剩餘額度</div><div class="v">${fmt(remain)}</div></div>
     <div class="card owed"><div class="k">個案應自付合計</div><div class="v">${fmt(owed)}</div></div>
   `;
-  state._transport = {quota, subsidy, selfpay, over, owed};
+  state._transport = {quota, subsidy, selfpay, over, owed, remain};
   document.getElementById('footTransport').textContent = fmt(owed);
+  document.getElementById('footTransportRemain').textContent = fmt(remain);
   renderSummary();
 }
 
@@ -925,7 +930,8 @@ function renderRespiteShort(){
       const price = parseFloat(tr.children[1].textContent.replace(/,/g,''))||0;
       const cost = price*qty;
       const sp = cost*rate;
-      const sub = cost-sp;
+      // 補助小計＝給付總額（未扣自付額），全額計入額度使用量
+      const sub = cost;
       tr.querySelector('[data-sub]').textContent = fmt(sub);
       subsidy+=sub; selfpay+=sp;
     });
@@ -946,13 +952,15 @@ function renderRespiteShort(){
       <div class="card ${over>0?'over':''}"><div class="k">超額自付</div><div class="v">${fmt(over)}</div></div>
       <div class="card owed"><div class="k">個案應自付合計</div><div class="v">${fmt(owed)}</div></div>
     `;
-    return {quota, over, owed, subsidy:res.subsidy, selfpay:res.selfpay};
+    return {quota, over, owed, subsidy:res.subsidy, selfpay:res.selfpay, remain};
   }
   state._respite = box('respite-summary', rQuotaBase, r);
   state._short = box('short-summary', sQuotaBase, s);
 
   const total = state._respite.owed + state._short.owed;
+  const remainTotal = state._respite.remain + state._short.remain;
   document.getElementById('footRespite').textContent = fmt(total);
+  document.getElementById('footRespiteRemain').textContent = fmt(remainTotal);
   renderSummary();
 }
 
