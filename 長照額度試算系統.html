@@ -505,9 +505,9 @@
     <h2>試算總結</h2>
     <div class="table-wrap">
     <table class="final-table">
-      <thead><tr><th>項目</th><th class="num">額度上限</th><th class="num">已用補助</th><th class="num">剩餘補助金額</th><th class="num">正常自付額</th><th class="num">超額自付額</th><th class="num">自費金額</th><th class="num">個案本次應自付合計</th><th>狀態</th></tr></thead>
+      <thead><tr><th>項目</th><th class="num">額度上限</th><th class="num">已用補助</th><th class="num">剩餘補助金額</th><th class="num">正常自付額</th><th class="num">自費金額</th><th class="num">個案本次應自付合計</th><th>狀態</th></tr></thead>
       <tbody id="summaryBody"></tbody>
-      <tfoot><tr class="total"><td colspan="7">全部項目應自付總計</td><td class="num" id="grandTotalSelfPay">0</td><td></td></tr></tfoot>
+      <tfoot><tr class="total"><td colspan="6">全部項目應自付總計</td><td class="num" id="grandTotalSelfPay">0</td><td></td></tr></tfoot>
     </table>
     </div>
   </section>
@@ -862,17 +862,16 @@ function renderCare(){
 
   const over = Math.max(0, totalSubsidy - quota);      // 已用補助 − 額度上限
   const remain = Math.max(0, quota - totalSubsidy);
-  const totalOwed = over + totalSelfpay + totalSelfFund; // 超額 ＋ 正常自付額 ＋ 自費總額
+  const totalOwed = totalSelfpay + totalSelfFund; // 正常自付額 ＋ 自費總額
 
   const box = document.getElementById('care-summary');
   box.innerHTML = `
     <div class="card"><div class="k">本額度上限（已依身分/外看/分算調整）</div><div class="v">${fmt(quota)}</div></div>
     <div class="card"><div class="k">已用補助金額</div><div class="v">${fmt(totalSubsidy)}</div></div>
     <div class="card remain"><div class="k">剩餘補助額度</div><div class="v">${fmt(remain)}</div></div>
-    <div class="card ${over>0?'over':''}"><div class="k">超額自付（已用補助 − 額度上限）</div><div class="v">${fmt(over)}</div></div>
     <div class="card"><div class="k">正常自付額（自付額 × 核定次數）</div><div class="v">${fmt(totalSelfpay)}</div></div>
     <div class="card"><div class="k">自費金額（給付價格 × 自費次數）</div><div class="v">${fmt(totalSelfFund)}</div></div>
-    <div class="card owed"><div class="k">個案應自付合計（超額＋正常自付額＋自費）</div><div class="v">${fmt(totalOwed)}</div></div>
+    <div class="card owed"><div class="k">個案應自付合計（正常自付額＋自費）</div><div class="v">${fmt(totalOwed)}</div></div>
   `;
 
   state._care = {quota, totalSubsidy, totalSelfpay, totalSelfFund, over, totalOwed, remain};
@@ -923,7 +922,7 @@ function renderRespiteShortTable(tblId, dataset){
     const tr=document.createElement('tr');
     tr.innerHTML = `<td>${label}（每單位 ${fmt(price)} 元，上限約 ${maxUnits} 單位）</td>
       <td class="num">${fmt(price)}</td>
-      <td class="num">${buildQtyCell(tblId+'|'+label)}</td>
+      <td class="num"><input type="number" class="qty" min="0" value="0" data-key="${tblId}|${label}" oninput="calcRespiteShort()"></td>
       <td class="num" data-sub="${tblId}|${label}">0</td>`;
     tbody.appendChild(tr);
   });
@@ -931,8 +930,14 @@ function renderRespiteShortTable(tblId, dataset){
 }
 
 function renderRespiteShort(){
-  const rQuotaBase = renderRespiteShortTable('tbl-respite', RESPITE);
-  const sQuotaBase = renderRespiteShortTable('tbl-short', SHORTTERM);
+  renderRespiteShortTable('tbl-respite', RESPITE);
+  renderRespiteShortTable('tbl-short', SHORTTERM);
+  calcRespiteShort();
+}
+function calcRespiteShort(){
+  const grp = state.level>=7 ? 'highgrp':'lowgrp';
+  const rQuotaBase = RESPITE[grp].quota;
+  const sQuotaBase = SHORTTERM[grp].quota;
 
   function sumTable(tblId){
     let subsidy=0, selfpay=0;
@@ -957,12 +962,11 @@ function renderRespiteShort(){
   function box(id, quota, res){
     const over = Math.max(0, res.subsidy-quota);
     const remain = Math.max(0, quota-res.subsidy);
-    const owed = res.selfpay+over;
+    const owed = res.selfpay;
     document.getElementById(id).innerHTML = `
       <div class="card"><div class="k">年度額度上限</div><div class="v">${fmt(quota)}</div></div>
       <div class="card"><div class="k">已用補助</div><div class="v">${fmt(res.subsidy)}</div></div>
       <div class="card remain"><div class="k">剩餘額度</div><div class="v">${fmt(remain)}</div></div>
-      <div class="card ${over>0?'over':''}"><div class="k">超額自付</div><div class="v">${fmt(over)}</div></div>
       <div class="card owed"><div class="k">個案應自付合計</div><div class="v">${fmt(owed)}</div></div>
     `;
     return {quota, over, owed, subsidy:res.subsidy, selfpay:res.selfpay, remain};
@@ -1055,7 +1059,7 @@ function renderSummary(){
   function row(name, quota, used, selfpay, over, owed, opts={}){
     const status = opts.dash ? '－' : (over>0? `<span class="flag-over">超額</span>` : `<span class="flag-ok">額度內</span>`);
     const remain = opts.dash ? null : Math.max(0, quota-used);
-    rows.push(`<tr class="${opts.total?'total':(opts.sub?'sub-row':'')}"><td data-label="項目">${name}</td><td class="num" data-label="額度上限">${opts.dash?'－':fmt(quota)}</td><td class="num" data-label="已用補助">${fmt(used)}</td><td class="num" data-label="剩餘補助金額">${opts.dash?'－':fmt(remain)}</td><td class="num" data-label="正常自付額">${fmt(selfpay)}</td><td class="num" data-label="超額自付額">${opts.dash?'－':fmt(over)}</td><td class="num" data-label="自費金額">${opts.selfFund===undefined?'－':fmt(opts.selfFund)}</td><td class="num" data-label="個案本次應自付合計">${fmt(owed)}</td><td data-label="狀態">${status}</td></tr>`);
+    rows.push(`<tr class="${opts.total?'total':(opts.sub?'sub-row':'')}"><td data-label="項目">${name}</td><td class="num" data-label="額度上限">${opts.dash?'－':fmt(quota)}</td><td class="num" data-label="已用補助">${fmt(used)}</td><td class="num" data-label="剩餘補助金額">${opts.dash?'－':fmt(remain)}</td><td class="num" data-label="正常自付額">${fmt(selfpay)}</td><td class="num" data-label="自費金額">${opts.selfFund===undefined?'－':fmt(opts.selfFund)}</td><td class="num" data-label="個案本次應自付合計">${fmt(owed)}</td><td data-label="狀態">${status}</td></tr>`);
   }
   let grand = 0;
 
