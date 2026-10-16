@@ -711,7 +711,7 @@ let state = {
   assistGroup:'g1', assistMode:'buy', transportApproved:0,
 };
 
-function fmt(n){ return Math.round(n).toLocaleString('en-US'); }
+function fmt(n){ return Math.floor(n).toLocaleString('en-US'); } // 全部金額無條件捨去
 function idIdx(identity){ return identity==='g'?0:(identity==='m'?1:2); } // 一般/中低/低收 -> col index into [g,m] pairs (低收=0 always)
 function idRate(){ return state.identity==='g'?0.16:(state.identity==='m'?0.05:0); }
 function idCapOf(quota, rate){ return Math.floor(quota*(rate===undefined?idRate():rate)); } // 身分別額度上限（小數無條件捨棄）
@@ -856,14 +856,15 @@ function renderCare(){
   document.getElementById('prorateResult').textContent = text;
 
   let quota = LEVEL_QUOTA[state.level];
-  if(state.foreign===1) quota = quota*0.3;
-  quota = quota*factor;
+  if(state.foreign===1) quota = Math.floor(quota*0.3);
+  quota = Math.floor(quota*factor);
 
+  totalSelfpay = Math.floor(totalSelfpay);
   const over = Math.max(0, totalSubsidy - quota);
   const remain = Math.max(0, quota - totalSubsidy);
   const inQuota = Math.min(totalSubsidy, quota);
   const rate = idRate();
-  const idCap = idCapOf(totalSubsidy);      // 已用補助金額 × 身分別比率，無條件捨棄
+  const idCap = idCapOf(inQuota);           // 已用補助（超額時以額度上限為準）× 身分別比率，無條件捨棄
   const totalOwed = totalSelfpay + over + totalSelfFund; // 自付額×核定次數 ＋ 超額自付 ＋ 自費
 
   const box = document.getElementById('care-summary');
@@ -873,7 +874,7 @@ function renderCare(){
     <div class="card remain"><div class="k">剩餘補助額度</div><div class="v">${fmt(remain)}</div></div>
     <div class="card"><div class="k">正常自付額（自付額 × 核定次數）</div><div class="v">${fmt(totalSelfpay)}</div></div>
     <div class="card ${over>0?'over':''}"><div class="k">超額自付</div><div class="v">${fmt(over)}</div></div>
-    <div class="card"><div class="k">個案身分別額度上限（${fmt(totalSubsidy)} × ${(rate*100).toFixed(0)}%）</div><div class="v">${fmt(idCap)}</div></div>
+    <div class="card"><div class="k">個案身分別額度上限（${fmt(inQuota)} × ${(rate*100).toFixed(0)}%）</div><div class="v">${fmt(idCap)}</div></div>
     <div class="card"><div class="k">自費金額</div><div class="v">${fmt(totalSelfFund)}</div></div>
     <div class="card owed"><div class="k">個案應自付合計（正常自付額＋超額＋自費）</div><div class="v">${fmt(totalOwed)}</div></div>
   `;
@@ -903,11 +904,11 @@ function renderTransport(){
   const approved = state.transportApproved ? 1 : 0;
   const rate = state.identity==='g'?0.27 : (state.identity==='m'?0.09:0);
   const {factor} = prorateFactor();
-  const unitAmount = 1840*factor; // 核定 1 單位＝分算後之月額度金額
+  const unitAmount = Math.floor(1840*factor); // 核定 1 單位＝分算後之月額度金額
 
   // 核定即用滿 1 單位；補助小計＝給付總額（未扣自付額），自付額另依比率計算
   const subsidy = approved ? unitAmount : 0;
-  const selfpay = approved ? unitAmount*rate : 0;
+  const selfpay = approved ? Math.floor(unitAmount*rate) : 0;
   const quota = unitAmount;
   const over = 0; // 每月固定 1 單位，恆不超額
   const remain = approved ? 0 : quota;
@@ -918,10 +919,10 @@ function renderTransport(){
     <div class="card"><div class="k">部分負擔比率</div><div class="v">${(rate*100).toFixed(0)}%</div></div>
     <div class="card"><div class="k">已用補助</div><div class="v">${fmt(subsidy)}</div></div>
     <div class="card remain"><div class="k">剩餘額度</div><div class="v">${fmt(remain)}</div></div>
-    <div class="card"><div class="k">身分別額度上限（${(rate*100).toFixed(0)}%）</div><div class="v">${fmt(idCapOf(subsidy, rate))}</div></div>
+    <div class="card"><div class="k">身分別額度上限（${(rate*100).toFixed(0)}%）</div><div class="v">${fmt(idCapOf(Math.min(subsidy, quota), rate))}</div></div>
     <div class="card owed"><div class="k">個案應自付合計</div><div class="v">${fmt(owed)}</div></div>
   `;
-  state._transport = {idCap:idCapOf(subsidy, rate), quota, subsidy, selfpay, over, owed, remain};
+  state._transport = {idCap:idCapOf(Math.min(subsidy, quota), rate), quota, subsidy, selfpay, over, owed, remain};
   document.getElementById('footTransport').textContent = fmt(owed);
   document.getElementById('footTransportRemain').textContent = fmt(remain);
   renderSummary();
@@ -955,7 +956,7 @@ function renderRespiteShort(){
       const qty = +inp.value||0;
       const price = parseFloat(tr.children[1].textContent.replace(/,/g,''))||0;
       const cost = price*qty;
-      const sp = cost*rate;
+      const sp = Math.floor(cost*rate);
       // 補助小計＝給付總額（未扣自付額），全額計入額度使用量
       const sub = cost;
       tr.querySelector('[data-sub]').textContent = fmt(sub);
@@ -970,7 +971,7 @@ function renderRespiteShort(){
   function box(id, quota, res){
     const over = Math.max(0, res.subsidy-quota);
     const remain = Math.max(0, quota-res.subsidy);
-    const idCap = idCapOf(res.subsidy);
+    const idCap = idCapOf(Math.min(res.subsidy, quota));
     const owed = res.selfpay+over;
     document.getElementById(id).innerHTML = `
       <div class="card"><div class="k">年度額度上限</div><div class="v">${fmt(quota)}</div></div>
