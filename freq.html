@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>服務頻率追蹤</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#faf6f0;--card:#fff;--line:#E4D5BE;--ink:#3d3529;--sub:#8C8071;--green:#7C9473;--soft:#E3EADD;
+    --red:#dc2626;--redbg:#fee2e2;--org:#b45309;--orgbg:#fef3c7;--yel:#854d0e;--yelbg:#fefce8;--blue:#1d4ed8;--bluebg:#dbeafe;--ok:#15803d;--okbg:#dcfce7}
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:'Noto Sans TC',system-ui,sans-serif;font-size:14px}
+  button{font-family:inherit;cursor:pointer}
+  input,select,textarea{font-family:inherit;font-size:14px}
+  @media (hover:none) and (pointer:coarse){input,select,textarea{font-size:16px}}
+  .top{background:#efe6da;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .brand{font-weight:700;font-size:15px;margin-right:6px}
+  .brand a{color:var(--sub);font-weight:400;font-size:12px;margin-left:8px;text-decoration:none}
+  .tabbtn{border:none;background:transparent;padding:8px 12px;border-radius:10px;color:#5a4a3a}
+  .tabbtn.on{background:rgba(124,148,115,.2);color:var(--green);font-weight:700}
+  .grow{flex:1}
+  .inp{padding:7px 10px;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .btn{background:var(--green);color:#fff;border:none;padding:8px 16px;border-radius:10px;font-weight:500;white-space:nowrap}
+  .btn.gray{background:#A69C8E}.btn.light{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .wrap{display:grid;grid-template-columns:300px 1fr;gap:14px;padding:14px;max-width:1500px;margin:0 auto}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr}.side{max-height:280px}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:12px}
+  .side{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:10px;height:calc(100vh - 90px);overflow:auto;position:sticky;top:70px}
+  .crow{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;cursor:pointer}
+  .crow:hover{background:#FBF3E6}.crow.sel{background:var(--soft)}
+  .crow .nm{font-weight:600}.crow .meta{font-size:11px;color:var(--sub)}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:12px;font-weight:600;white-space:nowrap}
+  .t-none{background:#f1f5f9;color:#64748b}.t-pend{background:var(--orgbg);color:var(--org)}.t-anom{background:var(--redbg);color:var(--red)}.t-done{background:var(--okbg);color:var(--ok)}
+  h2{margin:0 0 4px;font-size:19px} h3{margin:0 0 10px;font-size:15px}
+  .sub{color:var(--sub);font-size:12px}
+  textarea.paste{width:100%;height:90px;border:2px dashed #C9B896;border-radius:14px;padding:10px;resize:vertical;background:#FDFBF6}
+  textarea.paste:focus{outline:none;border-color:var(--green);background:#fff}
+  .steps{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+  .num{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+  .cal{overflow-x:auto}
+  .cal table{border-collapse:separate;border-spacing:2px;font-size:11px}
+  .cal th{font-weight:500;color:var(--sub);min-width:22px;text-align:center}
+  .cal th.we{color:#c2410c}
+  .cal td{width:22px;height:24px;text-align:center;border-radius:6px;background:#f6f3ee}
+  .cal td.std{background:var(--soft)}
+  .cal td.hit{background:var(--green);color:#fff;font-weight:700}
+  .cal td.hit.off{background:#e8a33d}
+  .cal td.flag{outline:2px solid var(--red);outline-offset:-2px}
+  .cal td.fut{opacity:.35}
+  .cal td.code{width:auto;background:none;text-align:left;padding-right:8px;white-space:nowrap}
+  .cal td.cnt{width:auto;background:none;white-space:nowrap;padding-left:8px;font-size:12px}
+  .wd{display:inline-flex;gap:2px;margin-top:3px}
+  .wd button{border:1px solid var(--line);background:#fff;border-radius:6px;font-size:11px;width:20px;height:20px;padding:0;color:var(--sub)}
+  .wd button.on{background:var(--green);border-color:var(--green);color:#fff}
+  .src{font-size:10px;color:var(--sub);margin-left:4px}
+  .item{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:12px;border:1px solid var(--line);margin-bottom:6px;flex-wrap:wrap}
+  .item.red{border-left:5px solid var(--red)}.item.orange{border-left:5px solid #f59e0b}.item.yellow{border-left:5px solid #facc15}.item.blue{border-left:5px solid var(--blue)}
+  .item .msg{flex:1;min-width:220px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{border:none;background:#fff;padding:5px 10px;font-size:12px;border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:none}
+  .seg button.on.pending{background:var(--orgbg);color:var(--org);font-weight:700}
+  .seg button.on.notified{background:var(--bluebg);color:var(--blue);font-weight:700}
+  .seg button.on.anomaly{background:var(--redbg);color:var(--red);font-weight:700}
+  .seg button.on.ok{background:var(--okbg);color:var(--ok);font-weight:700}
+  .note{width:100%;margin-top:6px;padding:6px 8px;border:1px solid var(--line);border-radius:10px}
+  .plan{display:flex;flex-wrap:wrap;gap:6px}
+  .pchip{background:#f6f3ee;border-radius:10px;padding:4px 10px;font-size:12px}
+  .pchip b{color:var(--green)}
+  .toast{position:fixed;right:20px;bottom:20px;color:#fff;padding:12px 18px;border-radius:14px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+  .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:200}
+  .gate .box{background:#fff;border-radius:18px;padding:32px 36px;box-shadow:0 10px 40px rgba(0,0,0,.15);width:320px;text-align:center}
+  .gate input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #ddd;margin:12px 0}
+  .gate .btn{width:100%}
+  .empty{text-align:center;color:var(--sub);padding:50px 10px}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--sub);margin-top:8px}
+  .legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-2px;background:var(--c)}
+  details summary{cursor:pointer;color:var(--green);font-weight:500}
+  .grp{font-weight:700;color:var(--green);margin:14px 0 6px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import { ConvexClient, ConvexHttpClient } from "https://esm.sh/convex@1.46.0/browser";
+import { html, render, useState, useEffect, useMemo, useRef } from "https://unpkg.com/htm@3.1.1/preact/standalone.module.js";
+
+// 原本服務追蹤系統的資料庫：這個頁面「只讀」個案、追蹤月份、設定，絕不寫入
+const SOURCE_URL = "https://robust-buzzard-570.convex.cloud";
+// 頻率追蹤專用的新資料庫：比對結果、標準排程都存這裡
+// 新專案 freq-backend 的網址（freq-backend 資料夾 .env.local 裡的 CONVEX_URL）
+const FREQ_URL = "https://avid-barracuda-174.convex.cloud";
+
+// ================= CORE-START（純邏輯：解析貼上內容、比對規則） =================
+const WD = ['日','一','二','三','四','五','六'];
+const WDMAP = {日:0,天:0,一:1,二:2,三:3,四:4,五:5,六:6};
+const CODE_RE = /([A-Z]{2}\d{2}[a-z]?\d?(?:-\d+)?)\s*\[/;
+const ROC_DATE_RE = /\d{2,3}\/\d{1,2}\/\d{1,2}/;
+const TIME_RE = /(\d{1,2}):(\d{2})\s*[~～\-－]\s*(\d{1,2}):(\d{2})/;
+
+function rocToISO(s){
+  const m = String(s||'').match(/(\d{2,4})\s*\/\s*(\d{1,2})\s*\/\s*(\d{1,2})/);
+  if(!m) return null;
+  let y = +m[1]; if(y < 1911) y += 1911;
+  return y+'-'+String(+m[2]).padStart(2,'0')+'-'+String(+m[3]).padStart(2,'0');
+}
+function firstNum(s){ const m = String(s==null?'':s).match(/\d+(?:\.\d+)?/); return m ? +m[0] : null; }
+function daysInMonth(mk){ const [y,m] = mk.split('-').map(Number); return new Date(y,m,0).getDate(); }
+function wdOf(iso){ const [y,m,d] = iso.split('-').map(Number); return new Date(y,m-1,d).getDay(); }
+function weekKey(iso){ const [y,m,d] = iso.split('-').map(Number); const dt = new Date(y,m-1,d); dt.setDate(dt.getDate()-((dt.getDay()+6)%7)); return dt.getFullYear()+'-'+(dt.getMonth()+1)+'-'+dt.getDate(); }
+function fmtMD(iso){ const [,m,d] = iso.split('-').map(Number); return m+'/'+d+'('+WD[wdOf(iso)]+')'; }
+function isoOf(mk, d){ return mk+'-'+String(d).padStart(2,'0'); }
+
+// 服務紀錄頁：項次｜服務日期｜服務項目｜類型｜服務數量｜服務區間起訖
+function parseRecords(text){
+  const rows = [], skipped = [];
+  String(text||'').split(/\r?\n/).forEach(line => {
+    const t = line.trim(); if(!t) return;
+    const dm = t.match(ROC_DATE_RE), cm = t.match(CODE_RE);
+    if(!dm || !cm){ if(/[A-Z]{2}\d{2}/.test(t)) skipped.push(t); return; }
+    const date = rocToISO(dm[0]), code = cm[1];
+    let qty = null;
+    const cells = t.split(/\t+/).map(s => s.trim()).filter(Boolean);
+    const ci = cells.findIndex(c => CODE_RE.test(c));
+    if(cells.length >= 4 && ci >= 0){
+      for(let i = ci+1; i < cells.length; i++){ if(/^\d+(\.\d+)?$/.test(cells[i])){ qty = +cells[i]; break; } }
+    }
+    if(qty == null){
+      const after = t.slice(t.indexOf(cm[0]));
+      const m2 = after.match(/\]\S*\s+\S+\s+(\d+(?:\.\d+)?)\s+\d{1,2}:\d{2}/);
+      if(m2) qty = +m2[1];
+    }
+    if(qty == null) qty = 1;
+    const tm = t.match(TIME_RE); let start = null, end = null;
+    if(tm){ start = +tm[1]*60 + +tm[2]; end = +tm[3]*60 + +tm[4]; if(end < start) end += 1440; }
+    rows.push({date, code, qty, start, end});
+  });
+  return {rows, skipped};
+}
+
+// 核定計畫頁：服務項目｜金額｜服務數量（可一次貼多個計畫頁面，同一服務取最大值）
+function parsePlan(text){
+  const items = {};
+  String(text||'').split(/\r?\n/).forEach(line => {
+    const t = line.trim(); const cm = t.match(CODE_RE);
+    if(!cm || ROC_DATE_RE.test(t)) return;
+    const cells = t.split(/\t+/).map(s => s.trim()).filter(Boolean);
+    let qty = null;
+    if(cells.length >= 2 && /^\d+(\.\d+)?$/.test(cells[cells.length-1])) qty = +cells[cells.length-1];
+    if(qty == null){ const m = t.match(/(\d+(?:\.\d+)?)\s*$/); if(m && !/元\s*$/.test(t)) qty = +m[1]; }
+    if(qty == null) return;
+    const code = cm[1];
+    const name = t.slice(t.indexOf('[')+1, t.indexOf(']'));
+    const prev = items[code];
+    items[code] = {code, name, qty: prev ? Math.max(prev.qty, qty) : qty, pages: prev ? prev.pages+1 : 1};
+  });
+  return Object.keys(items).length ? items : null;
+}
+
+// 從「實際頻率」文字推出星期幾，例如「週一、三、五」「週一至週六」「每日」
+function parseWeekdays(text){
+  if(!text) return null;
+  let s = String(text);
+  if(/每[日天]|天天|週一[至到~～\-]週日|一週\s*7\s*[次天]|每週\s*7/.test(s)) return [0,1,2,3,4,5,6];
+  const set = new Set();
+  const P = '(?:週|星期|禮拜|周)', C = '[一二三四五六日天]';
+  const rangeRe = new RegExp(P+'\\s*('+C+')\\s*(?:至|到|~|～|-|－|—)\\s*'+P+'?\\s*('+C+')','g');
+  s = s.replace(rangeRe, (m,a,b) => { let x = WDMAP[a], y = WDMAP[b]; if(y < x || (y === 0 && x > 0)) y += 7; for(let d = x; d <= y; d++) set.add(d%7); return ' '; });
+  const listRe = new RegExp(P+'\\s*('+C+'(?![次回趟])(?:\\s*[、，,\\/及和與]\\s*'+P+'?\\s*'+C+'(?![次回趟]))*)','g');
+  s.replace(listRe, (m,grp) => { (grp.match(new RegExp(C,'g'))||[]).forEach(ch => set.add(WDMAP[ch])); return m; });
+  return set.size ? [...set].sort((a,b) => a-b) : null;
+}
+
+// 從實際服務日期推測固定星期幾（只作為建議）
+function inferWeekdays(dates){
+  if(!dates || !dates.length) return null;
+  const cnt = [0,0,0,0,0,0,0]; dates.forEach(d => cnt[wdOf(d)]++);
+  const weeks = new Set(dates.map(weekKey)).size;
+  const thr = Math.max(2, Math.ceil(weeks*0.6));
+  const res = cnt.map((c,i) => c >= thr ? i : -1).filter(i => i >= 0);
+  return res.length ? res : null;
+}
+
+function effectivePlan(sysPlan, pasted){
+  if(!pasted) return sysPlan;
+  const out = {};
+  Object.values(sysPlan).forEach(p => { if(p.type === 'assistive' || p.type === 'envimprove') out[p.code] = p; });
+  Object.values(pasted).forEach(p => { const s = sysPlan[p.code] || {}; out[p.code] = {code:p.code, name:p.name || s.name || '', quota:p.qty, type:s.type || 'regular', freq:s.freq || ''}; });
+  return out;
+}
+
+function planDiff(sysPlan, pasted, ignore){
+  const items = [];
+  if(!pasted) return items;
+  Object.values(pasted).forEach(p => {
+    if(ignore.includes(p.code)) return;
+    const s = sysPlan[p.code];
+    if(!s) items.push({id:'planNew|'+p.code+'|'+p.qty, code:p.code, kind:'plan', level:'blue', msg:`衛福部核定有、本系統計畫沒有：${p.code} ${p.name}（${p.qty}）`});
+    else if(s.quota != null && s.type === 'regular' && s.quota !== p.qty) items.push({id:'planQty|'+p.code+'|'+s.quota+'|'+p.qty, code:p.code, kind:'plan', level:'blue', msg:`核定數量不同：系統 ${s.quota} → 衛福部 ${p.qty}`});
+  });
+  Object.values(sysPlan).forEach(s => {
+    if(ignore.includes(s.code) || s.type === 'assistive' || s.type === 'envimprove') return;
+    if(!pasted[s.code]) items.push({id:'planGone|'+s.code, code:s.code, kind:'plan', level:'blue', msg:`本系統計畫有、衛福部核定沒有：${s.code} ${s.name}`});
+  });
+  return items;
+}
+
+function runChecks({monthKey, rows, plan, standards, ignore, todayISO}){
+  const items = [], stats = {};
+  const inMonth = rows.filter(r => r.date.startsWith(monthKey));
+  const outMonth = rows.length - inMonth.length;
+  const byCode = {}; inMonth.forEach(r => (byCode[r.code] = byCode[r.code] || []).push(r));
+  const dim = daysInMonth(monthKey);
+  const lastDay = (todayISO && todayISO.startsWith(monthKey)) ? Math.max(0, +todayISO.slice(8,10) - 1) : dim;
+  const codes = [...new Set([...Object.keys(plan), ...Object.keys(byCode)])].sort();
+  codes.forEach(code => {
+    if(ignore.includes(code)) return;
+    const p = plan[code], rs = byCode[code] || [];
+    const type = (p && p.type) || 'regular';
+    if(type === 'assistive' || type === 'envimprove') return;
+    const used = rs.reduce((a,r) => a + (r.qty || 0), 0);
+    const dates = [...new Set(rs.map(r => r.date))].sort();
+    stats[code] = {code, name:(p && p.name) || '', approved:p ? p.quota : null, used, days:dates.length, rows:rs.length};
+    if(!p){ items.push({id:'unapproved|'+code, code, kind:'unapproved', level:'red', msg:`不在核定計畫內的服務，本月 ${rs.length} 筆`}); return; }
+    if(!rs.length){
+      if(type === 'regular' && !/依實際/.test(p.freq || '')) items.push({id:'unused|'+code, code, kind:'unused', level:'orange', msg:`有核定但本月沒有任何服務紀錄`});
+      return;
+    }
+    if(type === 'regular' && p.quota != null && used > p.quota) items.push({id:'over|'+code+'|'+used, code, kind:'over', level:'red', msg:`使用 ${used} 超過核定 ${p.quota}`});
+    const byDate = {}; rs.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
+    Object.entries(byDate).forEach(([d,list]) => {
+      if(list.length < 2) return;
+      let overlap = false;
+      for(let i = 0; i < list.length; i++) for(let j = i+1; j < list.length; j++){
+        const a = list[i], b = list[j];
+        if(a.start != null && b.start != null && a.start < b.end && b.start < a.end) overlap = true;
+      }
+      items.push({id:'dup|'+code+'|'+d, code, kind:'dup', level:overlap ? 'red' : 'yellow', date:d,
+        msg: overlap ? `${fmtMD(d)} 同時段 ${list.length} 筆，疑似重複申報` : `${fmtMD(d)} 同一天 ${list.length} 筆，請確認`});
+    });
+    const S = standards[code];
+    if(S && S.length && type === 'regular'){
+      const sset = new Set(S);
+      const expected = [];
+      for(let d = 1; d <= lastDay; d++){ const iso = isoOf(monthKey,d); if(sset.has(wdOf(iso))) expected.push(iso); }
+      const dset = new Set(dates);
+      const missing = expected.filter(x => !dset.has(x));
+      const extra = dates.filter(x => !sset.has(wdOf(x)));
+      if(S.length === 7){
+        if(missing.length) items.push({id:'missDaily|'+code+'|'+missing.join(','), code, kind:'missing', level:'orange', dates:missing, msg:`排定每天，有 ${missing.length} 天沒有服務：${missing.map(fmtMD).join('、')}`});
+      } else {
+        const usedExtra = new Set();
+        missing.forEach(m => {
+          const wk = weekKey(m);
+          const e = extra.find(x => !usedExtra.has(x) && weekKey(x) === wk);
+          if(e){ usedExtra.add(e); items.push({id:'resched|'+code+'|'+m+'|'+e, code, kind:'resched', level:'orange', date:m, date2:e, msg:`疑似改期：${fmtMD(m)} → ${fmtMD(e)}`}); }
+          else items.push({id:'missing|'+code+'|'+m, code, kind:'missing', level:'orange', date:m, msg:`排定日沒有服務：${fmtMD(m)}`});
+        });
+        extra.filter(x => !usedExtra.has(x)).forEach(e => items.push({id:'extra|'+code+'|'+e, code, kind:'extra', level:'orange', date:e, msg:`不在排定星期的服務：${fmtMD(e)}`}));
+      }
+    }
+  });
+  return {items, stats, outMonth, inMonthCount:inMonth.length};
+}
+// ================= CORE-END =================
+
+// ================= Convex 連線與登入 =================
+// 兩個資料庫各自一條連線、各自保存登入狀態（同一組團隊帳密）。
+//   source：原本服務追蹤系統的資料庫 → 只允許 query（讀取）
+//   freq  ：頻率追蹤專用資料庫       → 比對結果的讀寫都在這裡
+const SHARED_EMAIL = 'team@careapp-aa02.local';
+function makeConn(url, refreshKey){
+  const client = new ConvexClient(url), http = new ConvexHttpClient(url);
+  let token = null, inFlight = null, resolveReady;
+  const ready = new Promise(r => { resolveReady = r; });
+  async function fetchToken({forceRefreshToken}){
+    if(!forceRefreshToken && token) return token;
+    if(inFlight) return inFlight;
+    const rt = localStorage.getItem(refreshKey); if(!rt) return null;
+    inFlight = (async () => {
+      try{
+        const r = await http.action('auth:signIn', {refreshToken: rt});
+        if(r && r.tokens){ token = r.tokens.token; localStorage.setItem(refreshKey, r.tokens.refreshToken); resolveReady(); return token; }
+      }catch(e){ console.error('[換 token 失敗]', url, e); }
+      localStorage.removeItem(refreshKey); token = null; return null;
+    })().finally(() => { inFlight = null; });
+    return inFlight;
+  }
+  client.setAuth(fetchToken);
+  async function signIn(pw, flow){
+    const r = await http.action('auth:signIn', {provider:'password', params:{email:SHARED_EMAIL, password:pw, flow: flow || 'signIn'}});
+    if(!r || !r.tokens) throw new Error('登入失敗');
+    token = r.tokens.token; localStorage.setItem(refreshKey, r.tokens.refreshToken);
+    client.setAuth(fetchToken); resolveReady();
+  }
+  const hasSaved = () => !!localStorage.getItem(refreshKey);
+  return {client, ready, fetchToken, signIn, hasSaved};
+}
+const SRC = makeConn(SOURCE_URL, 'caFreqRefreshToken');
+const FRQ = makeConn(FREQ_URL, 'caFreqDbRefreshToken');
+const FREQ_CONFIGURED = !/請換成/.test(FREQ_URL);
+
+// 登入：同一組密碼先登入原資料庫（確認密碼正確），再登入新資料庫；
+// 新資料庫第一次使用還沒有帳號時，自動用同一組密碼建立。
+async function signIn(pw){
+  try{ await SRC.signIn(pw); }catch(e){ console.error(e); throw new Error('密碼錯誤，請再試一次'); }
+  try{ await FRQ.signIn(pw); }
+  catch(e1){
+    console.warn('[新資料庫登入失敗，嘗試第一次建立帳號]', e1);
+    try{ await FRQ.signIn(pw, 'signUp'); }
+    catch(e2){ console.error(e2); throw new Error('原系統登入成功，但頻率追蹤資料庫登入失敗。若曾改過團隊密碼，請聯絡管理者同步兩邊密碼。'); }
+  }
+}
+async function restoreSession(){
+  if(!SRC.hasSaved() || !FRQ.hasSaved()) return false;
+  const [a, b] = await Promise.all([SRC.fetchToken({forceRefreshToken:false}), FRQ.fetchToken({forceRefreshToken:false})]);
+  return !!(a && b);
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const isFreqFn = name => name.startsWith('freqChecks:');
+async function cq(name, args){
+  const conn = isFreqFn(name) ? FRQ : SRC;
+  await conn.ready;
+  for(let i = 0; ; i++){
+    try{ return await conn.client.query(name, args || {}); }
+    catch(e){ if(i < 5 && /未登入/.test(e.message || '')){ await sleep(1000); continue; } throw e; }
+  }
+}
+// 寫入只會送到頻率追蹤資料庫；任何想寫原資料庫的呼叫都直接擋下
+async function cm(name, args){
+  if(!isFreqFn(name)) throw new Error('安全限制：此系統不允許寫入原服務追蹤資料庫（'+name+'）');
+  await FRQ.ready; return FRQ.client.mutation(name, args);
+}
+const J = s => { try{ return JSON.parse(s || '{}'); }catch{ return {}; } };
+
+// ================= 畫面 =================
+const STATUS = [['pending','待確認'],['notified','有異動通知'],['anomaly','異常・交個管'],['ok','無需處理']];
+const defaultMonth = () => { const d = new Date(); const t = d.getDate() < 28 ? new Date(d.getFullYear(), d.getMonth()-1, 1) : d; return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0'); };
+const todayISO = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const prevMonth = mk => { const [y,m] = mk.split('-').map(Number); const d = new Date(y, m-2, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
+const loadIgnore = () => { try{ const v = JSON.parse(localStorage.getItem('freqIgnore')); return Array.isArray(v) ? v : ['OT01']; }catch{ return ['OT01']; } };
+
+function parseCase(row){
+  const d = J(row.data);
+  return {id:row.caseId, name:d.name || '', idNo:d.idNo || '', careManager:d.careManager || '', region:d.region || '',
+    contactName:d.contactName || '', contactPhone:d.contactPhone || '', services:d.services || []};
+}
+function sysPlanOf(c){
+  const p = {};
+  (c.services || []).forEach(s => { if(s.code) p[s.code] = {code:s.code, name:s.name || '', quota:firstNum(s.quota), type:s.type || 'regular', freq:s.freq || ''}; });
+  return p;
+}
+function badgeOf(check){
+  if(!check) return html`<span class="tag t-none">未比對</span>`;
+  const s = check.data.summary || {};
+  if(s.pending > 0) return html`<span class="tag t-pend">待確認 ${s.pending}</span>`;
+  if(s.anomaly > 0) return html`<span class="tag t-anom">異常 ${s.anomaly}</span>`;
+  return html`<span class="tag t-done">完成</span>`;
+}
+
+function Login({onDone}){
+  const [pw, setPw] = useState(''), [msg, setMsg] = useState('請輸入團隊共用密碼'), [busy, setBusy] = useState(false);
+  const go = async () => { if(!pw) return; setBusy(true); try{ await signIn(pw); onDone(); }catch(e){ console.error(e); setMsg(e.message || '登入失敗'); } setBusy(false); };
+  if(!FREQ_CONFIGURED) return html`<div class="gate"><div class="box">
+    <div style="font-size:18px;font-weight:700;color:var(--green)">服務頻率追蹤</div>
+    <div class="sub" style="margin-top:8px;line-height:1.7">尚未設定頻率追蹤專用資料庫。<br/>請在 freq.html 裡把 FREQ_URL 換成新 Convex 專案的網址。</div>
+  </div></div>`;
+  return html`<div class="gate"><div class="box">
+    <div style="font-size:18px;font-weight:700;color:var(--green)">服務頻率追蹤</div>
+    <div class="sub" style="margin-top:6px">${msg}</div>
+    <input type="password" value=${pw} onInput=${e => setPw(e.target.value)} onKeyDown=${e => e.key === 'Enter' && go()} placeholder="密碼" />
+    <button class="btn" disabled=${busy} onClick=${go}>${busy ? '登入中…' : '登入'}</button>
+  </div></div>`;
+}
+
+function WeekdayPicker({value, onChange}){
+  const v = new Set(value || []);
+  const order = [1,2,3,4,5,6,0];
+  return html`<span class="wd">${order.map(d => html`<button class=${v.has(d) ? 'on' : ''} title=${'週'+WD[d]}
+    onClick=${() => { const n = new Set(v); n.has(d) ? n.delete(d) : n.add(d); onChange([...n].sort((a,b) => a-b)); }}>${WD[d]}</button>`)}</span>`;
+}
+
+function Calendar({month, codes, plan, byCode, std, stdSrc, flagged, onStd, inferred}){
+  const dim = daysInMonth(month), today = todayISO();
+  const days = Array.from({length:dim}, (_,i) => i+1);
+  return html`<div class="cal"><table>
+    <thead><tr><th></th>${days.map(d => { const w = wdOf(isoOf(month,d)); return html`<th class=${w === 0 || w === 6 ? 'we' : ''}>${d}<br/>${WD[w]}</th>`; })}<th></th></tr></thead>
+    <tbody>${codes.map(code => {
+      const p = plan[code], rs = byCode[code] || [], S = new Set(std[code] || []);
+      const qtyByDate = {}; rs.forEach(r => qtyByDate[r.date] = (qtyByDate[r.date] || 0) + (r.qty || 0));
+      const used = rs.reduce((a,r) => a + (r.qty || 0), 0);
+      const fl = flagged[code] || new Set();
+      const inf = inferred[code];
+      const srcLabel = {saved:'已存', freq:'由實際頻率帶入'}[stdSrc[code]] || '';
+      return html`<tr>
+        <td class="code"><b>${code}</b> ${p ? p.name : html`<span class="tag t-anom">未核定</span>`}<br/>
+          ${p && p.type === 'regular' ? html`<${WeekdayPicker} value=${std[code]} onChange=${v => onStd(code, v)} />
+            ${srcLabel && html`<span class="src">${srcLabel}</span>`}
+            ${inf && JSON.stringify(inf) !== JSON.stringify(std[code] || []) && html`<button class="btn light" style="padding:1px 6px;font-size:11px;margin-left:4px"
+              onClick=${() => onStd(code, inf)}>推測：${inf.map(d => WD[d]).join('')}</button>`}` : html`<span class="src">${p ? '依實際狀況使用' : ''}</span>`}
+        </td>
+        ${days.map(d => { const iso = isoOf(month,d); const q = qtyByDate[iso];
+          const cls = [S.has(wdOf(iso)) ? 'std' : '', q ? 'hit' : '', q && S.size && !S.has(wdOf(iso)) ? 'off' : '', fl.has(iso) ? 'flag' : '', iso >= today ? 'fut' : ''].join(' ');
+          return html`<td class=${cls}>${q ? (q === 1 ? '●' : q) : ''}</td>`; })}
+        <td class="cnt">${used}${p && p.quota != null ? ' / '+p.quota : ''}</td>
+      </tr>`; })}</tbody></table>
+    <div class="legend"><span style="--c:var(--soft)">排定星期</span><span style="--c:var(--green)">有服務</span><span style="--c:#e8a33d">非排定日服務</span><span style="--c:#fff;outline:2px solid var(--red)">被標記的日期</span><span>數字＝當日數量</span></div>
+  </div>`;
+}
+
+function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
+  const sysPlan = useMemo(() => sysPlanOf(c), [c]);
+  const [recText, setRecText] = useState(''), [planText, setPlanText] = useState(''), [noRecords, setNoRecords] = useState(false);
+  const [std, setStd] = useState(null), [stdSrc, setStdSrc] = useState({}), [stdVer, setStdVer] = useState(0), [stdDirty, setStdDirty] = useState(false);
+  const [marks, setMarks] = useState({}), [saving, setSaving] = useState(false);
+  const recRef = useRef();
+
+  useEffect(() => {
+    setRecText(''); setPlanText(''); setNoRecords(false); setStd(null); setStdDirty(false);
+    const m = {}; ((check && check.data.items) || []).forEach(it => m[it.id] = {status:it.status, note:it.note || ''}); setMarks(m);
+    let off = false;
+    (async () => {
+      try{
+        const [sd, tm, tmPrev] = await Promise.all([
+          cq('freqChecks:getStandard', {caseId:c.id}),
+          cq('trackingMonths:get', {caseId:c.id, monthKey:month}),
+          cq('trackingMonths:get', {caseId:c.id, monthKey:prevMonth(month)}),
+        ]);
+        if(off) return;
+        const freqText = {};
+        [tmPrev, tm].forEach(row => { if(!row) return; (J(row.data).services || []).forEach(s => { if(s.code && s.actualFreq) freqText[s.code] = s.actualFreq; }); });
+        const s = {}, src = {};
+        Object.values(sysPlan).forEach(p => { const w = parseWeekdays(freqText[p.code] || p.freq); if(w){ s[p.code] = w; src[p.code] = 'freq'; } });
+        const saved = sd ? (J(sd.data).codes || {}) : {};
+        Object.entries(saved).forEach(([k,v]) => { s[k] = v; src[k] = 'saved'; });
+        setStd(s); setStdSrc(src); setStdVer(sd ? sd.updatedAt : 0);
+      }catch(e){ console.error(e); toast('讀取標準排程失敗：'+e.message, true); setStd({}); }
+    })();
+    setTimeout(() => recRef.current && recRef.current.focus(), 50);
+    return () => { off = true; };
+  }, [c.id, month]);
+
+  const parsed = useMemo(() => noRecords ? {rows:[], skipped:[]} : (recText.trim() ? parseRecords(recText) : null), [recText, noRecords]);
+  const pasted = useMemo(() => planText.trim() ? parsePlan(planText) : null, [planText]);
+  const plan = useMemo(() => effectivePlan(sysPlan, pasted), [sysPlan, pasted]);
+  const result = useMemo(() => parsed && std ? runChecks({monthKey:month, rows:parsed.rows, plan, standards:std, ignore, todayISO:todayISO()}) : null, [parsed, plan, std, ignore, month]);
+  const diff = useMemo(() => planDiff(sysPlan, pasted, ignore), [sysPlan, pasted, ignore]);
+  const savedItems = (check && check.data.items) || [];
+  const items = result ? [...diff, ...result.items] : pasted ? [...diff, ...savedItems.filter(i => i.kind !== 'plan')] : savedItems;
+
+  const byCode = useMemo(() => { const o = {}; (parsed ? parsed.rows : []).filter(r => r.date.startsWith(month)).forEach(r => (o[r.code] = o[r.code] || []).push(r)); return o; }, [parsed, month]);
+  const inferred = useMemo(() => { const o = {}; Object.entries(byCode).forEach(([k,rs]) => { o[k] = inferWeekdays([...new Set(rs.map(r => r.date))]); }); return o; }, [byCode]);
+  const calCodes = useMemo(() => [...new Set([...Object.keys(plan), ...Object.keys(byCode)])].filter(k => !ignore.includes(k) && !(plan[k] && (plan[k].type === 'assistive' || plan[k].type === 'envimprove'))).sort(), [plan, byCode, ignore]);
+  const flagged = useMemo(() => { const o = {}; items.forEach(it => { const s = (o[it.code] = o[it.code] || new Set()); [it.date, it.date2, ...(it.dates || [])].forEach(d => d && s.add(d)); }); return o; }, [items]);
+
+  const setMark = (id, patch) => setMarks(m => ({...m, [id]: {...(m[id] || {status:'pending', note:''}), ...patch}}));
+  const onStd = (code, v) => { setStd(s => ({...s, [code]: v})); setStdSrc(s => ({...s, [code]: 'saved'})); setStdDirty(true); };
+
+  const save = async (goNext) => {
+    if(!parsed && !check && !pasted){ toast('請先貼上服務紀錄（或勾選「本月無任何服務紀錄」）', true); return; }
+    setSaving(true);
+    try{
+      if(stdDirty){
+        const codes = {}; Object.entries(std).forEach(([k,v]) => { if(v && v.length) codes[k] = v; });
+        const r = await cm('freqChecks:upsertStandard', {caseId:c.id, data:JSON.stringify({codes}), expectedUpdatedAt:stdVer});
+        setStdVer(r.updatedAt); setStdDirty(false);
+      }
+      const finalItems = items.map(it => ({id:it.id, code:it.code, kind:it.kind, level:it.level, msg:it.msg, date:it.date || null, date2:it.date2 || null,
+        status:(marks[it.id] && marks[it.id].status) || 'pending', note:(marks[it.id] && marks[it.id].note) || ''}));
+      const summary = {total:finalItems.length, pending:finalItems.filter(i => i.status === 'pending').length, anomaly:finalItems.filter(i => i.status === 'anomaly').length};
+      const data = {items:finalItems, stats:result ? result.stats : ((check && check.data.stats) || {}), summary, planPasted:!!pasted || !!(check && check.data.planPasted),
+        hasRecords:!!parsed || !!(check && check.data.hasRecords), checkedBy:userName, checkedAt:Date.now()};
+      const r = await cm('freqChecks:upsertCheck', {caseId:c.id, monthKey:month, data:JSON.stringify(data), expectedUpdatedAt:check ? check.updatedAt : 0});
+      onSaved(c.id, {caseId:c.id, monthKey:month, data, updatedAt:r.updatedAt});
+      toast(summary.pending ? `已儲存（還有 ${summary.pending} 項待確認）` : '已儲存');
+      if(goNext) onNext();
+    }catch(e){ console.error(e); toast('儲存失敗：'+e.message, true); }
+    setSaving(false);
+  };
+
+  const onPasteRec = () => setNoRecords(false);
+  const planChips = Object.values(sysPlan).filter(p => !ignore.includes(p.code));
+  const pendingCount = items.filter(it => ((marks[it.id] && marks[it.id].status) || 'pending') === 'pending').length;
+
+  return html`<div>
+    <div class="card" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+      <div><h2>${c.name}</h2><div class="sub">${c.idNo} · 個管：${c.careManager || '—'}${c.region ? ' · '+c.region : ''}${c.contactName ? ' · 聯絡人：'+c.contactName+' '+c.contactPhone : ''}</div>
+        ${check && html`<div class="sub" style="margin-top:4px">上次比對：${check.data.checkedBy || ''} ${new Date(check.data.checkedAt || check.updatedAt).toLocaleString('zh-TW')}</div>`}</div>
+      <div style="display:flex;gap:8px"><button class="btn light" disabled=${saving} onClick=${() => save(false)}>儲存</button><button class="btn" disabled=${saving} onClick=${() => save(true)}>儲存並下一位 →</button></div>
+    </div>
+
+    <div class="card">
+      <div class="steps"><span class="num">1</span><h3 style="margin:0">核定計畫</h3><span class="sub">預設使用本系統的核定項目；有計畫異動時，貼上衛福部核定頁面比對</span></div>
+      <div class="plan">${planChips.length ? planChips.map(p => html`<span class="pchip"><b>${p.code}</b> ${p.name} ${p.quota != null ? '×'+p.quota : ''}</span>`) : html`<span class="sub">本系統尚未設定核定項目</span>`}</div>
+      <details style="margin-top:10px" open=${!!planText}>
+        <summary>貼上衛福部核定計畫頁面（選填，可一次貼多個計畫頁）</summary>
+        <textarea class="paste" style="margin-top:8px" placeholder="在衛福部系統的核定頁面全選表格 → 複製 → 貼在這裡" value=${planText} onInput=${e => setPlanText(e.target.value)}></textarea>
+        ${planText.trim() && html`<div class="sub">${pasted ? `辨識到 ${Object.keys(pasted).length} 個服務項目，本月比對以衛福部核定為準（同一服務在多頁出現時取最大數量）` : '⚠️ 沒有辨識到服務項目，請確認是否貼到核定表格'}</div>`}
+      </details>
+    </div>
+
+    <div class="card">
+      <div class="steps"><span class="num">2</span><h3 style="margin:0">貼上 ${+month.split('-')[1]} 月服務紀錄</h3></div>
+      <textarea ref=${recRef} class="paste" placeholder="在衛福部系統查詢這位個案的服務紀錄 → 全選表格 → 複製 → 貼在這裡（Ctrl+V）"
+        value=${recText} onPaste=${onPasteRec} onInput=${e => setRecText(e.target.value)}></textarea>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:6px">
+        <label class="sub"><input type="checkbox" checked=${noRecords} onChange=${e => { setNoRecords(e.target.checked); if(e.target.checked) setRecText(''); }} /> 本月無任何服務紀錄</label>
+        ${parsed && !noRecords && html`<span class="sub">辨識 ${parsed.rows.length} 筆${result && result.outMonth ? `（其中 ${result.outMonth} 筆不是 ${month} 已略過）` : ''}${parsed.skipped.length ? `，⚠️ ${parsed.skipped.length} 行無法辨識` : ''}</span>`}
+        ${recText && html`<button class="btn light" style="padding:3px 10px;font-size:12px" onClick=${() => setRecText('')}>清除</button>`}
+      </div>
+      ${std && (parsed || calCodes.length) ? html`<div style="margin-top:12px"><${Calendar} month=${month} codes=${calCodes} plan=${plan} byCode=${byCode} std=${std} stdSrc=${stdSrc} flagged=${flagged} onStd=${onStd} inferred=${inferred} /></div>` : ''}
+      ${stdDirty && html`<div class="sub" style="margin-top:6px;color:var(--org)">標準排程已修改，儲存時會一併存下，之後每個月沿用</div>`}
+    </div>
+
+    <div class="card">
+      <div class="steps"><span class="num">3</span><h3 style="margin:0">檢核結果</h3>
+        <span class="sub">${items.length ? `共 ${items.length} 項，待確認 ${pendingCount} 項` : (parsed ? '✅ 沒有發現需要確認的項目' : (check ? '' : '貼上服務紀錄後自動比對'))}</span></div>
+      ${!result && check && savedItems.length ? html`<div class="sub" style="margin-bottom:8px">顯示的是上次儲存的結果；重新貼上服務紀錄會重新比對（已標記的狀態會保留）</div>` : ''}
+      ${items.map(it => { const mk = marks[it.id] || {status:'pending', note:''}; return html`<div class=${'item '+it.level} key=${it.id}>
+        <div class="msg"><b>${it.code}</b> ${(plan[it.code] && plan[it.code].name) || ''}<br/>${it.msg}</div>
+        <span class="seg">${STATUS.map(([k,l]) => html`<button class=${mk.status === k ? 'on '+k : ''} onClick=${() => setMark(it.id, {status:k})}>${l}</button>`)}</span>
+        ${(mk.status !== 'pending' || mk.note) && html`<input class="note" placeholder="備註（例：已收到異動通知 10/12、個案住院…）" value=${mk.note} onInput=${e => setMark(it.id, {note:e.target.value})} />`}
+      </div>`; })}
+      ${items.length > 1 && html`<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn light" style="font-size:12px;padding:4px 10px" onClick=${() => items.forEach(it => { if(((marks[it.id] || {}).status || 'pending') === 'pending') setMark(it.id, {status:'ok'}); })}>其餘待確認全部設為「無需處理」</button></div>`}
+    </div>
+  </div>`;
+}
+
+function AnomalyView({cases, checks, month, cms}){
+  const [cmF, setCmF] = useState('全部'), [incPending, setIncPending] = useState(false);
+  const caseMap = useMemo(() => { const o = {}; cases.forEach(c => o[c.id] = c); return o; }, [cases]);
+  const rows = [];
+  Object.values(checks).forEach(ch => { const c = caseMap[ch.caseId]; if(!c) return; if(cmF !== '全部' && c.careManager !== cmF) return;
+    (ch.data.items || []).forEach(it => { if(it.status === 'anomaly' || (incPending && it.status === 'pending')) rows.push({c, it}); }); });
+  const groups = {}; rows.forEach(r => (groups[r.c.careManager || '未指派'] = groups[r.c.careManager || '未指派'] || []).push(r));
+  const copy = list => { const t = list.map(r => `${r.c.name}（${r.c.idNo}）${r.it.code} ${r.it.msg}${r.it.note ? '；'+r.it.note : ''}${r.it.status === 'pending' ? '【待確認】' : ''}`).join('\n'); navigator.clipboard.writeText(t); };
+  return html`<div style="max-width:1100px;margin:0 auto;padding:14px">
+    <div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <h3 style="margin:0">${month} 異常清單</h3>
+      <select class="inp" value=${cmF} onChange=${e => setCmF(e.target.value)}><option>全部</option>${cms.map(x => html`<option>${x}</option>`)}</select>
+      <label class="sub"><input type="checkbox" checked=${incPending} onChange=${e => setIncPending(e.target.checked)} /> 包含待確認</label>
+      <span class="sub">共 ${rows.length} 項</span>
+    </div>
+    ${!rows.length ? html`<div class="empty">目前沒有標記為「異常・交個管」的項目</div>` : Object.entries(groups).map(([g,list]) => html`<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center"><div class="grp" style="margin:0">${g}（${list.length}）</div>
+        <button class="btn light" style="font-size:12px;padding:4px 10px" onClick=${() => copy(list)}>複製文字給個管</button></div>
+      ${list.map(r => html`<div class=${'item '+r.it.level}><div class="msg"><b>${r.c.name}</b> <span class="sub">${r.c.idNo}</span><br/><b>${r.it.code}</b> ${r.it.msg}${r.it.note ? html`<div class="sub">備註：${r.it.note}</div>` : ''}</div>
+        <span class=${'tag '+(r.it.status === 'pending' ? 't-pend' : 't-anom')}>${r.it.status === 'pending' ? '待確認' : '異常'}</span></div>`)}
+    </div>`)}
+  </div>`;
+}
+
+function App(){
+  const [authed, setAuthed] = useState(false), [checking, setChecking] = useState(true);
+  const [userName, setUserName] = useState(localStorage.getItem('caUserName') || '');
+  const [cases, setCases] = useState([]), [checks, setChecks] = useState({}), [cms, setCms] = useState([]);
+  const [month, setMonth] = useState(defaultMonth()), [cmF, setCmF] = useState('全部'), [search, setSearch] = useState(''), [stF, setStF] = useState('全部');
+  const [selId, setSelId] = useState(null), [tab, setTab] = useState('check'), [loading, setLoading] = useState(false);
+  const [toastMsg, setToastMsg] = useState(null), [ignore, setIgnore] = useState(loadIgnore());
+
+  const toast = (msg, err) => { setToastMsg({msg, err}); setTimeout(() => setToastMsg(null), 3000); };
+
+  useEffect(() => { (async () => { if(FREQ_CONFIGURED && await restoreSession()) setAuthed(true); setChecking(false); })(); }, []);
+
+  const loadCases = async () => {
+    setLoading(true);
+    try{
+      const [rows, cfg] = await Promise.all([cq('cases:list', {}), cq('config:getMeta', {})]);
+      const list = rows.map(parseCase).sort((a,b) => (a.careManager || '').localeCompare(b.careManager || '', 'zh-Hant') || a.name.localeCompare(b.name, 'zh-Hant'));
+      setCases(list); setCms((cfg ? J(cfg.data).cms : null) || [...new Set(list.map(c => c.careManager).filter(Boolean))]);
+    }catch(e){ console.error(e); toast('載入個案失敗：'+e.message, true); }
+    setLoading(false);
+  };
+  const loadChecks = async mk => {
+    try{ const rows = await cq('freqChecks:listByMonth', {monthKey:mk}); const o = {}; rows.forEach(r => o[r.caseId] = {...r, data:J(r.data)}); setChecks(o); }
+    catch(e){ console.error(e); toast('載入比對結果失敗：'+e.message, true); }
+  };
+  useEffect(() => { if(authed) loadCases(); }, [authed]);
+  useEffect(() => { if(authed) loadChecks(month); }, [authed, month]);
+
+  const filtered = cases.filter(c => (cmF === '全部' || c.careManager === cmF) && (!search || c.name.includes(search) || c.idNo.includes(search))
+    && (stF === '全部' || (stF === '未比對' ? !checks[c.id] : stF === '待確認' ? (checks[c.id] && checks[c.id].data.summary.pending > 0) : (checks[c.id] && !checks[c.id].data.summary.pending))));
+  const doneCount = cases.filter(c => (cmF === '全部' || c.careManager === cmF) && checks[c.id] && !checks[c.id].data.summary.pending).length;
+  const totalCount = cases.filter(c => cmF === '全部' || c.careManager === cmF).length;
+  const sel = cases.find(c => c.id === selId);
+  const goNext = () => { const i = filtered.findIndex(c => c.id === selId); const n = filtered[i+1]; if(n){ setSelId(n.id); document.getElementById('row-'+n.id)?.scrollIntoView({block:'nearest'}); } else toast('已經是清單最後一位'); };
+
+  if(checking) return html`<div class="empty">載入中…</div>`;
+  if(!authed) return html`<${Login} onDone=${() => setAuthed(true)} />`;
+  if(!userName) return html`<div class="gate"><div class="box"><div style="font-weight:700;color:var(--green)">你是哪一位？</div>
+    <div class="sub" style="margin-top:6px">比對紀錄會顯示這個名字</div>
+    <input id="nm" placeholder="請輸入你的名字" onKeyDown=${e => { if(e.key === 'Enter' && e.target.value.trim()){ localStorage.setItem('caUserName', e.target.value.trim()); setUserName(e.target.value.trim()); } }} />
+    <button class="btn" onClick=${() => { const v = document.getElementById('nm').value.trim(); if(v){ localStorage.setItem('caUserName', v); setUserName(v); } }}>確定</button></div></div>`;
+
+  return html`<div>
+    <div class="top">
+      <span class="brand">服務頻率追蹤<a href="https://lelinsihuoffice-aa02.github.io/-care-tools/">← 回入口</a></span>
+      <button class=${'tabbtn'+(tab === 'check' ? ' on' : '')} onClick=${() => setTab('check')}>逐案比對</button>
+      <button class=${'tabbtn'+(tab === 'anomaly' ? ' on' : '')} onClick=${() => setTab('anomaly')}>異常清單</button>
+      <span class="grow"></span>
+      <label class="sub">追蹤月份 <input class="inp" type="month" value=${month} onChange=${e => setMonth(e.target.value)} /></label>
+      <select class="inp" value=${cmF} onChange=${e => setCmF(e.target.value)}><option>全部</option>${cms.map(x => html`<option>${x}</option>`)}</select>
+      <span class="tag t-done">已完成 ${doneCount} / ${totalCount}</span>
+      <button class="btn light" disabled=${loading} onClick=${() => { loadCases(); loadChecks(month); }}>${loading ? '載入中…' : '重新整理'}</button>
+      <span class="sub">${userName}</span>
+    </div>
+    ${tab === 'anomaly' ? html`<${AnomalyView} cases=${cases} checks=${checks} month=${month} cms=${cms} />` : html`<div class="wrap">
+      <div class="side">
+        <input class="inp" style="width:100%;margin-bottom:6px" placeholder="搜尋姓名或身分證" value=${search} onInput=${e => setSearch(e.target.value)} />
+        <select class="inp" style="width:100%;margin-bottom:8px" value=${stF} onChange=${e => setStF(e.target.value)}>${['全部','未比對','待確認','完成'].map(x => html`<option>${x}</option>`)}</select>
+        ${filtered.map(c => html`<div id=${'row-'+c.id} class=${'crow'+(c.id === selId ? ' sel' : '')} onClick=${() => setSelId(c.id)}>
+          <div class="grow"><div class="nm">${c.name}</div><div class="meta">${c.careManager}${c.region ? ' · '+c.region : ''}</div></div>${badgeOf(checks[c.id])}</div>`)}
+        ${!filtered.length && html`<div class="empty">沒有符合條件的個案</div>`}
+        <details style="margin-top:12px;font-size:12px"><summary>不比對的服務項目</summary>
+          <input class="inp" style="width:100%;margin-top:6px" value=${ignore.join(', ')} onChange=${e => { const v = e.target.value.split(/[,，\s]+/).filter(Boolean); setIgnore(v); localStorage.setItem('freqIgnore', JSON.stringify(v)); }} />
+          <div class="sub">用逗號分隔，例：OT01（只存在這台電腦）</div></details>
+      </div>
+      <div>${sel ? html`<${CasePanel} key=${sel.id+month} c=${sel} month=${month} check=${checks[sel.id]} ignore=${ignore} userName=${userName}
+          onSaved=${(id, ch) => setChecks(o => ({...o, [id]: ch}))} onNext=${goNext} toast=${toast} />`
+        : html`<div class="card empty">從左邊選一位個案開始。<br/><br/>流程：在衛福部系統查詢服務紀錄 → 全選複製 → 貼上 → 確認標記的項目 → 儲存並下一位</div>`}</div>
+    </div>`}
+    ${toastMsg && html`<div class="toast" style=${{background: toastMsg.err ? 'var(--red)' : 'var(--ok)'}}>${toastMsg.msg}</div>`}
+  </div>`;
+}
+
+render(html`<${App} />`, document.getElementById('app'));
+</script>
+</body>
+</html>
