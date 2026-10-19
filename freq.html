@@ -27,10 +27,11 @@
   .btn{background:var(--green);color:#fff;border:none;padding:8px 16px;border-radius:10px;font-weight:500;white-space:nowrap}
   .btn.gray{background:#A69C8E}.btn.light{background:#fff;color:var(--ink);border:1px solid var(--line)}
   .btn:disabled{opacity:.5;cursor:default}
-  .wrap{display:grid;grid-template-columns:300px 1fr;gap:14px;padding:14px;max-width:1500px;margin:0 auto}
-  @media (max-width:900px){.wrap{grid-template-columns:1fr}.side{max-height:280px}}
+  .wrap{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;padding:14px;max-width:1500px;margin:0 auto}
+  .wrap>*{min-width:0}
+  @media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}.side{max-height:280px}}
   .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:12px}
-  .side{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:10px;height:calc(100vh - 90px);overflow:auto;position:sticky;top:70px}
+  .side{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:10px;height:calc((100vh - 90px) / var(--z, 1));overflow:auto;position:sticky;top:70px}
   .crow{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;cursor:pointer}
   .crow:hover{background:#FBF3E6}.crow.sel{background:var(--soft)}
   .crow .nm{font-weight:600}.crow .meta{font-size:11px;color:var(--sub)}
@@ -73,6 +74,11 @@
   .pchip{background:#f6f3ee;border-radius:10px;padding:4px 10px;font-size:12px}
   .pchip b{color:var(--green)}
   .toast{position:fixed;right:20px;bottom:20px;color:#fff;padding:12px 18px;border-radius:14px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+  #app{zoom:var(--z, 1)}
+  .fz{position:fixed;left:16px;bottom:16px;z-index:1000;display:flex;align-items:center;background:#fff;border:1px solid var(--line);border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.15);overflow:hidden;font-family:'Noto Sans TC',system-ui,sans-serif}
+  .fz button{border:none;background:#fff;color:var(--green);font-weight:700;padding:8px 14px;font-size:16px;cursor:pointer}
+  .fz button:hover{background:var(--soft)}
+  .fz .lv{font-size:13px;color:var(--sub);min-width:46px;text-align:center;cursor:pointer}
   .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:200}
   .gate .box{background:#fff;border-radius:18px;padding:32px 36px;box-shadow:0 10px 40px rgba(0,0,0,.15);width:320px;text-align:center}
   .gate input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #ddd;margin:12px 0}
@@ -86,6 +92,29 @@
 </head>
 <body>
 <div id="app"></div>
+<div class="fz" title="調整字體大小">
+  <button id="fzDown" aria-label="縮小字體">A−</button>
+  <span class="lv" id="fzLv" title="恢復預設大小"></span>
+  <button id="fzUp" aria-label="放大字體">A＋</button>
+</div>
+<script>
+// 字體大小懸浮鈕：整個畫面一起縮放，設定記在這台電腦
+(function(){
+  var KEY = 'freqZoom', DEF = 1.15, MIN = 0.9, MAX = 1.8, STEP = 0.1;
+  var z = DEF;
+  try{ var v = parseFloat(localStorage.getItem(KEY)); if(v >= MIN && v <= MAX) z = v; }catch(e){}
+  function apply(){
+    z = Math.round(Math.min(MAX, Math.max(MIN, z)) * 100) / 100;
+    document.documentElement.style.setProperty('--z', z);
+    document.getElementById('fzLv').textContent = Math.round(z * 100) + '%';
+    try{ localStorage.setItem(KEY, z); }catch(e){}
+  }
+  document.getElementById('fzDown').onclick = function(){ z -= STEP; apply(); };
+  document.getElementById('fzUp').onclick = function(){ z += STEP; apply(); };
+  document.getElementById('fzLv').onclick = function(){ z = DEF; apply(); };
+  apply();
+})();
+</script>
 
 <script type="module">
 import { ConvexClient, ConvexHttpClient } from "https://esm.sh/convex@1.46.0/browser";
