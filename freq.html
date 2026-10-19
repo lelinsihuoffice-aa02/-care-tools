@@ -59,7 +59,7 @@
   .wd button.on{background:var(--green);border-color:var(--green);color:#fff}
   .src{font-size:10px;color:var(--sub);margin-left:4px}
   .item{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:12px;border:1px solid var(--line);margin-bottom:6px;flex-wrap:wrap}
-  .item.red{border-left:5px solid var(--red)}.item.orange{border-left:5px solid #f59e0b}.item.yellow{border-left:5px solid #facc15}.item.blue{border-left:5px solid var(--blue)}
+  .item.red{border-left:5px solid var(--red)}.item.orange{border-left:5px solid #f59e0b}.item.yellow{border-left:5px solid #facc15}.item.blue{border-left:5px solid var(--blue)}.item.info{border-left:5px solid #94a3b8}
   .item .msg{flex:1;min-width:220px}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .seg button{border:none;background:#fff;padding:5px 10px;font-size:12px;border-right:1px solid var(--line)}
@@ -269,8 +269,27 @@ function planDiff(sysPlan, pasted, ignore){
   return items;
 }
 
-function runChecks({monthKey, rows, plan, standards, meals, ignore, todayISO}){
-  meals = meals || {};
+// ---------- 交通接送與「依實際狀況使用」 ----------
+const COMMUTE_CODES = ['BD03'];   // 社區式服務交通接送：日照來回一天兩趟
+const COMMUTE_NOON = 12*60;       // 社區式交通上午／下午分界
+const DA01 = 'DA01';              // 交通接送：只需記錄使用日期
+function md(iso){ const [,m,d] = iso.split('-').map(Number); return m+'/'+d; }
+function tripsByDate(rs){ const o = {}; rs.forEach(r => o[r.date] = (o[r.date] || 0) + (r.qty || 1)); return o; }
+// 備註文字，例如「8/17、8/19(1趟)使用」（DA01 單趟才標趟數；其他服務只列日期）
+function usageNote(rs, markSingleTrip){
+  const t = tripsByDate(rs);
+  return Object.keys(t).sort().map(d => md(d) + (markSingleTrip && t[d] === 1 ? '(1趟)' : '')).join('、') + '使用';
+}
+// 社區式交通是否為「一天來回兩趟」：頻率寫「來回」，或核定次數＝日照核定次數×2
+function isRoundTrip(plan, code, ftext){
+  if(/來回/.test(ftext)) return true;
+  const p = plan[code]; if(!p || p.quota == null) return false;
+  const bb = Object.values(plan).filter(x => /^BB/.test(x.code) && x.quota != null);
+  return bb.some(x => x.quota*2 === p.quota) || (bb.length > 1 && bb.reduce((a,x) => a + x.quota, 0)*2 === p.quota);
+}
+
+function runChecks({monthKey, rows, plan, standards, meals, freqText, ignore, todayISO}){
+  meals = meals || {}; freqText = freqText || {};
   const items = [], stats = {};
   const inMonth = rows.filter(r => r.date.startsWith(monthKey));
   const outMonth = rows.length - inMonth.length;
@@ -287,14 +306,41 @@ function runChecks({monthKey, rows, plan, standards, meals, ignore, todayISO}){
     const dates = [...new Set(rs.map(r => r.date))].sort();
     stats[code] = {code, name:(p && p.name) || '', approved:p ? p.quota : null, used, days:dates.length, rows:rs.length};
     if(!p){ items.push({id:'unapproved|'+code, code, kind:'unapproved', level:'red', msg:`不在核定計畫內的服務，本月 ${rs.length} 筆`}); return; }
+    const ftext = (freqText[code] || '') + ' ' + (p.freq || '');
+    const asNeeded = /依實際/.test(ftext), isDA01 = code === DA01;
+    const roundTrip = COMMUTE_CODES.includes(code) && isRoundTrip(plan, code, ftext);
     if(!rs.length){
-      if(type === 'regular' && !/依實際/.test(p.freq || '')) items.push({id:'unused|'+code, code, kind:'unused', level:'orange', msg:`有核定但本月沒有任何服務紀錄`});
+      if(type === 'regular' && !asNeeded && !isDA01) items.push({id:'unused|'+code, code, kind:'unused', level:'orange', msg:`有核定但本月沒有任何服務紀錄`});
       return;
+    }
+    // DA01、依實際狀況使用：列出使用日期，備註自動帶入，預設「無需處理」
+    if(isDA01 || asNeeded){
+      const note = usageNote(rs, isDA01);
+      items.push({id:'usage|'+code+'|'+note, code, kind:'usage', level:'info', msg:`本月使用：${note}`, defStatus:'ok', defNote:note});
+    }
+    // 社區式交通來回：只有單趟的日子標異常
+    if(roundTrip){
+      const t = tripsByDate(rs);
+      const single = Object.keys(t).sort().filter(d => t[d] === 1);
+      if(single.length) items.push({id:'oneway|'+code+'|'+single.join(','), code, kind:'oneway', level:'orange', dates:single,
+        msg:`核定來回（一天兩趟），但有 ${single.length} 天只有單趟：${single.map(fmtMD).join('、')}`});
+      // 兩趟應上午、下午各一趟（以中午 12 點分界）；兩趟都在上午或都在下午 → 時間異常
+      const bad = [];
+      Object.keys(t).sort().forEach(d => {
+        const l = rs.filter(r => r.date === d && r.start != null).sort((a,b) => a.start - b.start);
+        if(l.length !== 2) return;
+        const am = l.filter(r => r.start < COMMUTE_NOON).length;
+        if(am !== 1) bad.push({d, l, am});
+      });
+      if(bad.length) items.push({id:'tripTime|'+code+'|'+bad.map(b => b.d).join(','), code, kind:'time', level:'orange', dates:bad.map(b => b.d),
+        msg:`來回兩趟應上午、下午各一趟，有 ${bad.length} 天時間異常：${bad.map(b => `${fmtMD(b.d)} ${b.l.map(r => fmtHM(r.start)).join('、')}（都在${b.am === 2 ? '上午' : '下午'}）`).join('；')}`});
     }
     if(type === 'regular' && p.quota != null && used > p.quota) items.push({id:'over|'+code+'|'+used, code, kind:'over', level:'red', msg:`使用 ${used} 超過核定 ${p.quota}`});
     const byDate = {}; rs.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
     Object.entries(byDate).forEach(([d,list]) => {
       if(list.length < 2) return;
+      // 交通接送一天兩趟是正常的，超過兩趟才提醒
+      if((isDA01 || roundTrip) && list.length <= 2) return;
       let overlap = false;
       for(let i = 0; i < list.length; i++) for(let j = i+1; j < list.length; j++){
         const a = list[i], b = list[j];
@@ -489,7 +535,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
   const sysPlan = useMemo(() => sysPlanOf(c), [c]);
   const [recText, setRecText] = useState(''), [planText, setPlanText] = useState(''), [noRecords, setNoRecords] = useState(false);
   const [std, setStd] = useState(null), [stdSrc, setStdSrc] = useState({}), [stdVer, setStdVer] = useState(0), [stdDirty, setStdDirty] = useState(false);
-  const [meals, setMeals] = useState({}), [mealSrc, setMealSrc] = useState({});
+  const [meals, setMeals] = useState({}), [mealSrc, setMealSrc] = useState({}), [freqText, setFreqText] = useState({});
   const [marks, setMarks] = useState({}), [saving, setSaving] = useState(false);
   const recRef = useRef();
 
@@ -507,6 +553,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
         if(off) return;
         const freqText = {};
         [tmPrev, tm].forEach(row => { if(!row) return; (J(row.data).services || []).forEach(s => { if(s.code && s.actualFreq) freqText[s.code] = s.actualFreq; }); });
+        setFreqText(freqText);
         const s = {}, src = {};
         Object.values(sysPlan).forEach(p => { const w = parseWeekdays(freqText[p.code] || p.freq); if(w){ s[p.code] = w; src[p.code] = 'freq'; } });
         const sdData = sd ? J(sd.data) : {};
@@ -524,7 +571,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
   const parsed = useMemo(() => noRecords ? {rows:[], skipped:[]} : (recText.trim() ? parseRecords(recText) : null), [recText, noRecords]);
   const pasted = useMemo(() => planText.trim() ? parsePlan(planText) : null, [planText]);
   const plan = useMemo(() => effectivePlan(sysPlan, pasted), [sysPlan, pasted]);
-  const result = useMemo(() => parsed && std ? runChecks({monthKey:month, rows:parsed.rows, plan, standards:std, meals, ignore, todayISO:todayISO()}) : null, [parsed, plan, std, meals, ignore, month]);
+  const result = useMemo(() => parsed && std ? runChecks({monthKey:month, rows:parsed.rows, plan, standards:std, meals, freqText, ignore, todayISO:todayISO()}) : null, [parsed, plan, std, meals, freqText, ignore, month]);
   const diff = useMemo(() => planDiff(sysPlan, pasted, ignore), [sysPlan, pasted, ignore]);
   const savedItems = (check && check.data.items) || [];
   const items = result ? [...diff, ...result.items] : pasted ? [...diff, ...savedItems.filter(i => i.kind !== 'plan')] : savedItems;
@@ -534,7 +581,10 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
   const calCodes = useMemo(() => [...new Set([...Object.keys(plan), ...Object.keys(byCode)])].filter(k => !ignore.includes(k) && !(plan[k] && (plan[k].type === 'assistive' || plan[k].type === 'envimprove'))).sort(), [plan, byCode, ignore]);
   const flagged = useMemo(() => { const o = {}; items.forEach(it => { const s = (o[it.code] = o[it.code] || new Set()); [it.date, it.date2, ...(it.dates || [])].forEach(d => d && s.add(d)); }); return o; }, [items]);
 
-  const setMark = (id, patch) => setMarks(m => ({...m, [id]: {...(m[id] || {status:'pending', note:''}), ...patch}}));
+  // 每一項的狀態與備註：使用者沒改過時，用項目自帶的預設值（例如交通接送的使用日期備註）
+  const defMark = it => ({status: it.defStatus || 'pending', note: it.defNote || ''});
+  const markOf = it => marks[it.id] || defMark(it);
+  const setMark = (it, patch) => setMarks(m => ({...m, [it.id]: {...(m[it.id] || defMark(it)), ...patch}}));
   const onStd = (code, v) => { setStd(s => ({...s, [code]: v})); setStdSrc(s => ({...s, [code]: 'saved'})); setStdDirty(true); };
   const onMeal = (code, v) => { setMeals(s => ({...s, [code]: v})); setMealSrc(s => ({...s, [code]: 'saved'})); setStdDirty(true); };
 
@@ -550,7 +600,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
         setStdVer(r.updatedAt); setStdDirty(false);
       }
       const finalItems = items.map(it => ({id:it.id, code:it.code, kind:it.kind, level:it.level, msg:it.msg, date:it.date || null, date2:it.date2 || null,
-        status:(marks[it.id] && marks[it.id].status) || 'pending', note:(marks[it.id] && marks[it.id].note) || ''}));
+        status:markOf(it).status || 'pending', note:markOf(it).note || ''}));
       const summary = {total:finalItems.length, pending:finalItems.filter(i => i.status === 'pending').length, anomaly:finalItems.filter(i => i.status === 'anomaly').length};
       const data = {items:finalItems, stats:result ? result.stats : ((check && check.data.stats) || {}), summary, planPasted:!!pasted || !!(check && check.data.planPasted),
         hasRecords:!!parsed || !!(check && check.data.hasRecords), checkedBy:userName, checkedAt:Date.now()};
@@ -564,7 +614,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
 
   const onPasteRec = () => setNoRecords(false);
   const planChips = Object.values(sysPlan).filter(p => !ignore.includes(p.code));
-  const pendingCount = items.filter(it => ((marks[it.id] && marks[it.id].status) || 'pending') === 'pending').length;
+  const pendingCount = items.filter(it => markOf(it).status === 'pending').length;
 
   return html`<div>
     <div class="card" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
@@ -600,13 +650,13 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
       <div class="steps"><span class="num">3</span><h3 style="margin:0">檢核結果</h3>
         <span class="sub">${items.length ? `共 ${items.length} 項，待確認 ${pendingCount} 項` : (parsed ? '✅ 沒有發現需要確認的項目' : (check ? '' : '貼上服務紀錄後自動比對'))}</span></div>
       ${!result && check && savedItems.length ? html`<div class="sub" style="margin-bottom:8px">顯示的是上次儲存的結果；重新貼上服務紀錄會重新比對（已標記的狀態會保留）</div>` : ''}
-      ${items.map(it => { const mk = marks[it.id] || {status:'pending', note:''}; return html`<div class=${'item '+it.level} key=${it.id}>
+      ${items.map(it => { const mk = markOf(it); return html`<div class=${'item '+it.level} key=${it.id}>
         <div class="msg"><b>${it.code}</b> ${(plan[it.code] && plan[it.code].name) || ''}<br/>${it.msg}</div>
-        <span class="seg">${STATUS.map(([k,l]) => html`<button class=${mk.status === k ? 'on '+k : ''} onClick=${() => setMark(it.id, {status:k})}>${l}</button>`)}</span>
-        ${(mk.status !== 'pending' || mk.note) && html`<input class="note" placeholder="備註（例：已收到異動通知 10/12、個案住院…）" value=${mk.note} onInput=${e => setMark(it.id, {note:e.target.value})} />`}
+        <span class="seg">${STATUS.map(([k,l]) => html`<button class=${mk.status === k ? 'on '+k : ''} onClick=${() => setMark(it, {status:k})}>${l}</button>`)}</span>
+        ${(mk.status !== 'pending' || mk.note) && html`<input class="note" placeholder="備註（例：已收到異動通知 10/12、個案住院…）" value=${mk.note} onInput=${e => setMark(it, {note:e.target.value})} />`}
       </div>`; })}
       ${items.length > 1 && html`<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn light" style="font-size:12px;padding:4px 10px" onClick=${() => items.forEach(it => { if(((marks[it.id] || {}).status || 'pending') === 'pending') setMark(it.id, {status:'ok'}); })}>其餘待確認全部設為「無需處理」</button></div>`}
+        <button class="btn light" style="font-size:12px;padding:4px 10px" onClick=${() => items.forEach(it => { if(markOf(it).status === 'pending') setMark(it, {status:'ok'}); })}>其餘待確認全部設為「無需處理」</button></div>`}
     </div>
   </div>`;
 }
