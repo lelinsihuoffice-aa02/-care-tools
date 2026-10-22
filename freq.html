@@ -129,12 +129,15 @@ const FREQ_URL = "https://avid-barracuda-174.convex.cloud";
 // ================= CORE-START（純邏輯：解析貼上內容、比對規則） =================
 const WD = ['日','一','二','三','四','五','六'];
 const WDMAP = {日:0,天:0,一:1,二:2,三:3,四:4,五:5,六:6};
-const CODE_RE = /([A-Z]{2}\d{2}[a-z]?\d?(?:-\d+)?)\s*\[/;
-const ROC_DATE_RE = /\d{2,3}\/\d{1,2}\/\d{1,2}/;
-const TIME_RE = /(\d{1,2}):(\d{2})\s*[~～\-－]\s*(\d{1,2}):(\d{2})/;
+// 服務碼：BA01、BA05-1、BA09a、BA17d1…，後面接 [名稱]、［名稱］、【名稱】、(名稱)、-名稱、空白或 Tab 後接中文名稱
+const CODE_RE = /(?<![A-Za-z0-9])([A-Z]{2}\d{2}[a-z]?\d?(?:-\d+)?)(?![0-9])\s*(?=[\[［【(（\-－]|[\u4e00-\u9fff])/;
+// 日期：民國 115/10/5、西元 2026/10/05，也接受 - 或 . 分隔
+const ROC_DATE_RE = /(?<!\d)\d{2,4}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{1,2}(?!\d)/;
+// 時間區間：08:00~09:00、08:00:00 ~ 09:00:00、115/10/05 08:00 ~ 115/10/05 09:00
+const TIME_RE = /(?<!\d)(\d{1,2}):(\d{2})(?::\d{2})?\s*[~～\-－至到]\s*(?:\d{2,4}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{1,2}\s+)?(\d{1,2}):(\d{2})/;
 
 function rocToISO(s){
-  const m = String(s||'').match(/(\d{2,4})\s*\/\s*(\d{1,2})\s*\/\s*(\d{1,2})/);
+  const m = String(s||'').match(/(\d{2,4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})/);
   if(!m) return null;
   let y = +m[1]; if(y < 1911) y += 1911;
   return y+'-'+String(+m[2]).padStart(2,'0')+'-'+String(+m[3]).padStart(2,'0');
@@ -146,13 +149,40 @@ function weekKey(iso){ const [y,m,d] = iso.split('-').map(Number); const dt = ne
 function fmtMD(iso){ const [,m,d] = iso.split('-').map(Number); return m+'/'+d+'('+WD[wdOf(iso)]+')'; }
 function isoOf(mk, d){ return mk+'-'+String(d).padStart(2,'0'); }
 
+// 從剪貼簿的網頁表格取出「一列一行、欄位用 Tab 分隔」的文字（格子裡的換行改成空白，避免一筆被拆成多行）
+function tableFromClipboard(e){
+  try{
+    const h = e.clipboardData && e.clipboardData.getData('text/html');
+    if(!h || !/<tr[\s>]/i.test(h)) return null;
+    const doc = new DOMParser().parseFromString(h, 'text/html');
+    doc.querySelectorAll('br,div,p,span,li').forEach(el => { el.before(' '); el.after(' '); });
+    const lines = [...doc.querySelectorAll('tr')].map(tr => [...tr.children].filter(c => /^(TD|TH)$/.test(c.tagName))
+      .map(c => (c.innerText || c.textContent || '').replace(/\s+/g, ' ').trim()).join('\t')).filter(l => l.trim());
+    return lines.length ? lines.join('\n') : null;
+  }catch(err){ return null; }
+}
 // 服務紀錄頁：項次｜服務日期｜服務項目｜類型｜服務數量｜服務區間起訖
+// 複製網頁表格時，同一格裡的換行會把一筆紀錄拆成好幾行：先把被拆開的行接回去
+function mergeRecordLines(text){
+  const out = [];
+  String(text||'').split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach(t => {
+    const hasD = ROC_DATE_RE.test(t), hasC = CODE_RE.test(t), hasT = /\d{1,2}:\d{2}/.test(t);
+    const last = out.length ? out[out.length-1] : null;
+    const lastC = last != null && CODE_RE.test(last), lastT = last != null && TIME_RE.test(last), lastD = last != null && ROC_DATE_RE.test(last);
+    let join = false;
+    if(last != null && lastD && !(hasD && hasC)){
+      if(!lastC) join = !hasD || hasC || hasT;          // 上一行還沒有服務碼：碼別／名稱被拆到下一行
+      else if(!lastT) join = !hasC && (!hasD || hasT);  // 上一行有服務碼但沒有時間：時間被拆到下一行
+    }
+    if(join) out[out.length-1] = last + '\t' + t; else out.push(t);
+  });
+  return out;
+}
 function parseRecords(text){
   const rows = [], skipped = [];
-  String(text||'').split(/\r?\n/).forEach(line => {
-    const t = line.trim(); if(!t) return;
+  mergeRecordLines(text).forEach(t => {
     const dm = t.match(ROC_DATE_RE), cm = t.match(CODE_RE);
-    if(!dm || !cm){ if(/[A-Z]{2}\d{2}/.test(t)) skipped.push(t); return; }
+    if(!dm || !cm){ if(/[A-Z]{2}\d{2}/.test(t) || (dm && /\d/.test(t.replace(dm[0], '')))) skipped.push(t); return; }
     const date = rocToISO(dm[0]), code = cm[1];
     let qty = null;
     const cells = t.split(/\t+/).map(s => s.trim()).filter(Boolean);
@@ -162,7 +192,7 @@ function parseRecords(text){
     }
     if(qty == null){
       const after = t.slice(t.indexOf(cm[0]));
-      const m2 = after.match(/\]\S*\s+\S+\s+(\d+(?:\.\d+)?)\s+\d{1,2}:\d{2}/);
+      const m2 = after.match(/[\]］】)）]\S*\s+\S+\s+(\d+(?:\.\d+)?)\s+\d{1,2}:\d{2}/);
       if(m2) qty = +m2[1];
     }
     if(qty == null) qty = 1;
@@ -178,14 +208,17 @@ function parsePlan(text){
   const items = {};
   String(text||'').split(/\r?\n/).forEach(line => {
     const t = line.trim(); const cm = t.match(CODE_RE);
-    if(!cm || ROC_DATE_RE.test(t)) return;
-    const cells = t.split(/\t+/).map(s => s.trim()).filter(Boolean);
+    // 有時間區間的是服務紀錄，不是核定項目；核定頁面若有起訖日期欄，先拿掉日期再找數量
+    if(!cm || TIME_RE.test(t)) return;
+    const u = t.replace(new RegExp(ROC_DATE_RE.source, 'g'), ' ').trim();
+    const cells = u.split(/\t+/).map(s => s.trim()).filter(Boolean);
     let qty = null;
     if(cells.length >= 2 && /^\d+(\.\d+)?$/.test(cells[cells.length-1])) qty = +cells[cells.length-1];
-    if(qty == null){ const m = t.match(/(\d+(?:\.\d+)?)\s*$/); if(m && !/元\s*$/.test(t)) qty = +m[1]; }
+    if(qty == null){ const m = u.match(/(\d+(?:\.\d+)?)\s*$/); if(m && !/元\s*$/.test(u)) qty = +m[1]; }
     if(qty == null) return;
     const code = cm[1];
-    const name = t.slice(t.indexOf('[')+1, t.indexOf(']'));
+    const nm = t.slice(t.indexOf(cm[0]) + cm[0].length).match(/^[\[［【(（\-－]?\s*([^\]］】)）\t]+)/);
+    const name = nm ? nm[1].trim() : '';
     const prev = items[code];
     items[code] = {code, name, qty: prev ? Math.max(prev.qty, qty) : qty, pages: prev ? prev.pages+1 : 1};
   });
@@ -506,7 +539,18 @@ const STATUS = [['pending','待確認'],['notified','有異動通知'],['anomaly
 const defaultMonth = () => { const d = new Date(); const t = d.getDate() < 28 ? new Date(d.getFullYear(), d.getMonth()-1, 1) : d; return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0'); };
 const todayISO = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
 const prevMonth = mk => { const [y,m] = mk.split('-').map(Number); const d = new Date(y, m-2, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
-const loadIgnore = () => { try{ const v = JSON.parse(localStorage.getItem('freqIgnore')); return Array.isArray(v) ? v : ['OT01']; }catch{ return ['OT01']; } };
+// 不比對的服務項目：預設全部都比對（以前預設排除 OT01，這裡會自動移除一次）
+const loadIgnore = () => {
+  try{
+    let v = JSON.parse(localStorage.getItem('freqIgnore'));
+    v = Array.isArray(v) ? v : [];
+    if(!localStorage.getItem('freqIgnoreV2')){
+      v = v.filter(c => c !== 'OT01');
+      localStorage.setItem('freqIgnore', JSON.stringify(v)); localStorage.setItem('freqIgnoreV2', '1');
+    }
+    return v;
+  }catch{ return []; }
+};
 
 function parseCase(row){
   const d = J(row.data);
@@ -675,7 +719,8 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
     setSaving(false);
   };
 
-  const onPasteRec = () => setNoRecords(false);
+  const onPasteRec = e => { setNoRecords(false); const t = tableFromClipboard(e); if(t != null){ e.preventDefault(); setRecText(t); } };
+  const onPastePlan = e => { const t = tableFromClipboard(e); if(t != null){ e.preventDefault(); setPlanText(p => p.trim() ? p + '\n' + t : t); } };
   const planChips = Object.values(sysPlan).filter(p => !ignore.includes(p.code));
   const pendingCount = items.filter(it => markOf(it).status === 'pending').length;
 
@@ -688,10 +733,11 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
 
     <div class="card">
       <div class="steps"><span class="num">1</span><h3 style="margin:0">核定計畫</h3><span class="sub">預設使用本系統的核定項目；有計畫異動時，貼上衛福部核定頁面比對</span></div>
+      ${ignore.length ? html`<div class="sub" style="color:var(--org);margin-top:4px">目前設定不比對：${ignore.join('、')}（左側「不比對的服務項目」可修改）</div>` : ''}
       <div class="plan">${planChips.length ? planChips.map(p => html`<span class="pchip"><b>${p.code}</b> ${p.name} ${p.quota != null ? '×'+p.quota : ''}</span>`) : html`<span class="sub">本系統尚未設定核定項目</span>`}</div>
       <details style="margin-top:10px" open=${!!planText}>
         <summary>貼上衛福部核定計畫頁面（選填，可一次貼多個計畫頁）</summary>
-        <textarea class="paste" style="margin-top:8px" placeholder="在衛福部系統的核定頁面全選表格 → 複製 → 貼在這裡" value=${planText} onInput=${e => setPlanText(e.target.value)}></textarea>
+        <textarea class="paste" style="margin-top:8px" placeholder="在衛福部系統的核定頁面全選表格 → 複製 → 貼在這裡" value=${planText} onPaste=${onPastePlan} onInput=${e => setPlanText(e.target.value)}></textarea>
         ${planText.trim() && html`<div class="sub">${pasted ? `辨識到 ${Object.keys(pasted).length} 個服務項目，本月比對以衛福部核定為準（同一服務在多頁出現時取最大數量）` : '⚠️ 沒有辨識到服務項目，請確認是否貼到核定表格'}</div>`}
       </details>
     </div>
@@ -705,6 +751,8 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
         ${parsed && !noRecords && html`<span class="sub">辨識 ${parsed.rows.length} 筆${result && result.outMonth ? `（其中 ${result.outMonth} 筆不是 ${month} 已略過）` : ''}${parsed.skipped.length ? `，⚠️ ${parsed.skipped.length} 行無法辨識` : ''}</span>`}
         ${recText && html`<button class="btn light" style="padding:3px 10px;font-size:12px" onClick=${() => setRecText('')}>清除</button>`}
       </div>
+      ${parsed && !noRecords && parsed.skipped.length ? html`<details style="margin-top:6px"><summary class="sub" style="cursor:pointer;color:var(--org)">查看無法辨識的 ${parsed.skipped.length} 行</summary>
+        <div class="sub" style="white-space:pre-wrap;font-size:12px;margin-top:4px;max-height:200px;overflow:auto">${parsed.skipped.join('\n')}</div></details>` : ''}
       ${std && (parsed || calCodes.length) ? html`<div style="margin-top:12px"><${Calendar} month=${month} codes=${calCodes} plan=${plan} byCode=${byCode} std=${std} stdSrc=${stdSrc} flagged=${flagged} onStd=${onStd} inferred=${inferred} meals=${meals} mealSrc=${mealSrc} mealAuto=${mealAuto} onMeal=${onMeal} onMealReset=${onMealReset} /></div>` : ''}
       ${stdDirty && html`<div class="sub" style="margin-top:6px;color:var(--org)">標準排程已修改，儲存時會一併存下，之後每個月沿用</div>`}
     </div>
@@ -811,7 +859,7 @@ function App(){
         ${!filtered.length && html`<div class="empty">沒有符合條件的個案</div>`}
         <details style="margin-top:12px;font-size:12px"><summary>不比對的服務項目</summary>
           <input class="inp" style="width:100%;margin-top:6px" value=${ignore.join(', ')} onChange=${e => { const v = e.target.value.split(/[,，\s]+/).filter(Boolean); setIgnore(v); localStorage.setItem('freqIgnore', JSON.stringify(v)); }} />
-          <div class="sub">用逗號分隔，例：OT01（只存在這台電腦）</div></details>
+          <div class="sub">用逗號分隔，例：BA20（只存在這台電腦）；留空＝全部都比對</div></details>
       </div>
       <div>${sel ? html`<${CasePanel} key=${sel.id+month} c=${sel} month=${month} check=${checks[sel.id]} ignore=${ignore} userName=${userName}
           onSaved=${(id, ch) => setChecks(o => ({...o, [id]: ch}))} onNext=${goNext} toast=${toast} />`
