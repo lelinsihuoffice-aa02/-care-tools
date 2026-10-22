@@ -207,61 +207,86 @@ function parseWeekdays(text){
 }
 
 // ---------- 服務時間規則（只有下列幾項需要看時間） ----------
-// 1. BA01 與 BA07 不可同一天
+// 1. BA01 與 BA07 不可同一天；BA01、BA07 各自也不可同一天重複使用
 // 2. BA01 或 BA07 與 BA02 同一天時，兩項服務要間隔 GAP_MIN_HOURS 小時以上
-// 3. BA05-1 頻率為「午餐」：下午 1 點過後才開始服務 → 異常
-//    BA05-1 頻率為「晚餐」：下午 1 點前就開始服務 → 異常
+// 3. BA09、BA09a 與 BA01、BA02、BA07 同一天時，兩項服務要間隔 GAP_MIN_HOURS 小時以上
+// 4. 不同服務碼別的服務時間不可重疊（DA01、BA13、BA14 除外）
+// 5. BA05-1 餐別（以開始時間判斷）：
+//    早午餐：上午 8:30 ~ 中午 12:00 之間開始；午餐：中午 12:00 前開始；晚餐：下午 1:00 之後開始
 const MEAL_CODES = ['BA05-1'];
-const MEAL_CUT = 13*60;          // 午餐／晚餐的分界：下午 1 點
-const GAP_MIN_HOURS = 3;         // BA01/BA07 與 BA02 同日的最短間隔
-const MEAL_LABEL = {lunch:'午餐／早午餐', dinner:'晚餐'};   // 「早午餐」與「午餐」同一規則
+const GAP_MIN_HOURS = 3;         // 間隔規則的最短小時數
+const OVERLAP_OK = ['DA01','BA13','BA14'];   // 可以和其他服務時間重疊的碼別
+const NO_REPEAT_CODES = ['BA01','BA07'];     // 不可當日重複使用
+const MEAL_KEYS = ['brunch','lunch','dinner'];
+const MEAL_LABEL = {brunch:'早午餐', lunch:'午餐', dinner:'晚餐'};
+const MEAL_WIN = {brunch:[8*60+30, 12*60], lunch:[0, 12*60], dinner:[13*60, 1440]};   // 開始時間允許範圍（含端點）
+const MEAL_RULE = {brunch:'早午餐需在 08:30–12:00 開始', lunch:'午餐需在 12:00 前開始', dinner:'晚餐需在 13:00 後開始'};
 function fmtHM(m){ m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
-// 從頻率文字判斷餐別：「備午餐」→ ['lunch']、「午、晚餐」→ ['lunch','dinner']
+// 從頻率文字判斷餐別：「備午餐」→ ['lunch']、「早午餐」→ ['brunch']、「午、晚餐」→ ['lunch','dinner']
 function parseMeals(text){
   if(!text) return null;
   const s = String(text), out = [];
-  if(/午餐|中餐|午、?晚餐|午晚餐/.test(s)) out.push('lunch');
+  if(/早午餐/.test(s)) out.push('brunch');
+  if(/(^|[^早])午餐|中餐|午[、，,／\/]?晚餐|中[、，,／\/]?晚餐/.test(s)) out.push('lunch');
   if(/晚餐/.test(s)) out.push('dinner');
   return out.length ? out : null;
 }
+function overlaps(a, b){ return a.start != null && b.start != null && a.start < b.end && b.start < a.end; }
+function gapText(gap){ return gap < 0 ? '時間重疊' : Math.floor(gap/60)+' 小時 '+(gap%60)+' 分'; }
 function checkTimeRules(inMonth, ignore){
   const items = [];
   const on = c => !ignore.includes(c);
   const byDate = {}; inMonth.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
+  // 兩組服務同日要間隔 GAP_MIN_HOURS 小時以上
+  const gapRule = (d, xs, ys, tag) => xs.forEach(x => ys.forEach(y => {
+    if(x === y || x.start == null || y.start == null) return;
+    const first = x.start <= y.start ? x : y, second = first === x ? y : x;
+    const gap = second.start - first.end;
+    if(gap < GAP_MIN_HOURS*60)
+      items.push({id:tag+'|'+d+'|'+x.code+'@'+x.start+'|'+y.code+'@'+y.start, code:x.code, kind:'rule', level:'orange', date:d,
+        msg:`${fmtMD(d)} ${x.code}（${fmtHM(x.start)}–${fmtHM(x.end)}）與 ${y.code}（${fmtHM(y.start)}–${fmtHM(y.end)}）間隔 ${gapText(gap)}，未達 ${GAP_MIN_HOURS} 小時`});
+  }));
   Object.keys(byDate).sort().forEach(d => {
-    const list = byDate[d];
-    const a01 = list.filter(r => r.code === 'BA01'), a07 = list.filter(r => r.code === 'BA07'), a02 = list.filter(r => r.code === 'BA02');
-    if(on('BA01') && on('BA07') && a01.length && a07.length)
+    const list = byDate[d].filter(r => on(r.code));
+    const of = (...cs) => list.filter(r => cs.includes(r.code));
+    const a01 = of('BA01'), a07 = of('BA07'), a02 = of('BA02');
+    if(a01.length && a07.length)
       items.push({id:'r0107|'+d, code:'BA01', kind:'rule', level:'red', date:d, msg:`${fmtMD(d)} BA01 與 BA07 同一天服務（不可同日）`});
-    if(on('BA02') && a02.length){
-      [...a01, ...a07].forEach(x => a02.forEach(y => {
-        if(x.start == null || y.start == null) return;
-        const first = x.start <= y.start ? x : y, second = first === x ? y : x;
-        const gap = second.start - first.end;
-        if(gap < GAP_MIN_HOURS*60)
-          items.push({id:'rgap|'+d+'|'+x.code+'@'+x.start+'|'+y.start, code:x.code, kind:'rule', level:'orange', date:d,
-            msg:`${fmtMD(d)} ${x.code}（${fmtHM(x.start)}–${fmtHM(x.end)}）與 BA02（${fmtHM(y.start)}–${fmtHM(y.end)}）間隔 ${gap < 0 ? '時間重疊' : Math.floor(gap/60)+' 小時 '+(gap%60)+' 分'}，未達 ${GAP_MIN_HOURS} 小時`});
-      }));
+    if(a02.length) gapRule(d, [...a01, ...a07], a02, 'rgap');
+    const a09 = of('BA09','BA09a');
+    if(a09.length) gapRule(d, a09, of('BA01','BA02','BA07'), 'rgap09');
+    // 不同碼別時間重疊（DA01、BA13、BA14 除外）
+    const chk = list.filter(r => r.start != null && !OVERLAP_OK.includes(r.code)).sort((a,b) => a.start - b.start);
+    for(let i = 0; i < chk.length; i++) for(let j = i+1; j < chk.length; j++){
+      const a = chk[i], b = chk[j];
+      if(a.code === b.code || !overlaps(a, b)) continue;
+      items.push({id:'rovl|'+d+'|'+a.code+'@'+a.start+'|'+b.code+'@'+b.start, code:a.code, kind:'rule', level:'red', date:d,
+        msg:`${fmtMD(d)} ${a.code}（${fmtHM(a.start)}–${fmtHM(a.end)}）與 ${b.code}（${fmtHM(b.start)}–${fmtHM(b.end)}）服務時間重疊`});
     }
   });
   return items;
 }
 function checkMeal(code, rs, meals){
-  if(!meals || !meals.length) return null;
+  meals = (meals || []).filter(k => MEAL_WIN[k]);
+  if(!meals.length) return null;
+  const fits = (r, k) => r.start >= MEAL_WIN[k][0] && r.start <= MEAL_WIN[k][1];
   const timed = rs.filter(r => r.start != null);
-  let off = [];
-  if(meals.length === 1){
-    off = meals[0] === 'lunch' ? timed.filter(r => r.start > MEAL_CUT) : timed.filter(r => r.start < MEAL_CUT);
-  } else {
-    // 午、晚餐都有：同一天有兩筆以上時，要一筆在 1 點前、一筆在 1 點後
+  const off = new Set();
+  // 每一筆的開始時間都要落在所選餐別的其中一個時段
+  timed.forEach(r => { if(!meals.some(k => fits(r, k))) off.add(r); });
+  // 同時有中午（早午餐／午餐）與晚餐：同一天兩筆以上時，要一筆在中午時段、一筆在晚餐時段
+  const mid = meals.filter(k => k !== 'dinner');
+  if(mid.length && meals.includes('dinner')){
     const byD = {}; timed.forEach(r => (byD[r.date] = byD[r.date] || []).push(r));
-    Object.values(byD).forEach(l => { if(l.length >= 2 && !(l.some(r => r.start <= MEAL_CUT) && l.some(r => r.start >= MEAL_CUT))) off.push(...l); });
+    Object.values(byD).forEach(l => {
+      if(l.length >= 2 && !(l.some(r => mid.some(k => fits(r, k))) && l.some(r => fits(r, 'dinner')))) l.forEach(r => off.add(r));
+    });
   }
-  if(!off.length) return null;
-  off.sort((a,b) => a.date.localeCompare(b.date) || a.start - b.start);
-  const rule = meals.length === 1 ? (meals[0] === 'lunch' ? '午餐（含早午餐）：下午 1 點過後才服務' : '晚餐：下午 1 點前就服務') : '午、晚餐：同一天兩次服務沒有分在下午 1 點前後';
-  return {id:'meal|'+code+'|'+off.map(r => r.date+'@'+r.start).join(','), code, kind:'time', level:'orange', dates:[...new Set(off.map(r => r.date))],
-    msg:`${rule}，共 ${off.length} 次：${off.map(r => fmtMD(r.date)+' '+fmtHM(r.start)).join('、')}`};
+  if(!off.size) return null;
+  const arr = [...off].sort((a,b) => a.date.localeCompare(b.date) || a.start - b.start);
+  const rule = meals.map(k => MEAL_RULE[k]).join('；');
+  return {id:'meal|'+code+'|'+arr.map(r => r.date+'@'+r.start).join(','), code, kind:'time', level:'orange', dates:[...new Set(arr.map(r => r.date))],
+    msg:`餐別時間異常（${rule}），共 ${arr.length} 次：${arr.map(r => fmtMD(r.date)+' '+fmtHM(r.start)).join('、')}`};
 }
 
 // 從實際服務日期推測固定星期幾（只作為建議）
@@ -375,8 +400,9 @@ function runChecks({monthKey, rows, plan, standards, meals, freqText, ignore, to
         const a = list[i], b = list[j];
         if(a.start != null && b.start != null && a.start < b.end && b.start < a.end) overlap = true;
       }
-      items.push({id:'dup|'+code+'|'+d, code, kind:'dup', level:overlap ? 'red' : 'yellow', date:d,
-        msg: overlap ? `${fmtMD(d)} 同時段 ${list.length} 筆，疑似重複申報` : `${fmtMD(d)} 同一天 ${list.length} 筆，請確認`});
+      const noRepeat = NO_REPEAT_CODES.includes(code);
+      items.push({id:'dup|'+code+'|'+d, code, kind:'dup', level:(overlap || noRepeat) ? 'red' : 'yellow', date:d,
+        msg: overlap ? `${fmtMD(d)} 同時段 ${list.length} 筆，疑似重複申報` : noRepeat ? `${fmtMD(d)} 同一天 ${list.length} 筆（${code} 不可當日重複使用）` : `${fmtMD(d)} 同一天 ${list.length} 筆，請確認`});
     });
     if(MEAL_CODES.includes(code)){ const it = checkMeal(code, rs, meals[code]); if(it) items.push(it); }
     const S = standards[code];
@@ -523,14 +549,17 @@ function WeekdayPicker({value, onChange}){
 }
 
 // 備餐的餐別（只有 MEAL_CODES 會顯示）
-function MealPicker({value, src, onChange}){
+function MealPicker({value, src, auto: autoVal, onChange, onReset}){
   const v = new Set(value || []);
-  const tog = k => { const n = new Set(v); n.has(k) ? n.delete(k) : n.add(k); onChange(['lunch','dinner'].filter(x => n.has(x))); };
-  return html`<div class="tw">餐別：<span class="wd">${['lunch','dinner'].map(k => html`<button class=${v.has(k) ? 'on' : ''} style="width:auto;padding:0 6px" onClick=${() => tog(k)}>${MEAL_LABEL[k]}</button>`)}</span>
-    ${!v.size ? html`<span class="src">未設定（不檢查時間）</span>` : src === 'freq' ? html`<span class="src">由實際頻率帶入</span>` : ''}</div>`;
+  const auto = src === 'freq';
+  const tog = k => { const n = new Set(v); n.has(k) ? n.delete(k) : n.add(k); onChange(MEAL_KEYS.filter(x => n.has(x))); };
+  return html`<div class="tw">餐別：<span class="wd">${MEAL_KEYS.map(k => html`<button class=${v.has(k) ? 'on' : ''} style="width:auto;padding:0 6px" onClick=${() => tog(k)}>${MEAL_LABEL[k]}</button>`)}</span>
+    ${auto ? html`<span class="src">依實際頻率自動勾選</span>`
+      : autoVal ? html`<span class="src">手動調整（頻率為${autoVal.map(k => MEAL_LABEL[k]).join('、')}）</span> <button class="btn light" style="width:auto;padding:0 6px;font-size:12px" onClick=${onReset}>改回依頻率</button>`
+      : !v.size ? html`<span class="src">頻率未寫餐別，請手動勾選（未勾不檢查時間）</span>` : html`<span class="src">手動勾選</span>`}</div>`;
 }
 
-function Calendar({month, codes, plan, byCode, std, stdSrc, flagged, onStd, inferred, meals, mealSrc, onMeal}){
+function Calendar({month, codes, plan, byCode, std, stdSrc, flagged, onStd, inferred, meals, mealSrc, mealAuto, onMeal, onMealReset}){
   const dim = daysInMonth(month), today = todayISO();
   const days = Array.from({length:dim}, (_,i) => i+1);
   return html`<div class="cal"><table>
@@ -548,7 +577,7 @@ function Calendar({month, codes, plan, byCode, std, stdSrc, flagged, onStd, infe
             ${srcLabel && html`<span class="src">${srcLabel}</span>`}
             ${inf && JSON.stringify(inf) !== JSON.stringify(std[code] || []) && html`<button class="btn light" style="padding:1px 6px;font-size:11px;margin-left:4px"
               onClick=${() => onStd(code, inf)}>推測：${inf.map(d => WD[d]).join('')}</button>`}` : html`<span class="src">${p ? '依實際狀況使用' : ''}</span>`}
-          ${p && MEAL_CODES.includes(code) && html`<${MealPicker} value=${meals[code]} src=${mealSrc[code]} onChange=${v => onMeal(code, v)} />`}
+          ${p && MEAL_CODES.includes(code) && html`<${MealPicker} value=${meals[code]} src=${mealSrc[code]} auto=${mealAuto && mealAuto[code]} onChange=${v => onMeal(code, v)} onReset=${() => onMealReset(code)} />`}
         </td>
         ${days.map(d => { const iso = isoOf(month,d); const q = qtyByDate[iso];
           const cls = [S.has(wdOf(iso)) ? 'std' : '', q ? 'hit' : '', q && S.size && !S.has(wdOf(iso)) ? 'off' : '', fl.has(iso) ? 'flag' : '', iso >= today ? 'fut' : ''].join(' ');
@@ -564,7 +593,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
   const sysPlan = useMemo(() => sysPlanOf(c), [c]);
   const [recText, setRecText] = useState(''), [planText, setPlanText] = useState(''), [noRecords, setNoRecords] = useState(false);
   const [std, setStd] = useState(null), [stdSrc, setStdSrc] = useState({}), [stdVer, setStdVer] = useState(0), [stdDirty, setStdDirty] = useState(false);
-  const [meals, setMeals] = useState({}), [mealSrc, setMealSrc] = useState({}), [freqText, setFreqText] = useState({});
+  const [meals, setMeals] = useState({}), [mealSrc, setMealSrc] = useState({}), [mealAuto, setMealAuto] = useState({}), [freqText, setFreqText] = useState({});
   const [marks, setMarks] = useState({}), [saving, setSaving] = useState(false);
   const recRef = useRef();
 
@@ -589,7 +618,11 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
         Object.entries(sdData.codes || {}).forEach(([k,v]) => { s[k] = v; src[k] = 'saved'; });
         const ml = {}, msrc = {};
         MEAL_CODES.forEach(code => { const p = sysPlan[code]; const w = parseMeals(freqText[code] || (p && p.freq)); if(w){ ml[code] = w; msrc[code] = 'freq'; } });
-        Object.entries(sdData.meals || {}).forEach(([k,v]) => { ml[k] = v; msrc[k] = 'saved'; });
+        const auto = {...ml}; setMealAuto(auto);
+        // 舊版存的勾選：只用在頻率沒寫餐別的服務（避免舊設定蓋掉頻率）
+        if(!sdData.mealsManual) Object.entries(sdData.meals || {}).forEach(([k,v]) => { if(msrc[k] !== 'freq'){ ml[k] = v; msrc[k] = 'saved'; } });
+        // 手動改過的一律保留，優先於頻率
+        Object.entries(sdData.mealsManual || {}).forEach(([k,v]) => { ml[k] = v; msrc[k] = 'saved'; });
         setStd(s); setStdSrc(src); setStdVer(sd ? sd.updatedAt : 0); setMeals(ml); setMealSrc(msrc);
       }catch(e){ console.error(e); toast('讀取標準排程失敗：'+e.message, true); setStd({}); }
     })();
@@ -615,6 +648,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
   const markOf = it => marks[it.id] || defMark(it);
   const setMark = (it, patch) => setMarks(m => ({...m, [it.id]: {...(m[it.id] || defMark(it)), ...patch}}));
   const onStd = (code, v) => { setStd(s => ({...s, [code]: v})); setStdSrc(s => ({...s, [code]: 'saved'})); setStdDirty(true); };
+  const onMealReset = code => { setMeals(s => ({...s, [code]: mealAuto[code]})); setMealSrc(s => ({...s, [code]: 'freq'})); setStdDirty(true); };
   const onMeal = (code, v) => { setMeals(s => ({...s, [code]: v})); setMealSrc(s => ({...s, [code]: 'saved'})); setStdDirty(true); };
 
   const save = async (goNext) => {
@@ -625,7 +659,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
         const codes = {}; Object.entries(std).forEach(([k,v]) => { if(v && v.length) codes[k] = v; });
         // 餐別：有改過或原本就存過的才存（空陣列代表「刻意不檢查」，也要存下來）
         const msave = {}; Object.entries(meals).forEach(([k,v]) => { if(mealSrc[k] === 'saved') msave[k] = v || []; });
-        const r = await cm('freqChecks:upsertStandard', {caseId:c.id, data:JSON.stringify({codes, meals:msave}), expectedUpdatedAt:stdVer});
+        const r = await cm('freqChecks:upsertStandard', {caseId:c.id, data:JSON.stringify({codes, meals:msave, mealsManual:msave}), expectedUpdatedAt:stdVer});
         setStdVer(r.updatedAt); setStdDirty(false);
       }
       const finalItems = items.map(it => ({id:it.id, code:it.code, kind:it.kind, level:it.level, msg:it.msg, date:it.date || null, date2:it.date2 || null,
@@ -671,7 +705,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
         ${parsed && !noRecords && html`<span class="sub">辨識 ${parsed.rows.length} 筆${result && result.outMonth ? `（其中 ${result.outMonth} 筆不是 ${month} 已略過）` : ''}${parsed.skipped.length ? `，⚠️ ${parsed.skipped.length} 行無法辨識` : ''}</span>`}
         ${recText && html`<button class="btn light" style="padding:3px 10px;font-size:12px" onClick=${() => setRecText('')}>清除</button>`}
       </div>
-      ${std && (parsed || calCodes.length) ? html`<div style="margin-top:12px"><${Calendar} month=${month} codes=${calCodes} plan=${plan} byCode=${byCode} std=${std} stdSrc=${stdSrc} flagged=${flagged} onStd=${onStd} inferred=${inferred} meals=${meals} mealSrc=${mealSrc} onMeal=${onMeal} /></div>` : ''}
+      ${std && (parsed || calCodes.length) ? html`<div style="margin-top:12px"><${Calendar} month=${month} codes=${calCodes} plan=${plan} byCode=${byCode} std=${std} stdSrc=${stdSrc} flagged=${flagged} onStd=${onStd} inferred=${inferred} meals=${meals} mealSrc=${mealSrc} mealAuto=${mealAuto} onMeal=${onMeal} onMealReset=${onMealReset} /></div>` : ''}
       ${stdDirty && html`<div class="sub" style="margin-top:6px;color:var(--org)">標準排程已修改，儲存時會一併存下，之後每個月沿用</div>`}
     </div>
 
