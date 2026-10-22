@@ -322,6 +322,18 @@ function checkMeal(code, rs, meals){
     msg:`餐別時間異常（${rule}），共 ${arr.length} 次：${arr.map(r => fmtMD(r.date)+' '+fmtHM(r.start)).join('、')}`};
 }
 
+// 從頻率文字判斷每次使用幾單位：「每次使用2單位」「每次 2 單位」「2單位/次」「一次兩單位」
+const CNUM = {一:1,二:2,兩:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9,十:10};
+function parseUnitsPer(text){
+  if(!text) return null;
+  const s = String(text), N = '(\\d+(?:\\.\\d+)?|[一二兩三四五六七八九十])';
+  const m = s.match(new RegExp('(?:每|一)次\\s*(?:使用|服務|用)?\\s*' + N + '\\s*(?:個)?單位'))
+         || s.match(new RegExp(N + '\\s*(?:個)?單位\\s*[\\/／]\\s*(?:每)?次'));
+  if(!m) return null;
+  const v = CNUM[m[1]] != null ? CNUM[m[1]] : +m[1];
+  return v > 0 ? v : null;
+}
+
 // 從實際服務日期推測固定星期幾（只作為建議）
 function inferWeekdays(dates){
   if(!dates || !dates.length) return null;
@@ -423,11 +435,20 @@ function runChecks({monthKey, rows, plan, standards, meals, freqText, ignore, to
         msg:`來回兩趟應上午、下午各一趟，有 ${bad.length} 天時間異常：${bad.map(b => `${fmtMD(b.d)} ${b.l.map(r => fmtHM(r.start)).join('、')}（都在${b.am === 2 ? '上午' : '下午'}）`).join('；')}`});
     }
     if(type === 'regular' && p.quota != null && used > p.quota) items.push({id:'over|'+code+'|'+used, code, kind:'over', level:'red', msg:`使用 ${used} 超過核定 ${p.quota}`});
+    // 頻率有寫「每次使用 N 單位」：每天的使用單位數要剛好 N
+    const unitsPer = (isDA01 || asNeeded || roundTrip) ? null : parseUnitsPer(ftext);
+    const dayQty = tripsByDate(rs);
+    if(unitsPer){
+      const badU = Object.keys(dayQty).sort().filter(d => Math.abs(dayQty[d] - unitsPer) > 1e-9);
+      if(badU.length) items.push({id:'units|'+code+'|'+unitsPer+'|'+badU.map(d => d+'='+dayQty[d]).join(','), code, kind:'units', level:'orange', dates:badU,
+        msg:`頻率為每次 ${unitsPer} 單位，有 ${badU.length} 天不符：${badU.map(d => fmtMD(d)+' 用 '+dayQty[d]+' 單位').join('、')}`});
+    }
     const byDate = {}; rs.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
     Object.entries(byDate).forEach(([d,list]) => {
       if(list.length < 2) return;
       // 交通接送一天兩趟是正常的，超過兩趟才提醒
       if((isDA01 || roundTrip) && list.length <= 2) return;
+      if(unitsPer && unitsPer > 1 && !NO_REPEAT_CODES.includes(code) && Math.abs(dayQty[d] - unitsPer) < 1e-9 && !list.some((a,i) => list.some((b,j) => j > i && overlaps(a, b)))) return;
       let overlap = false;
       for(let i = 0; i < list.length; i++) for(let j = i+1; j < list.length; j++){
         const a = list[i], b = list[j];
@@ -603,7 +624,7 @@ function MealPicker({value, src, auto: autoVal, onChange, onReset}){
       : !v.size ? html`<span class="src">頻率未寫餐別，請手動勾選（未勾不檢查時間）</span>` : html`<span class="src">手動勾選</span>`}</div>`;
 }
 
-function Calendar({month, codes, plan, byCode, std, stdSrc, flagged, onStd, inferred, meals, mealSrc, mealAuto, onMeal, onMealReset}){
+function Calendar({month, codes, plan, byCode, std, stdSrc, flagged, onStd, inferred, meals, mealSrc, mealAuto, onMeal, onMealReset, unitsPer}){
   const dim = daysInMonth(month), today = todayISO();
   const days = Array.from({length:dim}, (_,i) => i+1);
   return html`<div class="cal"><table>
@@ -619,6 +640,7 @@ function Calendar({month, codes, plan, byCode, std, stdSrc, flagged, onStd, infe
         <td class="code"><b>${code}</b> ${p ? p.name : html`<span class="tag t-anom">未核定</span>`}<br/>
           ${p && p.type === 'regular' ? html`<${WeekdayPicker} value=${std[code]} onChange=${v => onStd(code, v)} />
             ${srcLabel && html`<span class="src">${srcLabel}</span>`}
+            ${unitsPer && unitsPer[code] && html`<span class="src">・每次 ${unitsPer[code]} 單位</span>`}
             ${inf && JSON.stringify(inf) !== JSON.stringify(std[code] || []) && html`<button class="btn light" style="padding:1px 6px;font-size:11px;margin-left:4px"
               onClick=${() => onStd(code, inf)}>推測：${inf.map(d => WD[d]).join('')}</button>`}` : html`<span class="src">${p ? '依實際狀況使用' : ''}</span>`}
           ${p && MEAL_CODES.includes(code) && html`<${MealPicker} value=${meals[code]} src=${mealSrc[code]} auto=${mealAuto && mealAuto[code]} onChange=${v => onMeal(code, v)} onReset=${() => onMealReset(code)} />`}
@@ -678,6 +700,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
   const pasted = useMemo(() => planText.trim() ? parsePlan(planText) : null, [planText]);
   const plan = useMemo(() => effectivePlan(sysPlan, pasted), [sysPlan, pasted]);
   const result = useMemo(() => parsed && std ? runChecks({monthKey:month, rows:parsed.rows, plan, standards:std, meals, freqText, ignore, todayISO:todayISO()}) : null, [parsed, plan, std, meals, freqText, ignore, month]);
+  const unitsPer = useMemo(() => { const o = {}; Object.values(plan).forEach(p => { const v = parseUnitsPer((freqText[p.code] || '') + ' ' + (p.freq || '')); if(v) o[p.code] = v; }); return o; }, [plan, freqText]);
   const diff = useMemo(() => planDiff(sysPlan, pasted, ignore), [sysPlan, pasted, ignore]);
   const savedItems = (check && check.data.items) || [];
   const items = result ? [...diff, ...result.items] : pasted ? [...diff, ...savedItems.filter(i => i.kind !== 'plan')] : savedItems;
@@ -753,7 +776,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
       </div>
       ${parsed && !noRecords && parsed.skipped.length ? html`<details style="margin-top:6px"><summary class="sub" style="cursor:pointer;color:var(--org)">查看無法辨識的 ${parsed.skipped.length} 行</summary>
         <div class="sub" style="white-space:pre-wrap;font-size:12px;margin-top:4px;max-height:200px;overflow:auto">${parsed.skipped.join('\n')}</div></details>` : ''}
-      ${std && (parsed || calCodes.length) ? html`<div style="margin-top:12px"><${Calendar} month=${month} codes=${calCodes} plan=${plan} byCode=${byCode} std=${std} stdSrc=${stdSrc} flagged=${flagged} onStd=${onStd} inferred=${inferred} meals=${meals} mealSrc=${mealSrc} mealAuto=${mealAuto} onMeal=${onMeal} onMealReset=${onMealReset} /></div>` : ''}
+      ${std && (parsed || calCodes.length) ? html`<div style="margin-top:12px"><${Calendar} month=${month} codes=${calCodes} plan=${plan} byCode=${byCode} std=${std} stdSrc=${stdSrc} flagged=${flagged} onStd=${onStd} inferred=${inferred} meals=${meals} mealSrc=${mealSrc} mealAuto=${mealAuto} onMeal=${onMeal} onMealReset=${onMealReset} unitsPer=${unitsPer} /></div>` : ''}
       ${stdDirty && html`<div class="sub" style="margin-top:6px;color:var(--org)">標準排程已修改，儲存時會一併存下，之後每個月沿用</div>`}
     </div>
 
