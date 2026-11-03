@@ -88,6 +88,10 @@
   .legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-2px;background:var(--c)}
   details summary{cursor:pointer;color:var(--green);font-weight:500}
   .grp{font-weight:700;color:var(--green);margin:14px 0 6px}
+  .rbox{border:1px solid var(--line);border-radius:14px;padding:10px;margin-top:10px}
+  .rbox-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .rbox-h b{color:var(--green)}
+  .rbox .item:last-child{margin-bottom:0}
 </style>
 </head>
 <body>
@@ -243,7 +247,7 @@ function parseWeekdays(text){
 // 1. BA01 與 BA07 不可同一天；BA01、BA07 各自也不可同一天重複使用
 // 2. BA01 或 BA07 與 BA02 同一天時，兩項服務要間隔 GAP_MIN_HOURS 小時以上
 // 3. BA09、BA09a 與 BA01、BA02、BA07 同一天時，兩項服務要間隔 GAP_MIN_HOURS 小時以上
-// 4. 不同服務碼別的服務時間不可重疊（DA01、BA13、BA14 除外）
+// 4. 不同服務碼別的服務時間不可重疊（DA01、BA13、BA14 除外；BB、BC 碼別與 BD01 重疊也可以）
 // 5. BA05-1 餐別（以開始時間判斷）：
 //    早午餐：上午 8:30 ~ 中午 12:00 之間開始；午餐：中午 12:00 前開始；晚餐：下午 1:00 之後開始
 const MEAL_CODES = ['BA05-1'];
@@ -263,6 +267,14 @@ function parseMeals(text){
   if(/(^|[^早])午餐|中餐|午[、，,／\/]?晚餐|中[、，,／\/]?晚餐/.test(s)) out.push('lunch');
   if(/晚餐/.test(s)) out.push('dinner');
   return out.length ? out : null;
+}
+// BB、BC 碼別與 BD01 可以重疊（只限這個組合，BB 與 BC 之間仍要檢查）
+function overlapAllowed(x, y){ const bbc = c => /^(BB|BC)/.test(c); return (bbc(x) && y === 'BD01') || (bbc(y) && x === 'BD01'); }
+// 舊的比對結果可能存有現在已允許的重疊項目，顯示前先濾掉
+function isStaleOverlap(it){
+  if(!it.id || !it.id.startsWith('rovl|')) return false;
+  const p = it.id.split('|');
+  return overlapAllowed(String(p[2]).split('@')[0], String(p[3]).split('@')[0]);
 }
 function overlaps(a, b){ return a.start != null && b.start != null && a.start < b.end && b.start < a.end; }
 function gapText(gap){ return gap < 0 ? '時間重疊' : Math.floor(gap/60)+' 小時 '+(gap%60)+' 分'; }
@@ -292,12 +304,27 @@ function checkTimeRules(inMonth, ignore){
     const chk = list.filter(r => r.start != null && !OVERLAP_OK.includes(r.code)).sort((a,b) => a.start - b.start);
     for(let i = 0; i < chk.length; i++) for(let j = i+1; j < chk.length; j++){
       const a = chk[i], b = chk[j];
-      if(a.code === b.code || !overlaps(a, b)) continue;
+      if(a.code === b.code || overlapAllowed(a.code, b.code) || !overlaps(a, b)) continue;
       items.push({id:'rovl|'+d+'|'+a.code+'@'+a.start+'|'+b.code+'@'+b.start, code:a.code, kind:'rule', level:'red', date:d,
         msg:`${fmtMD(d)} ${a.code}（${fmtHM(a.start)}–${fmtHM(a.end)}）與 ${b.code}（${fmtHM(b.start)}–${fmtHM(b.end)}）服務時間重疊`});
     }
   });
   return items;
+}
+// 檢核結果分框：依項目 id 開頭分類（舊的儲存結果也適用）
+const RESULT_GROUPS = [
+  {key:'plan', title:'核定計畫差異', ids:['planNew','planQty','planGone']},
+  {key:'quota', title:'核定與使用量', ids:['unapproved','unused','over']},
+  {key:'off', title:'非排定時間服務', ids:['extra','resched','meal','tripTime']},
+  {key:'dated', title:'標記日期', ids:['missing','missDaily','oneway','units','dup']},
+  {key:'overlap', title:'服務時間重疊', ids:['rovl']},
+  {key:'gap', title:'服務間隔與同日規則', ids:['rgap','rgap09','r0107']},
+  {key:'usage', title:'本月使用紀錄', ids:['usage']},
+];
+function groupItems(items){
+  const out = RESULT_GROUPS.map(g => ({...g, items:[]})), other = {key:'other', title:'其他', items:[]};
+  items.forEach(it => { const pre = String(it.id).split('|')[0]; (out.find(g => g.ids.includes(pre)) || other).items.push(it); });
+  return [...out, other].filter(g => g.items.length);
 }
 function checkMeal(code, rs, meals){
   meals = (meals || []).filter(k => MEAL_WIN[k]);
@@ -702,7 +729,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
   const result = useMemo(() => parsed && std ? runChecks({monthKey:month, rows:parsed.rows, plan, standards:std, meals, freqText, ignore, todayISO:todayISO()}) : null, [parsed, plan, std, meals, freqText, ignore, month]);
   const unitsPer = useMemo(() => { const o = {}; Object.values(plan).forEach(p => { const v = parseUnitsPer((freqText[p.code] || '') + ' ' + (p.freq || '')); if(v) o[p.code] = v; }); return o; }, [plan, freqText]);
   const diff = useMemo(() => planDiff(sysPlan, pasted, ignore), [sysPlan, pasted, ignore]);
-  const savedItems = (check && check.data.items) || [];
+  const savedItems = ((check && check.data.items) || []).filter(it => !isStaleOverlap(it));
   const items = result ? [...diff, ...result.items] : pasted ? [...diff, ...savedItems.filter(i => i.kind !== 'plan')] : savedItems;
 
   const byCode = useMemo(() => { const o = {}; (parsed ? parsed.rows : []).filter(r => r.date.startsWith(month)).forEach(r => (o[r.code] = o[r.code] || []).push(r)); return o; }, [parsed, month]);
@@ -784,11 +811,14 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
       <div class="steps"><span class="num">3</span><h3 style="margin:0">檢核結果</h3>
         <span class="sub">${items.length ? `共 ${items.length} 項，待確認 ${pendingCount} 項` : (parsed ? '✅ 沒有發現需要確認的項目' : (check ? '' : '貼上服務紀錄後自動比對'))}</span></div>
       ${!result && check && savedItems.length ? html`<div class="sub" style="margin-bottom:8px">顯示的是上次儲存的結果；重新貼上服務紀錄會重新比對（已標記的狀態會保留）</div>` : ''}
-      ${items.map(it => { const mk = markOf(it); return html`<div class=${'item '+it.level} key=${it.id}>
+      ${groupItems(items).map(g => { const pend = g.items.filter(it => markOf(it).status === 'pending').length; return html`<section class="rbox" key=${g.key}>
+        <div class="rbox-h"><b>${g.title}</b><span class="sub">${g.items.length} 項${pend ? `，待確認 ${pend} 項` : ''}</span></div>
+      ${g.items.map(it => { const mk = markOf(it); return html`<div class=${'item '+it.level} key=${it.id}>
         <div class="msg"><b>${it.code}</b> ${(plan[it.code] && plan[it.code].name) || ''}<br/>${it.msg}</div>
         <span class="seg">${STATUS.map(([k,l]) => html`<button class=${mk.status === k ? 'on '+k : ''} onClick=${() => setMark(it, {status:k})}>${l}</button>`)}</span>
         ${(mk.status !== 'pending' || mk.note) && html`<input class="note" placeholder="備註（例：已收到異動通知 10/12、個案住院…）" value=${mk.note} onInput=${e => setMark(it, {note:e.target.value})} />`}
       </div>`; })}
+      </section>`; })}
       ${items.length > 1 && html`<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn light" style="font-size:12px;padding:4px 10px" onClick=${() => items.forEach(it => { if(markOf(it).status === 'pending') setMark(it, {status:'ok'}); })}>其餘待確認全部設為「無需處理」</button></div>`}
     </div>
@@ -800,7 +830,7 @@ function AnomalyView({cases, checks, month, cms}){
   const caseMap = useMemo(() => { const o = {}; cases.forEach(c => o[c.id] = c); return o; }, [cases]);
   const rows = [];
   Object.values(checks).forEach(ch => { const c = caseMap[ch.caseId]; if(!c) return; if(cmF !== '全部' && c.careManager !== cmF) return;
-    (ch.data.items || []).forEach(it => { if(it.status === 'anomaly' || (incPending && it.status === 'pending')) rows.push({c, it}); }); });
+    (ch.data.items || []).forEach(it => { if(isStaleOverlap(it)) return; if(it.status === 'anomaly' || (incPending && it.status === 'pending')) rows.push({c, it}); }); });
   const groups = {}; rows.forEach(r => (groups[r.c.careManager || '未指派'] = groups[r.c.careManager || '未指派'] || []).push(r));
   const copy = list => { const t = list.map(r => `${r.c.name}（${r.c.idNo}）${r.it.code} ${r.it.msg}${r.it.note ? '；'+r.it.note : ''}${r.it.status === 'pending' ? '【待確認】' : ''}`).join('\n'); navigator.clipboard.writeText(t); };
   return html`<div style="max-width:1100px;margin:0 auto;padding:14px">
