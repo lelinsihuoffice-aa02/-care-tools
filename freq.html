@@ -51,6 +51,7 @@
   .cal td.std{background:var(--soft)}
   .cal td.hit{background:var(--green);color:#fff;font-weight:700}
   .cal td.hit.off{background:#e8a33d}
+  .cal td.hit.self{background:#4a7a9e}
   .cal td.flag{outline:2px solid var(--red);outline-offset:-2px}
   .cal td.fut{opacity:.35}
   .cal td.code{width:auto;background:none;text-align:left;padding-right:8px;white-space:nowrap}
@@ -182,9 +183,19 @@ function mergeRecordLines(text){
   });
   return out;
 }
+// 類型欄：自費／補助。優先看服務項目的下一格；沒有分格時只看服務名稱之後、時間之前的文字
+function parsePayType(t, cm){
+  const cells = t.split(/\t+/).map(x => x.trim()), ci = cells.findIndex(c => c.includes(cm[0]));
+  const after = t.slice(t.indexOf(cm[0]) + cm[1].length).replace(/^\s*(?:\[[^\]]*\]|［[^］]*］|【[^】]*】|\([^)]*\)|（[^）]*）)/, ' ').split(/\d{1,2}:\d{2}/)[0];
+  const src = (ci >= 0 && /^(自費|補助)/.test(cells[ci+1] || '')) ? cells[ci+1] : after;
+  if(/自費/.test(src)) return 'self';
+  if(/補助/.test(src)) return 'subsidy';
+  return null;
+}
 function parseRecords(text){
   const rows = [], skipped = [];
   mergeRecordLines(text).forEach(t => {
+    if(/AA10申請狀態/.test(t) && !ROC_DATE_RE.test(t)) return;   // 表頭欄位名稱，不是紀錄
     const dm = t.match(ROC_DATE_RE), cm = t.match(CODE_RE);
     if(!dm || !cm){ if(/[A-Z]{2}\d{2}/.test(t) || (dm && /\d/.test(t.replace(dm[0], '')))) skipped.push(t); return; }
     const date = rocToISO(dm[0]), code = cm[1];
@@ -202,7 +213,7 @@ function parseRecords(text){
     if(qty == null) qty = 1;
     const tm = t.match(TIME_RE); let start = null, end = null;
     if(tm){ start = +tm[1]*60 + +tm[2]; end = +tm[3]*60 + +tm[4]; if(end < start) end += 1440; }
-    rows.push({date, code, qty, start, end});
+    rows.push({date, code, qty, start, end, pay:parsePayType(t, cm)});
   });
   return {rows, skipped};
 }
@@ -412,6 +423,15 @@ function isRoundTrip(plan, code, ftext){
   const p = plan[code]; if(!p || p.quota == null) return false;
   const bb = Object.values(plan).filter(x => /^BB/.test(x.code) && x.quota != null);
   return bb.some(x => x.quota*2 === p.quota) || (bb.length > 1 && bb.reduce((a,x) => a + x.quota, 0)*2 === p.quota);
+}
+
+// 有自費紀錄的服務：BB01：補助18單位，自費2單位（10/2、10/15）
+function selfPaySummary(code, rs){
+  if(!rs.some(r => r.pay === 'self')) return null;
+  const units = pay => Math.round(rs.filter(r => r.pay === pay).reduce((a,r) => a + (r.qty || 0), 0) * 100) / 100;
+  const dates = [...new Set(rs.filter(r => r.pay === 'self').map(r => r.date))].sort().map(d => { const [,m,dd] = d.split('-').map(Number); return m+'/'+dd; });
+  const none = units(null);
+  return `${code}：補助${units('subsidy')}單位，自費${units('self')}單位（${dates.join('、')}）${none ? `，未標示${none}單位` : ''}`;
 }
 
 function runChecks({monthKey, rows, plan, standards, meals, freqText, ignore, todayISO}){
@@ -654,6 +674,7 @@ function MealPicker({value, src, auto: autoVal, onChange, onReset}){
 function Calendar({month, codes, plan, byCode, std, stdSrc, flagged, onStd, inferred, meals, mealSrc, mealAuto, onMeal, onMealReset, unitsPer}){
   const dim = daysInMonth(month), today = todayISO();
   const days = Array.from({length:dim}, (_,i) => i+1);
+  const payLines = codes.map(code => selfPaySummary(code, byCode[code] || [])).filter(Boolean);
   return html`<div class="cal"><table>
     <thead><tr><th></th>${days.map(d => { const w = wdOf(isoOf(month,d)); return html`<th class=${w === 0 || w === 6 ? 'we' : ''}>${d}<br/>${WD[w]}</th>`; })}<th></th></tr></thead>
     <tbody>${codes.map(code => {
@@ -673,12 +694,13 @@ function Calendar({month, codes, plan, byCode, std, stdSrc, flagged, onStd, infe
           ${p && MEAL_CODES.includes(code) && html`<${MealPicker} value=${meals[code]} src=${mealSrc[code]} auto=${mealAuto && mealAuto[code]} onChange=${v => onMeal(code, v)} onReset=${() => onMealReset(code)} />`}
         </td>
         ${days.map(d => { const iso = isoOf(month,d); const q = qtyByDate[iso];
-          const cls = [S.has(wdOf(iso)) ? 'std' : '', q ? 'hit' : '', q && S.size && !S.has(wdOf(iso)) ? 'off' : '', fl.has(iso) ? 'flag' : '', iso >= today ? 'fut' : ''].join(' ');
-          const tip = rs.filter(r => r.date === iso).map(r => r.start != null ? fmtHM(r.start)+'–'+fmtHM(r.end) : '無時間').join('\n');
+          const cls = [S.has(wdOf(iso)) ? 'std' : '', q ? 'hit' : '', q && S.size && !S.has(wdOf(iso)) ? 'off' : '', rs.some(r => r.date === iso && r.pay === 'self') ? 'self' : '', fl.has(iso) ? 'flag' : '', iso >= today ? 'fut' : ''].join(' ');
+          const tip = rs.filter(r => r.date === iso).map(r => (r.start != null ? fmtHM(r.start)+'–'+fmtHM(r.end) : '無時間')+(r.pay === 'self' ? '（自費）' : '')).join('\n');
           return html`<td class=${cls} title=${tip}>${q ? (q === 1 ? '●' : q) : ''}</td>`; })}
         <td class="cnt">${used}${p && p.quota != null ? ' / '+p.quota : ''}</td>
       </tr>`; })}</tbody></table>
-    <div class="legend"><span style="--c:var(--soft)">排定星期</span><span style="--c:var(--green)">有服務</span><span style="--c:#e8a33d">非排定日服務</span><span style="--c:#fff;outline:2px solid var(--red)">被標記的日期</span><span>數字＝當日數量</span><span>滑鼠移到格子上可看服務時間</span></div>
+    <div class="legend"><span style="--c:var(--soft)">排定星期</span><span style="--c:var(--green)">有服務</span><span style="--c:#e8a33d">非排定日服務</span><span style="--c:#4a7a9e">自費</span><span style="--c:#fff;outline:2px solid var(--red)">被標記的日期</span><span>數字＝當日數量</span><span>滑鼠移到格子上可看服務時間</span></div>
+    ${payLines.length ? html`<div style="margin-top:8px;font-size:13px">${payLines.map(l => html`<div>${l}</div>`)}</div>` : ''}
   </div>`;
 }
 
@@ -729,7 +751,7 @@ function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
   const result = useMemo(() => parsed && std ? runChecks({monthKey:month, rows:parsed.rows, plan, standards:std, meals, freqText, ignore, todayISO:todayISO()}) : null, [parsed, plan, std, meals, freqText, ignore, month]);
   const unitsPer = useMemo(() => { const o = {}; Object.values(plan).forEach(p => { const v = parseUnitsPer((freqText[p.code] || '') + ' ' + (p.freq || '')); if(v) o[p.code] = v; }); return o; }, [plan, freqText]);
   const diff = useMemo(() => planDiff(sysPlan, pasted, ignore), [sysPlan, pasted, ignore]);
-  const savedItems = ((check && check.data.items) || []).filter(it => !isStaleOverlap(it));
+  const savedItems = ((check && check.data.items) || []).filter(it => !isStaleOverlap(it) && it.kind !== 'selfpay');
   const items = result ? [...diff, ...result.items] : pasted ? [...diff, ...savedItems.filter(i => i.kind !== 'plan')] : savedItems;
 
   const byCode = useMemo(() => { const o = {}; (parsed ? parsed.rows : []).filter(r => r.date.startsWith(month)).forEach(r => (o[r.code] = o[r.code] || []).push(r)); return o; }, [parsed, month]);
