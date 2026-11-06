@@ -258,7 +258,7 @@ function parseWeekdays(text){
 // 1. BA01 與 BA07 不可同一天；BA01、BA07 各自也不可同一天重複使用
 // 2. BA01 或 BA07 與 BA02 同一天時，兩項服務要間隔 GAP_MIN_HOURS 小時以上
 // 3. BA09、BA09a 與 BA01、BA02、BA07 同一天時，兩項服務要間隔 GAP_MIN_HOURS 小時以上
-// 4. 不同服務碼別的服務時間不可重疊（DA01、BA13、BA14 除外；BB、BC 碼別與 BD01 重疊也可以）
+// 4. 不同服務碼別的服務時間不可重疊（DA01、BA13、BA14 除外；BB、BC 碼別與 BD01、BC 碼別與 BD02 重疊也可以）
 // 5. BA05-1 餐別（以開始時間判斷）：
 //    早午餐：上午 8:30 ~ 中午 12:00 之間開始；午餐：中午 12:00 前開始；晚餐：下午 1:00 之後開始
 const MEAL_CODES = ['BA05-1'];
@@ -279,8 +279,11 @@ function parseMeals(text){
   if(/晚餐/.test(s)) out.push('dinner');
   return out.length ? out : null;
 }
-// BB、BC 碼別與 BD01 可以重疊（只限這個組合，BB 與 BC 之間仍要檢查）
-function overlapAllowed(x, y){ const bbc = c => /^(BB|BC)/.test(c); return (bbc(x) && y === 'BD01') || (bbc(y) && x === 'BD01'); }
+// BB、BC 碼別與 BD01、BC 碼別與 BD02 可以重疊（只限這些組合，BB 與 BC 之間仍要檢查）
+function overlapAllowed(x, y){
+  const ok = (a, b) => (/^(BB|BC)/.test(a) && b === 'BD01') || (/^BC/.test(a) && b === 'BD02');
+  return ok(x, y) || ok(y, x);
+}
 // 舊的比對結果可能存有現在已允許的重疊項目，顯示前先濾掉
 function isStaleOverlap(it){
   if(!it.id || !it.id.startsWith('rovl|')) return false;
