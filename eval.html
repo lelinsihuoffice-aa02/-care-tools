@@ -59,6 +59,12 @@
   .form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--sub)}
   .form label .inp{color:var(--ink)}
   .sect{font-weight:700;color:var(--green);margin:16px 0 8px}
+  .trigbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .trigbar button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font-size:13px;color:var(--ink)}
+  .trigbar button b{margin-left:6px;color:var(--green)}
+  .trigbar button.on{background:var(--green);border-color:var(--green);color:#fff}
+  .trigbar button.on b{color:#fff}
+  .trigbar button:hover:not(.on){background:#FBF3E6}
   .ampm{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;flex:none}
   .ampm button{border:none;background:#fff;color:var(--sub);padding:5px 10px;font-size:13px;border-right:1px solid var(--line)}
   .ampm button:last-child{border-right:none}
@@ -792,29 +798,40 @@ const latestOf = (db, c, k) => {
 };
 
 function SummaryView({ db, month, user, refresh }) {
-  const [q, setQ] = useState(''), [reg, setReg] = useState('全部'), [onlyEv, setOnlyEv] = useState(false), [all, setAll] = useState(false);
+  const [q, setQ] = useState(''), [reg, setReg] = useState('全部'), [trig, setTrig] = useState(''), [all, setAll] = useState(false);
   const [edit, setEdit] = useState(null);
   const evOf = useMemo(() => { const m = new Map(); for (const e of db.events) if (e.month === month) m.set(e.caseId, e); return m; }, [db, month]);
-  const list = useMemo(() => [...db.cases.values()].filter(c => {
+  const trigOf = c => { const e = evOf.get(c._id); return e && e.trigger ? normTrigger(e.trigger) : ''; };
+  // 先套用搜尋、地區、結案條件，再依觸發篩選（觸發按鍵上的數字用篩選前的名單計算）
+  const base = useMemo(() => [...db.cases.values()].filter(c => {
     const x = db.info.get(c._id) || {};
     const inList = all || !x.open || (x.open <= month && !(x.close && x.close < month));
     if (!inList) return false;
     if (reg !== '全部' && regionOf(c.caseNo) !== reg) return false;
-    if (onlyEv && !evOf.get(c._id)) return false;
     if (q && !(String(c.name || '').includes(q) || String(c.idNo || '').includes(q) || String(c.caseNo).includes(q))) return false;
     return true;
-  }).sort(sortNo), [db, month, q, reg, onlyEv, all, evOf]);
+  }).sort(sortNo), [db, month, q, reg, all]);
+  const trigCounts = useMemo(() => {
+    const m = new Map();
+    for (const c of base) { const t = trigOf(c); m.set(t, (m.get(t) || 0) + 1); }
+    const order = t => { const i = TRIGGERS.indexOf(t); return i < 0 ? 999 : i; };
+    return [...m.entries()].filter(([t]) => t).sort((a, b) => order(a[0]) - order(b[0]) || a[0].localeCompare(b[0], 'zh-Hant'));
+  }, [base, evOf]);
+  const nAny = base.filter(c => trigOf(c)).length;
+  const list = trig === '' ? base : trig === '__any' ? base.filter(c => trigOf(c)) : trig === '__none' ? base.filter(c => !trigOf(c)) : base.filter(c => trigOf(c) === trig);
   const nNew = list.filter(c => isNewTrigger((evOf.get(c._id) || {}).trigger)).length;
   return html`<div class="page">
     <div class="bar">
       <input class="inp" style="width:220px" placeholder="搜尋姓名、身分證、編號" value=${q} onInput=${e => setQ(e.target.value)} />
       <select class="inp" value=${reg} onChange=${e => setReg(e.target.value)}>${['全部', ...Object.values(REGIONS)].map(r => html`<option value=${r}>${r}</option>`)}</select>
-      <label class="sub"><input type="checkbox" checked=${onlyEv} onChange=${e => setOnlyEv(e.target.checked)} /> 只看本月有觸發</label>
       <label class="sub"><input type="checkbox" checked=${all} onChange=${e => setAll(e.target.checked)} /> 含已結案</label>
       <span class="grow"></span>
       <span class="sub">共 ${list.length} 案，本月新案 ${nNew}</span>
       <button class="btn" onClick=${() => setEdit({ isNew: true })}>＋ 新增個案</button>
     </div>
+    ${db.cases.size > 0 && html`<div class="trigbar"><span class="sub">${rocMonth(month)}觸發：</span>
+      ${[['', '全部', base.length], ['__any', '有觸發', nAny], ...trigCounts.map(([t, n]) => [t, t, n]), ['__none', '無觸發', base.length - nAny]].map(([k, label, n]) =>
+        html`<button class=${trig === k ? 'on' : ''} onClick=${() => setTrig(trig === k && k !== '' ? '' : k)}>${label}<b>${n}</b></button>`)}</div>`}
     ${db.cases.size === 0 ? html`<div class="card empty">還沒有資料。可以到「匯入」把個案總表 Excel 匯入，或按「新增個案」。</div>` : html`
     <div class="tw"><table class="grid">
       <thead><tr><th>編號</th><th>姓名</th><th>CMS</th><th>來源</th><th>${rocMonth(month)}觸發</th><th>照專評估</th><th>訪視</th><th>照專簽審</th><th>照會B</th><th>居服單位</th><th>狀態</th></tr></thead>
