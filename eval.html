@@ -119,6 +119,15 @@
 .rpt th{text-align:center}.rpt th.num{text-align:right}.rpt th.grp{text-align:center;border-bottom:1px solid var(--line);background:#efe5d6}
 .rpt th.sub2{position:static;font-weight:500;color:var(--sub)}.rpt tr:first-child th{position:static}
 .rpt tr:first-child th:first-child{text-align:left}.rpt td.zero{color:#c9bfb1}.rpt tr.tot td{border-top:2px solid var(--line);background:#faf6f0}
+.secs{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;margin-bottom:12px}.sec{min-width:0;max-width:100%}.sec h3{margin:0 0 6px}
+table.rpt2{width:auto;min-width:0}.rpt2 th{position:static;padding:8px 14px}.rpt2 th.num{text-align:right}.rpt2 td{padding:6px 14px}
+.rpt2 td.zero{color:#c9bfb1}.rpt2 tr.tot td{border-top:2px solid var(--line);background:#faf6f0;font-weight:700}
+.rpt2 td.note{white-space:pre-wrap;vertical-align:top;min-width:220px;max-width:520px;line-height:1.6}
+.cols-even{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:16px}
+.mlist{padding:12px 16px}.mlist h3{margin:0 0 8px}.mitem{padding:7px 0;border-top:1px solid #f0e8dc}.mitem .sub{margin-top:2px;line-height:1.6}
+.namecards{align-items:start;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.ncard{padding:12px 16px}.nhead{font-weight:700;margin-bottom:6px}.nsub{font-weight:600;color:var(--green);margin-top:8px}.nnames{line-height:1.7}
+.note-txt{white-space:pre-wrap;line-height:1.7}
 </style>
 </head>
 <body>
@@ -2066,6 +2075,93 @@ function AoaTable({ aoa, maxCols }) {
   return html`<div class="tw" style="max-height:none"><table class="grid">${rows.map((r, i) => html`<tr>${Array.from({ length: n }, (_, j) => {
     const v = r[j] ?? ''; return html`<td class=${typeof v === 'number' ? 'num' : ''} style=${i === 0 || /總計|合計/.test(r[0]) ? 'font-weight:700' : ''}>${typeof v === 'number' && v > 0 && v < 1 && !Number.isInteger(v) ? Math.round(v * 1000) / 10 + '%' : String(v)}</td>`; })}</tr>`)}</table></div>`;
 }
+// ================= 報表整齊顯示（只是畫面；匯出格式不變） =================
+const isBlank = x => x === '' || x === null || x === undefined || (typeof x === 'string' && !x.trim());
+const isNumLike = x => typeof x === 'number' || (typeof x === 'string' && /^\s*-?[\d,]+(\.\d+)?%?\s*$/.test(x));
+const TOTAL_RE = /^(總計|合計|小計)/;
+// 把一張 Excel/Word 表切成好幾段：空白列分段，只有一格的短文字列當標題
+function aoaSections(aoa) {
+  const rows = fillRows(aoa).map(r => { r = [...r]; while (r.length && isBlank(r[r.length - 1])) r.pop(); return r; });
+  const out = []; let cur = null;
+  const flush = () => { if (cur && cur.rows.length) out.push(cur); cur = null; };
+  for (const r of rows) {
+    if (!r.length) { flush(); continue; }
+    const filled = r.filter(x => !isBlank(x)), t = String(filled[0] ?? '');
+    if (filled.length === 1 && !isBlank(r[0]) && !isNumLike(r[0]) && t.length <= 60 && !t.includes('\n') && !TOTAL_RE.test(t) && (!cur || /[:：]\s*$/.test(t) || /\d+年/.test(t))) {
+      flush(); cur = { title: t.replace(/\s*[:：]\s*$/, ''), rows: [] }; continue;
+    }
+    if (!cur) cur = { title: '', rows: [] };
+    cur.rows.push(r);
+  }
+  flush(); return out;
+}
+const showVal = v => typeof v === 'number' && v > 0 && v < 1 && !Number.isInteger(v) ? Math.round(v * 1000) / 10 + '%' : typeof v === 'number' ? v.toLocaleString('zh-TW') : String(v ?? '');
+function SecTable({ rows, hl, sumNote }) {
+  const longCell = v => typeof v === 'string' && (v.includes('\n') || v.length > 30);
+  const head = rows[0] || [];
+  let body = rows.slice(1), tail = [];
+  // 名單這種長文字（例如 指定／輪派、新案名單）不塞進表格，改放在表格下方的卡片
+  const cut = body.findIndex(r => r.some(longCell) && !r.some((x, j) => j > 0 && typeof x === 'number' || (typeof x === 'string' && /^\s*\d+\s*$/.test(x))));
+  if (cut >= 0) {
+    let st = cut; const prev = body[cut - 1];
+    if (prev && prev.every(x => isBlank(x) || (!isNumLike(x) && !longCell(x))) && !TOTAL_RE.test(String(prev[0] ?? ''))) st = cut - 1;
+    tail = body.slice(st); body = body.slice(0, st);
+  }
+  const n = Math.max(1, ...[head, ...body].map(r => r.length));
+  const labels = tail.length && !tail[0].some(longCell) ? tail.shift() : [];
+  const notes = tail.flatMap(r => r.map((v, j) => [labels[j] || '', v]).filter(([, v]) => !isBlank(v)));
+  const numCol = Array.from({ length: n }, (_, j) => j > 0 && body.some(r => !isBlank(r[j])) && body.every(r => isBlank(r[j]) || isNumLike(r[j])));
+  return html`<div class="tw" style="max-height:none"><table class="grid rpt2">
+    <thead><tr>${Array.from({ length: n }, (_, j) => html`<th class=${numCol[j] ? 'num' : ''}>${showVal(head[j])}</th>`)}</tr></thead>
+    <tbody>${body.map(r => {
+      const tot = TOTAL_RE.test(String(r[0] ?? '')), cur = hl && String(r[0] ?? '').trim() === hl;
+      return html`<tr class=${tot ? 'tot' : cur ? 'curmonth' : ''}>${Array.from({ length: n }, (_, j) => {
+        const v = r[j];
+        if (numCol[j]) return html`<td class=${'num' + (isBlank(v) || +v === 0 ? ' zero' : '')}>${isBlank(v) ? '0' : showVal(v)}</td>`;
+        return html`<td class=${longCell(v) ? 'note' : ''}>${showVal(v)}</td>`;
+      })}</tr>`; })}</tbody></table></div>
+    ${notes.map(([k, v]) => html`${k && html`<h3 style="margin-top:16px">${k}</h3>`}<div class="namecards" style="margin-top:8px">${String(v).split(/\n\s*\n/).map(p => p.trim()).filter(Boolean).map(p => {
+      let [first, ...rest] = p.split('\n');
+      const m = /^(.*?\d+[位人])((?:四湖|台西|臺西|東勢|麥寮).*)$/.exec(first) || /^(.*?\d+位)(\S.*)$/.exec(first); // 「結案：19位四湖-7人：…」→ 標題和名單分開
+      if (m && m[1].length <= 30) { first = m[1]; rest = [m[2], ...rest]; }
+      return html`<div class="card ncard"><div class="nhead">${first.replace(/^\(/, '')}</div>${rest.map(l => html`<div class="nnames">${l}</div>`)}</div>`; })}</div>`)}`;
+}
+function SmartTables({ aoa, hl }) {
+  const secs = aoaSections(aoa);
+  if (!secs.length) return html`<div class="card empty">沒有資料</div>`;
+  return html`<div class="secs">${secs.map(sc => html`<div class="sec">${sc.title && html`<h3>${sc.title}</h3>`}<${SecTable} rows=${sc.rows} hl=${hl} /></div>`)}</div>`;
+}
+// 派案統計（系統資料）
+function DispatchView({ d }) {
+  const sums = d.head.map((_, j) => j >= 3 ? d.rows.reduce((a, r) => a + (+r[j] || 0), 0) : '');
+  const list = (title, items) => html`<div class="card mlist"><h3>${title} <span class="sub">${items.length} 項</span></h3>
+    ${items.length ? items.map(t => { const [k, ...rest] = t.split('\n'); return html`<div class="mitem"><b>${k}</b><div class="sub">${rest.join(' ').replace(/^\(|\)$/g, '')}</div></div>`; }) : html`<div class="sub">無</div>`}</div>`;
+  return html`<h3>${d.title}</h3>
+    <div class="secs"><div class="sec"><${SecTable} rows=${[d.head, ...d.rows, ['總計', `${d.rows.length} 人`, '', ...sums.slice(3)]]} /></div></div>
+    <div class="cols-even">${list('指定', d.designated)}${list('輪派', d.rotation)}</div>`;
+}
+// 個案統計（系統資料）
+function CaseView({ d }) {
+  const groups = []; let g = [];
+  for (const line of d.text) { if (line === '') { if (g.length) groups.push(g); g = []; } else g.push(line); }
+  if (g.length) groups.push(g);
+  // 只有一行、沒有名單的（例如「新案：17位」）當小標題；其他做成卡片
+  const segs = []; let cards = [];
+  const card = gr => html`<div class="card ncard"><div class="nhead">${gr[0].replace(/^\(/, '').replace(/[：:]$/, '')}</div>
+      ${gr.slice(1).map(l => /－\d+位$/.test(l) ? html`<div class="nsub">${l}</div>` : html`<div class="nnames">${l}</div>`)}</div>`;
+  const flushCards = () => { if (cards.length) segs.push(html`<div class="namecards">${cards}</div>`); cards = []; };
+  for (const gr of groups) {
+    const m = gr.length === 1 && /^(.+?)[：:](.+)$/.exec(gr[0]);
+    if (m && /\(/.test(m[2])) cards.push(card([m[1], m[2]]));
+    else if (gr.length === 1) { flushCards(); segs.push(html`<h3>${gr[0]}</h3>`); }
+    else cards.push(card(gr));
+  }
+  flushCards();
+  return html`<h3>${d.title}</h3>
+    <div class="secs"><div class="sec"><${SecTable} rows=${[d.head, ...d.table]} /></div></div>
+    ${segs}`;
+}
+
 // ================= 圓餅圖（跟 Google 試算表 / Excel 連線用同一份數字 publishRows） =================
 const PIE_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
 const PIE_CATS = ['個案狀態', '地區', '性別', '身分別', '年齡', 'CMS級數', '轉介樂臨', '核銷件數'];
@@ -2199,13 +2295,12 @@ function StatReport({ db, month, user, refresh, rkey: key, picker }) {
   const desc = { statDispatch: '當月新案（新案-開頭）的派案單位、核定服務代碼數，以及指定／輪派名單', statCms: '當月新案的 CMS、身分福利別、性別、障礙等級', statCase: '當月各來源件數（依地區），以及新案、上月未吃到錢、結案名單', statMonthly: '當月新案、在案、結案、轉介樂臨、核銷，以及個案結構分析', statAnnual: '整年每月的新案、在案、出備、結案、性別、身分別、CMS、居住區域、障礙等級' }[key];
   let body;
   if (key === 'statDispatch' || key === 'statCase') {
-    const blk = hasSys(month) ? (key === 'statDispatch' ? dispatchBlock(dispatchStatMonth(month, db)) : caseBlock(caseStatMonth(month, db))) : hist[month] ? histRowsToBlock(hist[month]) : null;
-    body = blk ? html`<div class="tw" style="max-height:none"><table class="grid">${blk.map(r => html`<tr>${r.map(c => html`<td colspan=${c.span || 1} style=${'white-space:pre-wrap;vertical-align:top;' + (c.b ? 'font-weight:700' : '')}>${String(c.t ?? '')}</td>`)}</tr>`)}</table></div>`
-      : html`<div class="card empty">${rocMonth(month)}沒有資料</div>`;
-  } else if (key === 'statCms') body = html`<${AoaTable} aoa=${hasSys(month) || !hist[month] ? cmsSheetAoa(month, db) : hist[month]} />`;
+    body = hasSys(month) ? (key === 'statDispatch' ? html`<${DispatchView} d=${dispatchStatMonth(month, db)} />` : html`<${CaseView} d=${caseStatMonth(month, db)} />`)
+      : hist[month] ? html`<${SmartTables} aoa=${hist[month]} />` : html`<div class="card empty">${rocMonth(month)}沒有資料</div>`;
+  } else if (key === 'statCms') body = html`<${SmartTables} aoa=${hasSys(month) || !hist[month] ? cmsSheetAoa(month, db) : hist[month]} />`;
   else if (key === 'statMonthly') body = hasSys(month) ? html`<${MonthlyView} month=${month} db=${db} />` : html`<div class="card empty">${rocMonth(month)}系統裡沒有總表資料</div>`;
   else { const b = annualBook(y, db, hist, month > todayMonth() ? month : todayMonth());
-    body = html`<div class="trigbar">${Object.keys(b.sheets).map(n => html`<button class=${sheet === n ? 'on' : ''} onClick=${() => setSheet(n)}>${n}</button>`)}</div><${AoaTable} aoa=${b.sheets[sheet] || []} maxCols=${15} />`; }
+    body = html`<div class="trigbar">${Object.keys(b.sheets).map(n => html`<button class=${sheet === n ? 'on' : ''} onClick=${() => setSheet(n)}>${n}</button>`)}</div><${SmartTables} aoa=${b.sheets[sheet] || []} hl=${roc(month + '-01').slice(0, -3)} />`; }
   return html`<div class="page">
     <div class="bar">${picker}<span class="sub">${desc}</span><span class="grow"></span>
       ${kvKey && html`<label class="btn light" style="cursor:pointer">${busy ? '處理中…' : `匯入舊檔（${key === 'statDispatch' || key === 'statCase' ? 'Word' : 'Excel'}）`}<input type="file" accept=${key === 'statDispatch' || key === 'statCase' ? '.docx' : '.xlsx,.xls'} style="display:none" onChange=${e => { importOld(e.target.files[0]); e.target.value = ''; }} /></label>`}
