@@ -503,7 +503,8 @@ function cellText(col, r) {
 // ---------- 服務單位統計 ----------
 // kind：'new' 新案 / 'reassess' 複評；回傳 { [類別key]: { [單位]: 件數 } }
 function unitStats(kind, month, db) {
-  const f = kind === 'new' ? (e => isNewTrigger(e.trigger)) : (e => normTrigger(e.trigger) === '複評');
+  // 新案：觸發是「新案-」開頭的全部項目；複評：只算「複評」（新案-複評等排除）
+  const f = unitStatFilter(kind);
   const out = {};
   for (const e of db.events) {
     if (e.month !== month || !f(e) || !db.cases.has(e.caseId)) continue;
@@ -516,6 +517,63 @@ function unitStats(kind, month, db) {
     }
   }
   return out;
+}
+
+const unitStatFilter = kind => kind === 'new' ? (e => normTrigger(e.trigger).startsWith('新案')) : (e => normTrigger(e.trigger) === '複評');
+const UNIT_SHEETS = {
+  new: ['B單位', 'C碼', '交通', '社區交通', '日喘', '居喘', '日照', '小規機', '機喘', '家托', '餐飲(OT)', '沐浴車', '輔具', '短照'],
+  reassess: ['B單位', 'C碼', '交通', '居喘', '日照', '日喘', '短照', '機喘', '餐飲(OT)', '家托', '沐浴車', '輔具'],
+};
+const STAT2CAT = Object.fromEntries(CATS.map(c => [c.stat, c.key]));
+// 讀舊的服務單位統計 Excel：每張工作表＝一個服務類別，第一列是單位全名，A 欄是「111/09」這種月份
+function parseUnitStatBook(sheets) {   // sheets: { 工作表名: aoa }
+  const order = {}, counts = {}, sheetOrder = [];
+  for (const [name, aoa] of Object.entries(sheets)) {
+    const cat = String(name).trim(); if (!STAT2CAT[cat] || !aoa.length) continue;
+    sheetOrder.push(cat);
+    const head = (aoa[0] || []).map(x => String(x || '').replace(/\s+/g, ' ').trim());
+    order[cat] = head.slice(1).filter(Boolean);
+    counts[cat] = {};
+    for (let i = 1; i < aoa.length; i++) {
+      const row = aoa[i] || [], m = String(row[0] || '').trim().match(/^(\d{2,3})\/(\d{1,2})$/);
+      if (!m) continue;
+      const mk = `${+m[1] + 1911}-${pad(+m[2])}`, o = {};
+      head.forEach((h, j) => { if (j && h && typeof row[j] === 'number' && row[j]) o[h] = row[j]; });
+      counts[cat][mk] = o;
+    }
+  }
+  return { sheetOrder, order, counts };
+}
+// 組出服務單位統計表：每個類別一張，欄＝單位（舊檔的順序在前，新出現的接在後面），列＝月份
+//   某個月系統裡有該類觸發資料 → 用系統計算；沒有 → 用匯入的舊數字
+function unitStatBook(kind, db, hist, toMonth) {
+  hist = hist || { sheetOrder: [], order: {}, counts: {} };
+  const f = unitStatFilter(kind), sysMonths = new Set();
+  for (const e of db.events) if (db.cases.has(e.caseId) && f(e)) sysMonths.add(e.month);
+  const histMonths = new Set(Object.values(hist.counts).flatMap(o => Object.keys(o)));
+  const allMonths = [...sysMonths, ...histMonths].sort();
+  const start = allMonths[0] || toMonth.slice(0, 4) + '-01';
+  const months = []; for (let m = start; m <= `${toMonth.slice(0, 4)}-12`; m = shiftMonth(m, 1)) months.push(m);
+  const fullOf = u => { const hit = (db.units || []).find(x => (x.short || x.name) === u); return hit ? hit.name : u; };
+  const sheets = [...new Set([...(hist.sheetOrder.length ? hist.sheetOrder : UNIT_SHEETS[kind]), ...UNIT_SHEETS[kind]])];
+  const sysByMonth = {}; for (const m of sysMonths) sysByMonth[m] = unitStats(kind, m, db);
+  return sheets.map(cat => {
+    const cols = [...(hist.order[cat] || [])], colKey = cols.map(c => db.resolveUnit(c));
+    const rows = months.map(m => {
+      const v = {};
+      if (sysMonths.has(m)) {
+        for (const [u, n] of Object.entries((sysByMonth[m][STAT2CAT[cat]] || {}))) {
+          let j = colKey.indexOf(u);
+          if (j < 0) { cols.push(fullOf(u)); colKey.push(u); j = cols.length - 1; }
+          v[cols[j]] = (v[cols[j]] || 0) + n;
+        }
+        return { m, src: '系統', v };
+      }
+      const h = (hist.counts[cat] || {})[m];
+      return { m, src: h ? '匯入' : '', v: h ? { ...h } : {} };
+    });
+    return { cat, cols, rows };
+  });
 }
 
 // ---------- 月統計（在案、新案、結案、最新總數） ----------
@@ -878,9 +936,9 @@ const IDB = {
   async set(k, v) { try { const db = await this.open(); await new Promise(res => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = res; }); } catch (e) { } },
   async clear() { try { const db = await this.open(); await new Promise(res => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').clear(); t.oncomplete = res; t.onerror = res; }); } catch (e) { } },
 };
-const TABLES = ['cases', 'events', 'units', 'holidays', 'closures'];
+const TABLES = ['cases', 'events', 'units', 'holidays', 'closures', 'kv'];
 const CACHE_KEY = 'cache:' + EVAL_URL;
-const store = { rows: { cases: new Map(), events: new Map(), units: new Map(), holidays: new Map(), closures: new Map() }, since: { cases: 0, events: 0, units: 0, holidays: 0, closures: 0 } };
+const store = { rows: { cases: new Map(), events: new Map(), units: new Map(), holidays: new Map(), closures: new Map(), kv: new Map() }, since: { cases: 0, events: 0, units: 0, holidays: 0, closures: 0, kv: 0 } };
 async function loadCache() {
   const c = await IDB.get(CACHE_KEY);
   if (!c) return;
@@ -922,7 +980,8 @@ function buildDb() {
   for (const x of store.rows.holidays.values()) { const d = J(x.d); holidays[x.date] = d.kind || '假日'; holidayList.push({ ...d, _id: x._id, date: x.date }); }
   holidayList.sort((a, b) => a.date.localeCompare(b.date));
   const closures = [...store.rows.closures.values()].map(x => ({ ...J(x.d), _id: x._id, key: x.key }));
-  return { cases, events, units, holidays, holidayList, closures, resolveUnit: makeUnitResolver(units), info: caseMonths({ cases, events }) };
+  const kv = {}; for (const x of store.rows.kv.values()) kv[x.key] = J(x.d);
+  return { cases, events, units, holidays, holidayList, closures, kv, resolveUnit: makeUnitResolver(units), info: caseMonths({ cases, events }) };
 }
 
 // ================= 小元件 =================
@@ -1365,8 +1424,15 @@ function exportClosures(list, yr) {
 }
 
 // ================= 評鑑報表 =================
+const UNIT_REPORTS = { unitNew: ['new', '新案服務單位統計'], unitRe: ['reassess', '複評服務單位統計'] };
 function ReportView({ db, month, user, refresh }) {
   const [key, setKey] = useState('dispatch');
+  const picker = html`<select class="inp" value=${key} onChange=${e => setKey(e.target.value)}>${Object.entries(REPORTS).map(([k, R]) => html`<option value=${k}>${R.title}</option>`)}
+    ${Object.entries(UNIT_REPORTS).map(([k, [, t]]) => html`<option value=${k}>${t}</option>`)}</select>`;
+  if (UNIT_REPORTS[key]) return html`<${UnitStatReport} db=${db} month=${month} user=${user} refresh=${refresh} kind=${UNIT_REPORTS[key][0]} title=${UNIT_REPORTS[key][1]} picker=${picker} />`;
+  return html`<${EvalReport} db=${db} month=${month} user=${user} refresh=${refresh} rkey=${key} picker=${picker} />`;
+}
+function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
   const rep = useMemo(() => buildReport(key, month, db), [key, month, db]);
   const save = async (r, field, val) => {
     try { await call('m', 'data:patchEvent', { caseId: r.caseId, month, patch: JSON.stringify({ [field]: val }), by: user }); await refresh(); }
@@ -1376,7 +1442,7 @@ function ReportView({ db, month, user, refresh }) {
   const missing = rep.rows.reduce((n, r) => n + (rep.R.cols.some(c => c.need && c.need(r) && !r.e[c.edit]) ? 1 : 0), 0);
   return html`<div class="page">
     <div class="bar">
-      <select class="inp" value=${key} onChange=${e => setKey(e.target.value)}>${Object.entries(REPORTS).map(([k, R]) => html`<option value=${k}>${R.title}</option>`)}</select>
+      ${picker}
       <span class="sub">${rep.R.note}</span><span class="grow"></span>
       <button class="btn light" onClick=${() => exportReport(key, month, db, false)}>匯出${rocMonth(month)} Excel</button>
       <button class="btn light" onClick=${() => exportReport(key, month, db, true)}>匯出${+month.slice(0, 4) - 1911}年整年（12 個工作表）</button>
@@ -1406,6 +1472,65 @@ function ReportView({ db, month, user, refresh }) {
   </div>`;
 }
 
+// ================= 服務單位統計（評鑑報表） =================
+function UnitStatReport({ db, month, user, refresh, kind, title, picker }) {
+  const hist = db.kv['unitstat:' + kind];
+  const book = useMemo(() => unitStatBook(kind, db, hist, month), [db, hist, kind, month]);
+  const years = [...new Set(book[0] ? book[0].rows.map(r => r.m.slice(0, 4)) : [])];
+  const [yr, setYr] = useState(month.slice(0, 4)), [cat, setCat] = useState('B單位'), [busy, setBusy] = useState(false);
+  const sheet = book.find(b => b.cat === cat) || book[0];
+  const rows = sheet ? sheet.rows.filter(r => r.m.startsWith(yr)) : [];
+  const cols = sheet ? sheet.cols.filter(c => sheet.rows.some(r => r.v[c])) : [];   // 畫面只列有數字的單位
+  const showCols = cols.length ? cols : (sheet ? sheet.cols : []);
+  const tot = c => rows.reduce((a, r) => a + (r.v[c] || 0), 0);
+  const importHist = async f => {
+    if (!f) return; setBusy(true);
+    try {
+      const w = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      const h = parseUnitStatBook(Object.fromEntries(w.SheetNames.map(n => [n, XLSX.utils.sheet_to_json(w.Sheets[n], { header: 1, raw: true, defval: '' })])));
+      if (!h.sheetOrder.length) throw new Error('找不到服務類別的工作表（例如 B單位、C碼、交通）');
+      await call('m', 'data:saveKv', { key: 'unitstat:' + kind, d: JSON.stringify(h), by: user });
+      await refresh(); toast(`已匯入 ${h.sheetOrder.length} 張工作表的舊數字`);
+    } catch (e) { toast('匯入失敗：' + e.message, true); }
+    setBusy(false);
+  };
+  return html`<div class="page">
+    <div class="bar">${picker}<span class="sub">${kind === 'new' ? '當月觸發是「新案-」開頭的全部個案' : '當月觸發是「複評」的個案（新案-複評排除）'}，依服務項目統計各單位件數</span><span class="grow"></span>
+      <label class="btn light" style="cursor:pointer">${busy ? '匯入中…' : '匯入舊統計 Excel'}<input type="file" accept=".xlsx,.xls" style="display:none" onChange=${e => importHist(e.target.files[0])} /></label>
+      <button class="btn" onClick=${() => exportUnitStatBook(book, title)}>匯出 Excel（全部月份）</button></div>
+    ${!hist && html`<div class="card sub" style="margin-bottom:10px">還沒有匯入舊的${title} Excel。匯入後，系統裡沒有資料的月份（例如 111 年 9 月起）會用舊檔的數字，之後的月份由系統自動計算，接在後面。</div>`}
+    <div class="bar"><select class="inp" value=${yr} onChange=${e => setYr(e.target.value)}>${years.map(y => html`<option value=${y}>${+y - 1911}年</option>`)}</select></div>
+    <div class="trigbar">${book.map(b => { const n = b.rows.filter(r => r.m.startsWith(yr)).reduce((a, r) => a + Object.values(r.v).reduce((x, y) => x + y, 0), 0);
+      return html`<button class=${cat === b.cat ? 'on' : ''} onClick=${() => setCat(b.cat)}>${b.cat}<b>${n}</b></button>`; })}</div>
+    ${sheet && html`<div class="tw"><table class="grid">
+      <thead><tr><th>月份</th><th>來源</th>${showCols.map(c => html`<th class="num" style="white-space:normal;min-width:90px;max-width:160px" title=${c}>${db.resolveUnit(c)}</th>`)}<th class="num">合計</th></tr></thead>
+      <tbody>${rows.map(r => html`<tr><td>${roc(r.m + '-01').slice(0, -3)}</td>
+        <td>${r.src && html`<span class=${'tag ' + (r.src === '系統' ? 't-new' : 't-close')}>${r.src}</span>`}</td>
+        ${showCols.map(c => html`<td class="num">${r.v[c] || ''}</td>`)}<td class="num"><b>${Object.values(r.v).reduce((a, b) => a + b, 0) || ''}</b></td></tr>`)}
+        <tr><td><b>總計</b></td><td></td>${showCols.map(c => html`<td class="num"><b>${tot(c) || ''}</b></td>`)}<td class="num"><b>${showCols.reduce((a, c) => a + tot(c), 0)}</b></td></tr>
+      </tbody></table></div>
+      <div class="sub" style="margin-top:8px">欄位標題顯示簡稱（滑鼠移上去看全名），匯出時用全名。畫面只列有數字的單位，匯出時會保留舊檔的全部單位欄位。</div>`}
+  </div>`;
+}
+// 匯出：每個服務類別一張工作表，月份一路往下，每年一列「總計」；B單位最後加「友單位總計」（最近一年、樂臨以外的單位）
+function exportUnitStatBook(book, title) {
+  const wb = XLSX.utils.book_new();
+  for (const sh of book) {
+    const aoa = [['', ...sh.cols]];
+    const years = [...new Set(sh.rows.map(r => r.m.slice(0, 4)))];
+    let lastTot = null;
+    for (const y of years) {
+      const rs = sh.rows.filter(r => r.m.startsWith(y));
+      for (const r of rs) aoa.push([roc(r.m + '-01').slice(0, -3), ...sh.cols.map(c => r.v[c] || '')]);
+      lastTot = sh.cols.map(c => rs.reduce((a, r) => a + (r.v[c] || 0), 0));
+      aoa.push(['總計', ...lastTot]);
+    }
+    if (sh.cat === 'B單位' && lastTot) aoa.push(['友單位總計', sh.cols.reduce((a, c, i) => a + (/樂臨/.test(c) ? 0 : lastTot[i]), 0)]);
+    XLSX.utils.book_append_sheet(wb, sheetFromAoa(aoa, [8, ...sh.cols.map(() => 16)]), sh.cat);
+  }
+  XLSX.writeFile(wb, `${title}.xlsx`);
+}
+
 // ================= 統計 =================
 function StatsView({ db, month }) {
   const [sub, setSub] = useState('month');
@@ -1423,9 +1548,7 @@ function StatsView({ db, month }) {
     onClick=${() => setPick(pick && pick.cat === cat && pick.rg === rg ? null : { cat, rg })}>${bold ? html`<b>${n}</b>` : n}</button></td>`;
   return html`<div class="page">
     <div class="bar">
-      ${[['month', '月統計'], ['new', '新案服務單位統計'], ['reassess', '複評服務單位統計']].map(([k, l]) => html`<button class=${'tabbtn' + (sub === k ? ' on' : '')} onClick=${() => setSub(k)}>${l}</button>`)}
-      <span class="grow"></span>
-      ${sub !== 'month' && html`<button class="btn light" onClick=${() => exportUnitStats(sub, month.slice(0, 4), db)}>匯出${+month.slice(0, 4) - 1911}年整年 Excel</button>`}
+      <h2 style="margin:0">${rocMonth(month)}月統計</h2><span class="sub">案量、在案來源、核銷金額與待補報；服務單位統計在「評鑑報表」</span>
     </div>
     ${sub === 'month' ? html`<div class="cols3">
       <div class="card"><h3>${rocMonth(month)}各區案量</h3>
