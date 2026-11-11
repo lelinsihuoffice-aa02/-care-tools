@@ -46,6 +46,9 @@
   .grid td{padding:6px 8px;border-bottom:1px solid #f0e8dc;white-space:nowrap;vertical-align:middle}
   .grid tr.click:hover td{background:#FBF3E6;cursor:pointer}
   .grid td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .grid th.num{text-align:right}
+  .cols2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:12px}
+  @media (max-width:900px){.cols2{grid-template-columns:minmax(0,1fr)}}
   .grid td.flag{background:var(--redbg);color:var(--red);font-weight:700}
   .grid td.need{background:#fff7ed}
   .grid td .inp{padding:4px 8px;border-radius:8px;font-size:13px}
@@ -529,7 +532,43 @@ function caseMonths(db) {
     const cm = closeMonthOf(e.trigger, e.month);
     if (cm && (!x.close || cm < x.close) && !(x.openEv && cm < x.open)) x.close = cm;
   }
+  // 沒打結案觸發，但 A結束服務日期、系統結案日期都填了 → 以較晚的日期月份當結案月
+  for (const [id, c] of db.cases) {
+    const x = info.get(id), done = closedOffMonth(c);
+    if (!x.close && done && !(x.open && done < x.open)) x.close = done;
+  }
   return info;
+}
+// 兩個結案日期都填了 → 回傳較晚那天的月份（這個月還在總表，下個月起移到結案表）
+function closedOffMonth(c) {
+  if (!c.aEnd || !c.sysClose) return '';
+  return monthOf(c.aEnd > c.sysClose ? c.aEnd : c.sysClose);
+}
+// 某月是否還顯示在總表（含已結案但還沒補齊兩個結案日期的個案）
+function inSummaryList(c, x, month) {
+  if (x.open && x.open > month) return false;
+  if (!x.close || x.close >= month) return true;
+  const off = closedOffMonth(c);
+  return !(off && off < month);
+}
+// 本月沒有自己打觸發時，系統自動帶入的觸發：
+//   之前月份結案、還在總表上 → 「11月結案」
+//   上個月有觸發（不是「-」、不是結案），但沒選金額或沒吃到錢 → 本月補報：
+//     新案-xxx → 「11月新案-xxx」；其他觸發 → 「上月沒吃到錢」
+function autoTriggers(month, db) {
+  const info = db.info || caseMonths(db), prev = shiftMonth(month, -1), out = new Map();
+  const cur = new Map(), last = new Map();
+  for (const e of db.events) { if (e.month === month) cur.set(e.caseId, e); else if (e.month === prev) last.set(e.caseId, e); }
+  for (const [id, c] of db.cases) {
+    const own = cur.get(id);
+    if (own && normTrigger(own.trigger)) continue;
+    const x = info.get(id) || {};
+    if (x.close && x.close < month) { if (inSummaryList(c, x, month)) out.set(id, `${+x.close.slice(5)}月結案`); continue; }
+    const pe = last.get(id), pt = pe ? normTrigger(pe.trigger) : '';
+    if (pt && !isCloseTrigger(pt) && (!FEE[pe.fee] || pe.fee === 'none'))
+      out.set(id, pt.startsWith('新案') ? `${+prev.slice(5)}月${pt}` : '上月沒吃到錢');
+  }
+  return out;
 }
 function srcGroup(src) {
   const s = String(src || '');
@@ -580,16 +619,24 @@ function feeKeyOf(e) {
   if (e && FEE[e.fee]) return e.fee;
   return e && normTrigger(e.trigger) ? 'unset' : DEFAULT_FEE_NO_TRIGGER;
 }
+// 沒選金額時的預設：沒觸發 → 400；結案400- → 400；結案- → 沒吃到錢；其他觸發 → 未選（要人工選）
+function defaultFee(t) {
+  t = normTrigger(t);
+  if (!t) return DEFAULT_FEE_NO_TRIGGER;
+  if (/^結案400/.test(t)) return '400';
+  if (/^結案/.test(t)) return 'none';
+  return 'unset';
+}
 function billing(month, db) {
-  const by = new Map(), info = db.info || caseMonths(db), evOf = new Map();
+  const by = new Map(), info = db.info || caseMonths(db), evOf = new Map(), auto = autoTriggers(month, db);
   for (const e of db.events) if (e.month === month && db.cases.has(e.caseId)) evOf.set(e.caseId, e);
   for (const [id] of db.cases) {
     const x = info.get(id) || {};
     if (x.open && x.open > month) continue;            // 還沒開案
     if (x.close && x.close < month) continue;          // 之前已結案、不在本月總表
     const e = evOf.get(id) || null;
-    const t = e ? normTrigger(e.trigger) : '';
-    const k = feeKeyOf(e);
+    const t = (e ? normTrigger(e.trigger) : '') || auto.get(id) || '';
+    const k = e && FEE[e.fee] ? e.fee : defaultFee(t);
     const r = by.get(t || NO_TRIG) || { t: t || NO_TRIG, n: 0, c: {}, amt: 0, ids: {} };
     r.n++; r.c[k] = (r.c[k] || 0) + 1; (r.ids[k] = r.ids[k] || []).push(id);
     if (FEE[k]) r.amt += FEE[k].amt;
@@ -600,6 +647,18 @@ function billing(month, db) {
   const total = { t: '合計', n: 0, c: {}, amt: 0, ids: {} };
   for (const r of rows) { total.n += r.n; total.amt += r.amt; for (const k in r.c) { total.c[k] = (total.c[k] || 0) + r.c[k]; total.ids[k] = [...(total.ids[k] || []), ...r.ids[k]]; } }
   return { rows, total };
+}
+
+// 上個月選了「沒吃到錢」的個案 → 本月待補報；本月已選金額就算已補報
+function unpaidLastMonth(month, db) {
+  const prev = shiftMonth(month, -1), cur = new Map(), out = [];
+  for (const e of db.events) if (e.month === month) cur.set(e.caseId, e);
+  for (const e of db.events) {
+    if (e.month !== prev || e.fee !== 'none' || !db.cases.has(e.caseId)) continue;
+    const ce = cur.get(e.caseId);
+    out.push({ caseId: e.caseId, prevTrigger: normTrigger(e.trigger) || '-', fee: ce && FEE[ce.fee] && ce.fee !== 'none' ? ce.fee : '' });
+  }
+  return out;
 }
 
 // ---------- Excel 總表匯入 ----------
@@ -650,6 +709,72 @@ function parseSummarySheet(aoa, month) {
     rows.push({ caseNo, c, e: hasTrigger ? e : null, month });
   }
   return { rows, unknownHeaders: unknown, headerRow: hr };
+}
+
+// ---------- 結案 ----------
+const CLOSE_REASONS = ['無需求', '死亡', '入住機構或醫療院所', '已聘外籍看護工', '家人自行照顧', '轉外縣市', '轉單位', '未符合長照資格', '重新評估'];
+const normArea = a => { const s = String(a || '').trim().replace(/臺/g, '台'); const hit = Object.values(REGIONS).find(r => s.includes(r)); return hit || s; };
+// 結案原因統一寫法：含「死亡」一律算死亡；CMS1級、未符長照資格 → 未符合長照資格
+const normReason = r => {
+  const s = String(r || '').trim().replace(/\s+/g, '');
+  if (/死亡/.test(s)) return '死亡';
+  if (s === '未符長照資格' || /^CMS1級?$/i.test(s)) return '未符合長照資格';
+  return s;
+};
+const closureKey = (idNo, sysClose, name) => `${String(idNo || name || '').trim().toUpperCase()}|${sysClose || ''}`;
+const isDeath = r => /死亡/.test(r || '');
+// 結案清單 = 系統裡兩個結案日期都填了的個案 ＋ 匯入／補登的結案紀錄（同一人同一天系統結案只算一次）
+function closureList(db) {
+  const out = [], keys = new Set();
+  for (const c of db.cases.values()) {
+    if (!closedOffMonth(c)) continue;
+    const k = closureKey(c.idNo, c.sysClose, c.name); keys.add(k);
+    let codes = '', best = '';
+    for (const e of db.events) if (e.caseId === c._id && e.codes && e.month >= best) { best = e.month; codes = e.codes; }
+    out.push({ from: 'case', id: c._id, caseNo: c.caseNo, name: c.name || '', idNo: c.idNo || '', aEnd: c.aEnd, sysClose: c.sysClose,
+      reason: normReason(c.closeReason), area: regionOf(c.caseNo), codes });
+  }
+  for (const x of (db.closures || [])) {
+    if (keys.has(x.key)) continue;
+    out.push({ from: 'import', id: x._id, key: x.key, caseNo: '', name: x.name || '', idNo: x.idNo || '', aEnd: x.aEnd || '', sysClose: x.sysClose || '',
+      reason: normReason(x.reason), area: normArea(x.area), codes: x.codes || '' });
+  }
+  return out.sort((a, b) => (b.sysClose || '').localeCompare(a.sysClose || '') || a.name.localeCompare(b.name, 'zh-Hant'));
+}
+// 依地區、結案原因統計
+function closureStats(list) {
+  const regs = Object.values(REGIONS), byReg = {}, byReason = {}, cross = {};
+  for (const r of regs) { byReg[r] = 0; cross[r] = {}; }
+  for (const x of list) {
+    const rg = regs.includes(x.area) ? x.area : (x.area || '未填');
+    const rs = x.reason || '未填';
+    byReg[rg] = (byReg[rg] || 0) + 1; byReason[rs] = (byReason[rs] || 0) + 1;
+    (cross[rg] = cross[rg] || {})[rs] = (cross[rg][rs] || 0) + 1;
+  }
+  const order = rs => { const i = CLOSE_REASONS.indexOf(rs); return i < 0 ? 99 : i; };
+  const reasons = Object.keys(byReason).sort((a, b) => order(a) - order(b) || byReason[b] - byReason[a]);
+  return { byReg, byReason, cross, reasons, total: list.length };
+}
+// 解析結案 Excel 的一張工作表（姓名、身分證號、A個管結案、系統結案、結案原因、居住地、服務代碼）
+const CLOSE_MAP = { '姓名': 'name', '身分證號': 'idNo', '身分證字號': 'idNo', 'A個管結案': 'aEnd', 'A結束服務日期': 'aEnd', '系統結案': 'sysClose', '系統結案日期': 'sysClose',
+  '結案原因': 'reason', '居住地': 'area', '地區': 'area', '服務代碼': 'codes' };
+function parseClosureSheet(aoa) {
+  const hr = aoa.findIndex(row => row && row.some(x => normHeader(x) === '結案原因') && row.some(x => /系統結案/.test(normHeader(x))));
+  if (hr < 0) throw new Error('找不到標題列（需要有「系統結案」和「結案原因」兩欄）');
+  const heads = aoa[hr].map(normHeader), rows = [], seen = new Set();
+  for (let i = hr + 1; i < aoa.length; i++) {
+    const row = aoa[i]; if (!row) continue;
+    const d = {};
+    heads.forEach((h, j) => { const k = CLOSE_MAP[h]; if (!k) return; let v = row[j]; if (v === undefined || v === null) v = '';
+      d[k] = k === 'aEnd' || k === 'sysClose' ? parseDate(typeof v === 'string' ? v.trim() : v) : String(v).trim(); });
+    if (!d.name && !d.idNo && !d.sysClose && !d.reason) continue;
+    d.reason = normReason(d.reason); d.area = normArea(d.area);
+    // 沒有姓名和身分證時無法辨識是誰，改用整列內容＋列號當 key（同一個檔案重複匯入仍不會重複）
+    const key = d.idNo || d.name ? closureKey(d.idNo, d.sysClose, d.name) : `?${i}|${d.sysClose}|${d.aEnd}|${d.area}|${d.reason}|${d.codes}`;
+    if (seen.has(key)) continue; seen.add(key);
+    rows.push({ key, d });
+  }
+  return { rows };
 }
 
 // 2026 年（民國 115 年）行政機關放假日（平日部分），來源：人事行政總處辦公日曆表
@@ -729,13 +854,13 @@ const IDB = {
   async set(k, v) { try { const db = await this.open(); await new Promise(res => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = res; }); } catch (e) { } },
   async clear() { try { const db = await this.open(); await new Promise(res => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').clear(); t.oncomplete = res; t.onerror = res; }); } catch (e) { } },
 };
-const TABLES = ['cases', 'events', 'units', 'holidays'];
+const TABLES = ['cases', 'events', 'units', 'holidays', 'closures'];
 const CACHE_KEY = 'cache:' + EVAL_URL;
-const store = { rows: { cases: new Map(), events: new Map(), units: new Map(), holidays: new Map() }, since: { cases: 0, events: 0, units: 0, holidays: 0 } };
+const store = { rows: { cases: new Map(), events: new Map(), units: new Map(), holidays: new Map(), closures: new Map() }, since: { cases: 0, events: 0, units: 0, holidays: 0, closures: 0 } };
 async function loadCache() {
   const c = await IDB.get(CACHE_KEY);
   if (!c) return;
-  for (const t of TABLES) { store.rows[t] = new Map((c.rows[t] || []).map(x => [x._id, x])); store.since[t] = c.since[t] || 0; }
+  for (const t of TABLES) { store.rows[t] = new Map(((c.rows || {})[t] || []).map(x => [x._id, x])); store.since[t] = (c.since || {})[t] || 0; }
 }
 let syncing = null;
 async function syncAll() {
@@ -772,7 +897,8 @@ function buildDb() {
   const holidays = {}, holidayList = [];
   for (const x of store.rows.holidays.values()) { const d = J(x.d); holidays[x.date] = d.kind || '假日'; holidayList.push({ ...d, _id: x._id, date: x.date }); }
   holidayList.sort((a, b) => a.date.localeCompare(b.date));
-  return { cases, events, units, holidays, holidayList, resolveUnit: makeUnitResolver(units), info: caseMonths({ cases, events }) };
+  const closures = [...store.rows.closures.values()].map(x => ({ ...J(x.d), _id: x._id, key: x.key }));
+  return { cases, events, units, holidays, holidayList, closures, resolveUnit: makeUnitResolver(units), info: caseMonths({ cases, events }) };
 }
 
 // ================= 小元件 =================
@@ -875,37 +1001,47 @@ const latestOf = (db, c, k) => {
 };
 
 function SummaryView({ db, month, user, refresh }) {
-  const [q, setQ] = useState(''), [reg, setReg] = useState('全部'), [trig, setTrig] = useState(''), [all, setAll] = useState(false);
+  const [view, setView] = useState('list'); // list 總表 / closed 結案表
+  const [q, setQ] = useState(''), [reg, setReg] = useState('全部'), [trig, setTrig] = useState('');
   const [edit, setEdit] = useState(null);
   const evOf = useMemo(() => { const m = new Map(); for (const e of db.events) if (e.month === month) m.set(e.caseId, e); return m; }, [db, month]);
-  const trigOf = c => { const e = evOf.get(c._id); return e && e.trigger ? normTrigger(e.trigger) : ''; };
-  // 先套用搜尋、地區、結案條件，再依觸發篩選（觸發按鍵上的數字用篩選前的名單計算）
-  const base = useMemo(() => [...db.cases.values()].filter(c => {
-    const x = db.info.get(c._id) || {};
-    const inList = all || !x.open || (x.open <= month && !(x.close && x.close < month));
-    if (!inList) return false;
-    if (reg !== '全部' && regionOf(c.caseNo) !== reg) return false;
-    if (q && !(String(c.name || '').includes(q) || String(c.idNo || '').includes(q) || String(c.caseNo).includes(q))) return false;
-    return true;
-  }).sort(sortNo), [db, month, q, reg, all]);
+  const auto = useMemo(() => autoTriggers(month, db), [db, month]);
+  // 本月觸發：自己打的優先，沒有就用系統自動帶入的（11月結案、11月新案-初評…）
+  const trigOf = c => { const e = evOf.get(c._id); return (e && normTrigger(e.trigger)) || auto.get(c._id) || ''; };
+  const match = c => (reg === '全部' || regionOf(c.caseNo) === reg) &&
+    (!q || String(c.name || '').includes(q) || String(c.idNo || '').includes(q) || String(c.caseNo).includes(q));
+  const base = useMemo(() => [...db.cases.values()].filter(c => inSummaryList(c, db.info.get(c._id) || {}, month) && match(c)).sort(sortNo), [db, month, q, reg]);
+  const nClosed = useMemo(() => closureList(db).length, [db]);
   const trigCounts = useMemo(() => {
     const m = new Map();
     for (const c of base) { const t = trigOf(c); m.set(t, (m.get(t) || 0) + 1); }
     const order = t => { const i = TRIGGERS.indexOf(t); return i < 0 ? 999 : i; };
     return [...m.entries()].filter(([t]) => t).sort((a, b) => order(a[0]) - order(b[0]) || a[0].localeCompare(b[0], 'zh-Hant'));
-  }, [base, evOf]);
+  }, [base, evOf, auto]);
   const nAny = base.filter(c => trigOf(c)).length;
   const list = trig === '' ? base : trig === '__any' ? base.filter(c => trigOf(c)) : trig === '__none' ? base.filter(c => !trigOf(c)) : base.filter(c => trigOf(c) === trig);
   const nNew = list.filter(c => isNewTrigger((evOf.get(c._id) || {}).trigger)).length;
+  const feeCell = c => {
+    const e = evOf.get(c._id), t = trigOf(c), x = db.info.get(c._id) || {};
+    if (x.close && x.close < month) return '';                       // 之前已結案，不核銷
+    const k = e && FEE[e.fee] ? e.fee : defaultFee(t);
+    if (k === 'unset') return '';
+    const isAuto = !(e && FEE[e.fee]);
+    return html`<span class=${'tag ' + (k === 'none' ? 't-warn' : isAuto ? 't-close' : 't-ok')} title=${isAuto ? '沒選金額時的預設值' : ''}>${FEE[k].label}${isAuto ? '（預設）' : ''}</span>`;
+  };
   return html`<div class="page">
     <div class="bar">
-      <input class="inp" style="width:220px" placeholder="搜尋姓名、身分證、編號" value=${q} onInput=${e => setQ(e.target.value)} />
-      <select class="inp" value=${reg} onChange=${e => setReg(e.target.value)}>${['全部', ...Object.values(REGIONS)].map(r => html`<option value=${r}>${r}</option>`)}</select>
-      <label class="sub"><input type="checkbox" checked=${all} onChange=${e => setAll(e.target.checked)} /> 含已結案</label>
+      <span class="ampm" style="margin-right:4px">
+        <button class=${view === 'list' ? 'on' : ''} onClick=${() => setView('list')}>總表 ${base.length}</button>
+        <button class=${view === 'closed' ? 'on' : ''} onClick=${() => setView('closed')}>結案表 ${nClosed}</button></span>
+      ${view === 'list' && html`<input class="inp" style="width:220px" placeholder="搜尋姓名、身分證、編號" value=${q} onInput=${e => setQ(e.target.value)} />
+      <select class="inp" value=${reg} onChange=${e => setReg(e.target.value)}>${['全部', ...Object.values(REGIONS)].map(r => html`<option value=${r}>${r}</option>`)}</select>`}
       <span class="grow"></span>
-      <span class="sub">共 ${list.length} 案，本月新案 ${nNew}</span>
-      <button class="btn" onClick=${() => setEdit({ isNew: true })}>＋ 新增個案</button>
+      ${view === 'list' && html`<span class="sub">共 ${list.length} 案，本月新案 ${nNew}</span>`}
+      ${view === 'list' && html`<button class="btn" onClick=${() => setEdit({ isNew: true })}>＋ 新增個案</button>`}
     </div>
+    ${view === 'closed' ? html`<${ClosedView} db=${db} user=${user} refresh=${refresh} openCase=${id => setEdit({ id })} />`
+    : html`
     ${db.cases.size > 0 && html`<div class="trigbar"><span class="sub">${rocMonth(month)}觸發：</span>
       ${[['', '全部', base.length], ['__any', '有觸發', nAny], ...trigCounts.map(([t, n]) => [t, t, n]), ['__none', '無觸發', base.length - nAny]].map(([k, label, n]) =>
         html`<button class=${trig === k ? 'on' : ''} onClick=${() => setTrig(trig === k && k !== '' ? '' : k)}>${label}<b>${n}</b></button>`)}</div>`}
@@ -913,17 +1049,16 @@ function SummaryView({ db, month, user, refresh }) {
     <div class="tw"><table class="grid">
       <thead><tr><th>編號</th><th>姓名</th><th>CMS</th><th>來源</th><th>${rocMonth(month)}觸發</th><th>核銷</th><th>照專評估</th><th>訪視</th><th>照專簽審</th><th>照會B</th><th>居服單位</th><th>狀態</th></tr></thead>
       <tbody>${list.map(c => {
-        const e = evOf.get(c._id), x = db.info.get(c._id) || {};
-        const closed = x.close && x.close <= month;
+        const e = evOf.get(c._id), x = db.info.get(c._id) || {}, t = trigOf(c), isAuto = !(e && normTrigger(e.trigger)) && !!t;
+        const closed = x.close && x.close <= month, waiting = x.close && x.close < month;
         return html`<tr class="click" onClick=${() => setEdit({ id: c._id })}>
           <td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${c.cms}</td><td>${c.src}</td>
-          <td>${e && e.trigger ? html`<span class=${'tag ' + (isNewTrigger(e.trigger) ? 't-new' : isCloseTrigger(e.trigger) ? 't-close' : 't-ev')}>${e.trigger}</span>` : ''}</td>
-          <td>${(() => { const k = feeKeyOf(e); if (k === 'unset') return ''; const auto = !(e && FEE[e.fee]);
-            return html`<span class=${'tag ' + (k === 'none' ? 't-warn' : auto ? 't-close' : 't-ok')} title=${auto ? '沒有觸發，每月自動算 400' : ''}>${FEE[k].label}${auto ? '（自動）' : ''}</span>`; })()}</td>
+          <td>${t ? html`<span class=${'tag ' + (isNewTrigger(t) ? 't-new' : /結案/.test(t) ? 't-close' : isAuto ? 't-org' : 't-ev')} title=${isAuto ? '系統自動帶入' : ''}>${t}${isAuto ? '（自動）' : ''}</span>` : '-'}</td>
+          <td>${feeCell(c)}</td>
           <td>${roc(latestOf(db, c, 'assess'))}</td><td>${roc(latestOf(db, c, 'visit'))}</td><td>${roc(latestOf(db, c, 'approve'))}</td><td>${roc(latestOf(db, c, 'referB'))}</td>
           <td>${db.resolveUnit((c.services || {}).home || '')}</td>
-          <td>${closed ? html`<span class="tag t-close">已結案</span>` : ''}</td></tr>`;
-      })}</tbody></table></div>`}
+          <td>${closed ? html`<span class="tag t-close">${rocMonth(x.close)}結案${waiting && !closedOffMonth(c) ? '（待補結案日期）' : ''}</span>` : ''}</td></tr>`;
+      })}</tbody></table></div>`}`}
     ${edit && html`<${CaseEditor} db=${db} month=${month} user=${user} id=${edit.id} onClose=${() => setEdit(null)} refresh=${refresh} />`}
   </div>`;
 }
@@ -962,6 +1097,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
     }
     setCaseNo(no); setRq('');
   };
+  const autoTrig = useMemo(() => curId ? autoTriggers(em, db).get(curId) || '' : '', [db, em, curId]);
   const chooseTrigger = t => {
     const nt = ev.trigger === t ? '' : t;
     setEv({ ...ev, trigger: nt });
@@ -1006,6 +1142,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
   return html`<div class="modal" onClick=${e => e.target === e.currentTarget && onClose()}><div class="drawer">
     <div class="bar"><h2 style="margin:0">${!isAdd ? `${orig.name}　${orig.caseNo}` : '新增個案'}</h2><span class="grow"></span>
       ${id && html`<${ConfirmBtn} label="刪除個案" onYes=${del} />`}
+      ${!isAdd && html`<button class="btn light" title="把本月觸發設為「結案-」，再填 A結束服務日期和系統結案日期" onClick=${() => { setEm(month); setEv(v => ({ ...v, trigger: '結案-' })); setTimeout(() => { const el = document.getElementById('closeDates'); if (el) el.scrollIntoView({ block: 'center' }); }, 50); }}>辦理結案</button>`}
       <button class="btn light" onClick=${onClose}>關閉</button><button class="btn" disabled=${busy || (isAdd && (!kind || (kind === 'new' && !reopen)))} onClick=${save}>${busy ? '儲存中…' : '儲存'}</button></div>
     ${isAdd && html`<div class="card">
       <div class="sect" style="margin-top:0">新增方式</div>
@@ -1032,6 +1169,11 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
     ${(!isAdd || kind === 'other' || (kind === 'new' && reopen)) && html`<div>
     <div class="card">
       <div class="sect" style="margin-top:0">基本資料</div>
+      ${!isAdd && (/^結案/.test(normTrigger(ev.trigger)) || (orig && (orig.aEnd || orig.sysClose || orig.closeReason))) && html`<div id="closeDates" class="card" style="background:#FDFBF6;margin-bottom:10px">
+        <b>辦理結案</b><div class="sub" style="margin:4px 0 8px">兩個日期都填好後，下個月起這個個案會自動移到「結案表」，不再出現在總表。</div>
+        <div class="form"><label>A結束服務日期<${DateInput} style="width:100%" value=${c.aEnd || ''} onChange=${v => setC({ ...c, aEnd: v })} /></label>
+          <label>系統結案日期<${DateInput} style="width:100%" value=${c.sysClose || ''} onChange=${v => setC({ ...c, sysClose: v })} /></label></div>
+        <div class="sub" style="margin-top:10px">結案原因</div><${ReasonPick} value=${c.closeReason || ''} onChange=${v => setC({ ...c, closeReason: v })} /></div>`}
       <div class="form">
         <label>個案編號<span style="display:flex;gap:4px"><input class="inp" style="flex:1" value=${caseNo} onInput=${e => setCaseNo(e.target.value)} />
 </span>
@@ -1053,9 +1195,10 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
           <div class="trigbar" style="margin:4px 0 0">${NEW_TRIGGERS.map(t => html`<button class=${ev.trigger === t ? 'on' : ''} onClick=${() => chooseTrigger(t)}>${t}</button>`)}</div></div>`
         : html`<label>觸發<input class="inp" list="dl-trig" value=${ev.trigger || ''} onInput=${e => setEv({ ...ev, trigger: e.target.value })} onBlur=${e => setEv({ ...ev, trigger: normTrigger(e.target.value) })} />
           <datalist id="dl-trig">${TRIGGERS.map(t => html`<option value=${t} />`)}</datalist></label>`}
+        ${!normTrigger(ev.trigger) && autoTrig && html`<div style="grid-column:1/-1" class="sub">本月沒有自己打觸發，系統自動帶入：<span class="tag t-org">${autoTrig}</span>${/新案|沒吃到錢/.test(autoTrig) ? '（上月沒選金額或沒吃到錢，本月請補報並選金額）' : ''}</div>`}
         <div style="grid-column:1/-1"><span class="sub">核銷金額</span>
           <div class="trigbar" style="margin:4px 0 0">${FEES.map(f => html`<button class=${ev.fee === f.key ? 'on' : ''} onClick=${() => setEv({ ...ev, fee: ev.fee === f.key ? '' : f.key })}>${f.label}</button>`)}
-          ${!normTrigger(ev.trigger) && !FEE[ev.fee] && html`<span class="sub">沒有觸發時，沒選就自動算 400</span>`}</div></div>
+          ${!FEE[ev.fee] && defaultFee(ev.trigger) !== 'unset' && html`<span class="sub">沒選就預設為「${FEE[defaultFee(ev.trigger)].label}」</span>`}</div></div>
         ${EVENT_DATES.map(([k, label]) => html`<label>${label}${k === 'supervisor' || k === 'approve'
           ? html`<span style="display:flex;gap:4px"><${DateInput} style="flex:1;min-width:0" value=${ev[k] || ''} onChange=${v => setEv({ ...ev, [k]: v })} /><${AmPm} value=${ev[k + 'Time']} onChange=${v => setEv({ ...ev, [k + 'Time']: v })} /></span>`
           : html`<${DateInput} style="width:100%" value=${ev[k] || ''} onChange=${v => setEv({ ...ev, [k]: v })} />`}</label>`)}
@@ -1066,6 +1209,128 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
     </div>
     </div>`}
   </div></div>`;
+}
+
+// ================= 結案表 =================
+function ClosedView({ db, user, refresh, openCase }) {
+  const all = useMemo(() => closureList(db), [db]);
+  const years = useMemo(() => [...new Set(all.map(x => (x.sysClose || '').slice(0, 4)).filter(Boolean))].sort().reverse(), [all]);
+  const [yr, setYr] = useState(''), [rg, setRg] = useState(''), [rs, setRs] = useState(''), [q, setQ] = useState('');
+  const [edit, setEdit] = useState(null), [imp, setImp] = useState(false);
+  const byYear = yr ? all.filter(x => (x.sysClose || '').startsWith(yr)) : all;
+  const st = useMemo(() => closureStats(byYear), [byYear]);
+  const list = byYear.filter(x => (!rg || x.area === rg) && (!rs || (x.reason || '未填') === rs) &&
+    (!q || x.name.includes(q) || x.idNo.toUpperCase().includes(q.toUpperCase()) || x.caseNo.includes(q)));
+  const noReason = byYear.filter(x => !x.reason).length;
+  return html`<div>
+    <div class="bar">
+      <select class="inp" value=${yr} onChange=${e => setYr(e.target.value)}><option value="">全部年度</option>${years.map(y => html`<option value=${y}>${+y - 1911}年</option>`)}</select>
+      <input class="inp" style="width:200px" placeholder="搜尋姓名、身分證、編號" value=${q} onInput=${e => setQ(e.target.value)} />
+      <span class="grow"></span>
+      <button class="btn light" onClick=${() => setImp(true)}>匯入結案 Excel</button>
+      <button class="btn light" onClick=${() => setEdit({})}>＋ 補登結案紀錄</button>
+      <button class="btn" disabled=${!byYear.length} onClick=${() => exportClosures(byYear, yr)}>匯出結案報表</button>
+    </div>
+    <div class="trigbar"><span class="sub">地區：</span>${[['', '全部', byYear.length], ...Object.values(REGIONS).map(r => [r, r, st.byReg[r] || 0])].map(([k, l, n]) =>
+      html`<button class=${rg === k ? 'on' : ''} onClick=${() => setRg(rg === k ? '' : k)}>${l}<b>${n}</b></button>`)}</div>
+    <div class="trigbar"><span class="sub">原因：</span>${st.reasons.map(k =>
+      html`<button class=${rs === k ? 'on' : ''} onClick=${() => setRs(rs === k ? '' : k)}>${k}<b>${st.byReason[k]}</b></button>`)}</div>
+    ${noReason > 0 && html`<div class="sub" style="margin-bottom:8px;color:var(--org)">有 ${noReason} 筆沒有填結案原因（點「未填」可以列出來）。</div>`}
+    <div class="sub" style="margin-bottom:8px">系統裡 A結束服務日期和系統結案日期都填好的個案會自動列在這裡（來源「系統」），舊資料用「匯入結案 Excel」帶入（來源「匯入」）。</div>
+    ${list.length === 0 ? html`<div class="card empty">沒有符合條件的結案紀錄</div>` : html`
+    <div class="tw"><table class="grid">
+      <thead><tr><th>姓名</th><th>身分證號</th><th>編號</th><th>A個管結案</th><th>系統結案</th><th>結案原因</th><th>居住地</th><th>服務代碼</th><th>來源</th></tr></thead>
+      <tbody>${list.slice(0, 1000).map(x => html`<tr class="click" onClick=${() => x.from === 'case' ? openCase(x.id) : setEdit(x)}>
+        <td><b>${x.name}</b></td><td>${x.idNo}</td><td>${x.caseNo}</td><td>${roc(x.aEnd)}</td><td>${roc(x.sysClose)}</td>
+        <td>${x.reason ? html`<span class=${'tag ' + (isDeath(x.reason) ? 't-close' : 't-ev')}>${x.reason}</span>` : html`<span class="tag t-org">未填</span>`}</td>
+        <td>${x.area}</td><td style="max-width:260px;overflow:hidden;text-overflow:ellipsis" title=${x.codes}>${x.codes}</td>
+        <td><span class=${'tag ' + (x.from === 'case' ? 't-new' : 't-close')}>${x.from === 'case' ? '系統' : '匯入'}</span></td></tr>`)}</tbody></table></div>
+    ${list.length > 1000 && html`<div class="sub">只顯示前 1000 筆，請用年度或地區篩選</div>`}`}
+    ${edit && html`<${ClosureEditor} rec=${edit} user=${user} refresh=${refresh} onClose=${() => setEdit(null)} />`}
+    ${imp && html`<${ClosureImport} db=${db} user=${user} refresh=${refresh} onClose=${() => setImp(false)} />`}
+  </div>`;
+}
+function ReasonPick({ value, onChange }) {
+  return html`<div class="trigbar" style="margin:4px 0 0">${CLOSE_REASONS.map(r => html`<button class=${value === r ? 'on' : ''} onClick=${() => onChange(value === r ? '' : r)}>${r}</button>`)}
+    ${value && !CLOSE_REASONS.includes(value) && html`<button class="on">${value}</button>`}</div>`;
+}
+function ClosureEditor({ rec, user, refresh, onClose }) {
+  const [d, setD] = useState({ name: rec.name || '', idNo: rec.idNo || '', aEnd: rec.aEnd || '', sysClose: rec.sysClose || '', reason: rec.reason || '', area: rec.area || '', codes: rec.codes || '' });
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    if (!d.name.trim() && !d.idNo.trim()) return toast('請填寫姓名或身分證號', true);
+    if (!d.sysClose) return toast('請填寫系統結案日期', true);
+    setBusy(true);
+    try { await call('m', 'data:saveClosure', { id: rec.id, key: closureKey(d.idNo, d.sysClose, d.name), d: JSON.stringify(d), by: user }); await refresh(); toast('已儲存'); onClose(); }
+    catch (e) { toast('儲存失敗：' + e.message, true); }
+    setBusy(false);
+  };
+  const del = async () => { try { await call('m', 'data:remove', { table: 'closures', id: rec.id, by: user }); await refresh(); toast('已刪除'); onClose(); } catch (e) { toast('刪除失敗：' + e.message, true); } };
+  return html`<div class="modal" onClick=${e => e.target === e.currentTarget && onClose()}><div class="drawer" style="width:min(720px,100%)">
+    <div class="bar"><h2 style="margin:0">${rec.id ? '結案紀錄' : '補登結案紀錄'}</h2><span class="grow"></span>
+      ${rec.id && html`<${ConfirmBtn} label="刪除" onYes=${del} />`}
+      <button class="btn light" onClick=${onClose}>關閉</button><button class="btn" disabled=${busy} onClick=${save}>儲存</button></div>
+    <div class="card"><div class="form">
+      <label>姓名<input class="inp" value=${d.name} onInput=${e => setD({ ...d, name: e.target.value })} /></label>
+      <label>身分證號<input class="inp" value=${d.idNo} onInput=${e => setD({ ...d, idNo: e.target.value })} /></label>
+      <label>A個管結案<${DateInput} style="width:100%" value=${d.aEnd} onChange=${v => setD({ ...d, aEnd: v })} /></label>
+      <label>系統結案<${DateInput} style="width:100%" value=${d.sysClose} onChange=${v => setD({ ...d, sysClose: v })} /></label>
+      <label style="grid-column:1/-1">服務代碼<input class="inp" value=${d.codes} onInput=${e => setD({ ...d, codes: e.target.value })} /></label>
+    </div>
+    <div class="sect">居住地</div><div class="trigbar">${Object.values(REGIONS).map(r => html`<button class=${d.area === r ? 'on' : ''} onClick=${() => setD({ ...d, area: r })}>${r}</button>`)}</div>
+    <div class="sect">結案原因</div><${ReasonPick} value=${d.reason} onChange=${v => setD({ ...d, reason: v })} /></div>
+  </div></div>`;
+}
+function ClosureImport({ db, user, refresh, onClose }) {
+  const [wb, setWb] = useState(null), [sheet, setSheet] = useState(''), [busy, setBusy] = useState(false), [prog, setProg] = useState(''), [result, setResult] = useState(null);
+  const parsed = useMemo(() => { if (!wb || !sheet) return null; try { return parseClosureSheet(XLSX.utils.sheet_to_json(wb.Sheets[sheet], { header: 1, raw: true, defval: '' })); } catch (e) { return { error: e.message }; } }, [wb, sheet]);
+  const pick = async f => { if (!f) return; try { const w = XLSX.read(await f.arrayBuffer(), { type: 'array' }); setWb(w); setResult(null);
+    setSheet(w.SheetNames.find(n => n.includes('結案總表')) || w.SheetNames.find(n => /結案/.test(n)) || w.SheetNames[0]); } catch (e) { toast('無法讀取這個檔案：' + e.message, true); } };
+  const run = async () => {
+    setBusy(true); const st = { created: 0, updated: 0, unchanged: 0 };
+    try { const rows = parsed.rows, B = 100;
+      for (let i = 0; i < rows.length; i += B) { setProg(`匯入中… ${Math.min(i + B, rows.length)} / ${rows.length}`);
+        const r = await call('m', 'data:importClosures', { rows: rows.slice(i, i + B).map(x => ({ key: x.key, d: JSON.stringify(x.d) })), by: user }); for (const k in st) st[k] += r[k]; }
+      await refresh(); setResult(st); toast('匯入完成');
+    } catch (e) { toast('匯入失敗：' + e.message, true); }
+    setProg(''); setBusy(false);
+  };
+  const st = parsed && parsed.rows ? closureStats(parsed.rows.map(r => r.d)) : null;
+  return html`<div class="modal" onClick=${e => e.target === e.currentTarget && onClose()}><div class="drawer" style="width:min(820px,100%)">
+    <div class="bar"><h2 style="margin:0">匯入結案 Excel</h2><span class="grow"></span><button class="btn light" onClick=${onClose}>關閉</button></div>
+    <div class="card">
+      <div class="sub" style="margin-bottom:10px;line-height:1.8">請選「結案總表」這一張（各區的工作表內容重複，不用匯入）。用「身分證號＋系統結案日期」比對，重複匯入不會產生重複資料，之後有新增可以整份再匯入一次。</div>
+      <div class="bar"><input type="file" accept=".xlsx,.xls" onChange=${e => pick(e.target.files[0])} />
+        ${wb && html`<select class="inp" value=${sheet} onChange=${e => { setSheet(e.target.value); setResult(null); }}>${wb.SheetNames.map(n => html`<option value=${n}>${n}</option>`)}</select>`}</div>
+      ${parsed && parsed.error && html`<div class="tag t-warn">${parsed.error}</div>`}
+      ${st && html`<div class="chips"><div class="chip"><span class="sub">結案筆數</span><b>${st.total}</b></div>
+        ${Object.values(REGIONS).map(r => html`<div class="chip"><span class="sub">${r}</span><b>${st.byReg[r] || 0}</b></div>`)}
+        <div class="chip"><span class="sub">死亡</span><b>${parsed.rows.filter(r => isDeath(r.d.reason)).length}</b></div></div>
+        <div class="sub" style="margin-bottom:10px">結案原因：${st.reasons.map(k => `${k} ${st.byReason[k]}`).join('、')}</div>
+        <button class="btn" disabled=${busy || !st.total} onClick=${run}>${busy ? prog : `匯入 ${st.total} 筆`}</button>
+        ${result && html` <span class="tag t-ok">完成：新增 ${result.created}、更新 ${result.updated}、未變動 ${result.unchanged}</span>`}`}
+    </div></div></div>`;
+}
+// 匯出結案報表：總表分析、結案總表、各區結案、各區死亡結案
+function exportClosures(list, yr) {
+  const wb = XLSX.utils.book_new(), regs = ['四湖', '台西', '麥寮', '東勢'];
+  const head = ['姓名', '身分證號', 'A個管結案', '系統結案', '結案原因', '居住地', '服務代碼'];
+  const rowOf = x => [x.name, x.idNo, roc(x.aEnd), roc(x.sysClose), x.reason, x.area, x.codes];
+  const st = closureStats(list);
+  const A = [['總地區', '總人數'], ...regs.map(r => [r, st.byReg[r] || 0]), ['總數', regs.reduce((a, r) => a + (st.byReg[r] || 0), 0)], [], [],
+    ['總結案原因', '總人數'], ...st.reasons.map(k => [k, st.byReason[k]]), ['總人數', st.total]];
+  for (const r of regs) {
+    const o = st.cross[r] || {}, ks = st.reasons.filter(k => o[k]);
+    A.push([], [], [r, '結案分析'], ['結案原因', '人數'], ...ks.map(k => [k, o[k]]), ['總人數', ks.reduce((a, k) => a + o[k], 0)]);
+  }
+  XLSX.utils.book_append_sheet(wb, sheetFromAoa(A, [20, 10]), '總表分析');
+  XLSX.utils.book_append_sheet(wb, sheetFromAoa([head, ...list.map(rowOf)], [10, 13, 11, 11, 18, 8, 40]), '結案總表');
+  for (const r of regs) {
+    const mine = list.filter(x => x.area === r);
+    XLSX.utils.book_append_sheet(wb, sheetFromAoa([head, ...mine.filter(x => !isDeath(x.reason)).map(rowOf)], [10, 13, 11, 11, 18, 8, 40]), `${r}-結案`);
+    XLSX.utils.book_append_sheet(wb, sheetFromAoa([head, ...mine.filter(x => isDeath(x.reason)).map(rowOf)], [10, 13, 11, 11, 18, 8, 40]), `${r}-死亡結案`);
+  }
+  XLSX.writeFile(wb, `${yr ? (+yr - 1911) + '年' : ''}結案總表.xlsx`);
 }
 
 // ================= 評鑑報表 =================
@@ -1115,6 +1380,7 @@ function StatsView({ db, month }) {
   const [sub, setSub] = useState('month');
   const ms = useMemo(() => monthSummary(month, db), [db, month]);
   const bill = useMemo(() => billing(month, db), [db, month]);
+  const unpaid = useMemo(() => unpaidLastMonth(month, db), [db, month]);
   const us = useMemo(() => sub === 'month' ? null : unitStats(sub, month, db), [db, month, sub]);
   const regs = [...Object.values(REGIONS), ...(ms.latest['未知'] ? ['未知'] : [])];
   const [pick, setPick] = useState(null); // { cat, rg } 點數字看明細
@@ -1143,17 +1409,36 @@ function StatsView({ db, month }) {
         <div class="kv"><span>合計</span><b>${ms.src.出備 + ms.src.初評 + ms.src.轉入 + ms.src.未填}</b></div>
         ${ms.src.未填 > 0 && html`<div class="sub" style="margin-top:6px">有 ${ms.src.未填} 案沒有填申請來源，請到總表補上。</div>`}</div>
     </div>
-    <div class="card"><div class="bar"><h3 style="margin:0">${rocMonth(month)}觸發與核銷金額</h3><span class="grow"></span>
-      <span class="chip" style="padding:6px 14px"><span class="sub">本月核銷金額</span> <b style="display:inline;font-size:18px">$${bill.total.amt.toLocaleString()}</b></span></div>
-      ${bill.rows.length === 0 ? html`<div class="sub">本月沒有觸發紀錄</div>` : html`<div class="tw" style="max-height:none"><table class="grid" style="width:100%">
-        <thead><tr><th>觸發</th><th>件數</th>${FEES.map(f => html`<th>${f.label}</th>`)}<th>未選金額</th><th>金額</th></tr></thead>
-        <tbody>${[...bill.rows, bill.total].map(r => { const tot = r === bill.total; return html`<tr>
-          <td>${tot ? html`<b>合計</b>` : r.t}</td><td class="num">${tot ? html`<b>${r.n}</b>` : r.n}</td>
-          ${[...FEES.map(f => f.key), 'unset'].map(k => r.c[k] ? html`<td class=${'num' + (k === 'unset' ? ' need' : '')}><button class=${'numlink' + (pick && pick.bill && pick.t === r.t && pick.k === k ? ' on' : '')}
-            onClick=${() => setPick(pick && pick.bill && pick.t === r.t && pick.k === k ? null : { bill: true, t: r.t, k, ids: r.ids[k] })}>${r.c[k]}</button></td>` : html`<td></td>`)}
-          <td class="num">${tot ? html`<b>$${r.amt.toLocaleString()}</b>` : '$' + r.amt.toLocaleString()}</td></tr>`; })}</tbody></table></div>
-        ${bill.total.c.unset > 0 && html`<div class="sub" style="margin-top:6px;color:var(--org)">有 ${bill.total.c.unset} 筆觸發還沒選核銷金額（點橘色數字看是哪些，再到總表點個案補選）。</div>`}`}
+    <div class="card"><div class="bar"><h3 style="margin:0">上月沒吃到錢・本月待補報</h3><span class="grow"></span>
+      ${unpaid.length > 0 && html`<span class="tag ${unpaid.some(u => !u.fee) ? 't-warn' : 't-ok'}">待補報 ${unpaid.filter(u => !u.fee).length}／共 ${unpaid.length}</span>`}</div>
+      ${unpaid.length === 0 ? html`<div class="sub">${rocMonth(shiftMonth(month, -1))}沒有選「沒吃到錢」的個案</div>` : html`<div class="tw" style="max-height:320px"><table class="grid" style="width:100%">
+        <thead><tr><th>編號</th><th>姓名</th><th>地區</th><th>${rocMonth(shiftMonth(month, -1))}觸發</th><th>${rocMonth(month)}核銷</th></tr></thead>
+        <tbody>${unpaid.map(u => { const c = db.cases.get(u.caseId); return html`<tr><td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${regionOf(c.caseNo)}</td><td>${u.prevTrigger}</td>
+          <td>${u.fee ? html`<span class="tag t-ok">已補報 ${FEE[u.fee].label}</span>` : html`<span class="tag t-warn">待補報</span>`}</td></tr>`; })}</tbody></table></div>
+        <div class="sub" style="margin-top:6px">到總表點個案，在本月選核銷金額，就會變成「已補報」。</div>`}
     </div>
+    <div class="bar" style="margin-top:4px"><h3 style="margin:0">${rocMonth(month)}核銷</h3><span class="grow"></span>
+      <span class="chip" style="padding:6px 14px"><span class="sub">本月核銷金額</span> <b style="display:inline;font-size:18px">$${bill.total.amt.toLocaleString()}</b></span></div>
+    ${bill.rows.length === 0 ? html`<div class="card sub">本月沒有資料</div>` : html`<div class="cols2">
+      <div class="card"><h3>依金額</h3>
+        <table class="grid" style="width:100%"><thead><tr><th>核銷金額</th><th class="num">件數</th><th class="num">小計</th></tr></thead>
+        <tbody>${[...FEES.map(f => [f.key, f.label, f.amt]), ['unset', '未選金額', null]].map(([k, label, amt]) => html`<tr>
+          <td>${k === 'unset' ? html`<span class="tag t-org">未選金額</span>` : k === 'none' ? label : '$' + amt.toLocaleString()}</td>
+          <td class=${'num' + (k === 'unset' && bill.total.c[k] ? ' need' : '')}>${bill.total.c[k] ? html`<button class=${'numlink' + (pick && pick.bill && pick.t === '合計' && pick.k === k ? ' on' : '')}
+            onClick=${() => setPick(pick && pick.bill && pick.t === '合計' && pick.k === k ? null : { bill: true, t: '合計', k, ids: bill.total.ids[k] })}>${bill.total.c[k]}</button>` : '0'}</td>
+          <td class="num">${amt === null ? '—' : '$' + ((bill.total.c[k] || 0) * amt).toLocaleString()}</td></tr>`)}
+          <tr><td><b>合計</b></td><td class="num"><b>${bill.total.n}</b></td><td class="num"><b>$${bill.total.amt.toLocaleString()}</b></td></tr></tbody></table>
+        ${bill.total.c.unset > 0 && html`<div class="sub" style="margin-top:8px;color:var(--org)">還有 ${bill.total.c.unset} 筆有觸發但沒選金額，點橘色數字看是哪些，再到總表點個案選金額。</div>`}</div>
+      <div class="card"><h3>依觸發</h3>
+        <table class="grid" style="width:100%"><thead><tr><th>觸發</th><th class="num">件數</th><th>已選金額</th><th class="num">未選</th><th class="num">小計</th></tr></thead>
+        <tbody>${bill.rows.map(r => html`<tr>
+          <td>${r.t === NO_TRIG ? html`-<span class="sub">（無觸發，預設 400）</span>` : r.t}${/^結案/.test(r.t) ? html`<span class="sub">（預設${defaultFee(r.t) === 'none' ? '沒吃到錢' : ' 400'}）</span>` : ''}</td><td class="num">${r.n}</td>
+          <td>${FEES.filter(f => r.c[f.key]).map(f => html`<button class=${'numlink' + (pick && pick.bill && pick.t === r.t && pick.k === f.key ? ' on' : '')} style="margin-right:6px"
+            onClick=${() => setPick(pick && pick.bill && pick.t === r.t && pick.k === f.key ? null : { bill: true, t: r.t, k: f.key, ids: r.ids[f.key] })}>${f.label} × ${r.c[f.key]}</button>`)}</td>
+          <td class=${'num' + (r.c.unset ? ' need' : '')}>${r.c.unset ? html`<button class=${'numlink' + (pick && pick.bill && pick.t === r.t && pick.k === 'unset' ? ' on' : '')}
+            onClick=${() => setPick(pick && pick.bill && pick.t === r.t && pick.k === 'unset' ? null : { bill: true, t: r.t, k: 'unset', ids: r.ids.unset })}>${r.c.unset}</button>` : ''}</td>
+          <td class="num">$${r.amt.toLocaleString()}</td></tr>`)}</tbody></table></div>
+    </div>`}
     ${pick && html`<div class="card"><div class="bar"><h3 style="margin:0">${pick.bill ? `${pick.t}・${pick.k === 'unset' ? '未選金額' : FEE[pick.k].label}` : `${pick.rg || '全部地區'}・${CATN[pick.cat]}`}　${pickList.length} 案</h3><span class="grow"></span>
       <button class="btn light sm" onClick=${() => setPick(null)}>關閉</button></div>
       <div class="tw" style="max-height:420px"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>地區</th><th>申請來源</th><th>開案月</th><th>結案月</th><th>${rocMonth(month)}觸發</th><th>開案日期</th><th>A結束服務</th><th>系統結案</th></tr></thead>
