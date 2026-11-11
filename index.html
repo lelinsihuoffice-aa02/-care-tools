@@ -35,7 +35,7 @@
     border-radius:0 0 28px 28px;
   }
   .brand{display:flex;align-items:center;gap:14px;}
-  .brand .logo{flex:none;width:56px;height:56px;border-radius:50%;background:#fff;object-fit:contain;padding:7px;box-shadow:0 2px 10px rgba(18,51,48,.25);}
+  .brand .logo{flex:none;width:56px;height:56px;border-radius:50%;object-fit:contain;padding:9px;background:rgba(244,241,230,.10);border:1px solid rgba(244,241,230,.22);filter:brightness(0) invert(1);opacity:.9;}
   header.top h1{
     font-family:"Noto Serif TC",serif;
     font-weight:700;
@@ -52,6 +52,14 @@
   .wrap{max-width:760px;margin:0 auto;padding:28px 20px 44px;}
   .hint{font-size:14px;color:var(--muted);margin:0 0 22px;}
 
+  .card .icon svg{width:38px;height:38px;}
+  @media (max-width:600px){.card .icon svg{width:30px;height:30px;}}
+  .tabs{display:flex;gap:8px;margin:0 0 22px;border-bottom:1px solid var(--line);}
+  .tab{border:none;background:none;font:inherit;font-size:16px;color:var(--muted);padding:10px 16px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px;}
+  .tab:hover{color:var(--ink);}
+  .tab.on{color:var(--teal-dark);font-weight:700;border-bottom-color:var(--teal-dark);}
+  .tab .n{font-size:12px;margin-left:6px;color:var(--muted);font-weight:400;}
+  .pane[hidden]{display:none;}
   .grid{display:flex;flex-direction:column;gap:22px;}
 
   a.card{
@@ -83,6 +91,7 @@
   }
   .card.b .icon{background:#e6ebe0;color:var(--teal-dark);}
   .card.c .icon{background:#e3e9ee;color:#4a6274;}
+  .card.d .icon{background:#f3e3e0;color:#9a5446;}
 
   .card .body{flex:1;min-width:0;}
   .card h2{
@@ -133,10 +142,16 @@
 </header>
 
 <div class="wrap">
-  <p class="hint">共 3 個系統</p>
-  <div class="grid">
+  <div class="tabs" role="tablist">
+    <button class="tab on" data-tab="work" role="tab">工作系統<span class="n">3</span></button>
+    <button class="tab" data-tab="cloud" role="tab">雲端資料庫<span class="n">1</span></button>
+  </div>
+
+  <div class="pane" id="pane-work">
+    <p class="hint">日常作業與試算工具，點選卡片即可前往。</p>
+    <div class="grid">
     <a class="card a" href="https://lelinsihuoffice-aa02.github.io/care-app/">
-      <div class="icon">長</div>
+      <div class="icon" title="長"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 3.5h3l1.5 4-2 1.3a10.5 10.5 0 0 0 7.2 7.2l1.3-2 4 1.5v3a2 2 0 0 1-2 2A16.5 16.5 0 0 1 3.5 5.5a2 2 0 0 1 2-2z"/></svg></div>
       <div class="body">
         <h2>長照服務追蹤系統(AA02)</h2>
         <p>個案管理相關作業</p>
@@ -145,7 +160,7 @@
     </a>
 
     <a class="card b" href="https://lelinsihuoffice-aa02.github.io/-care-tools/長照額度試算系統.html">
-      <div class="icon">額</div>
+      <div class="icon" title="額"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><rect x="8" y="6" width="8" height="3.5" rx=".8"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01" stroke-width="2.4"/></svg></div>
       <div class="body">
         <h2>長照額度試算系統</h2>
         <p>依長照 3.0 給付基準試算各項服務額度</p>
@@ -154,15 +169,45 @@
     </a>
 
     <a class="card c" href="https://lelinsihuoffice-aa02.github.io/-care-tools/freq.html">
-      <div class="icon">頻</div>
+      <div class="icon" title="頻"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/><path d="m9 15 2 2 4-4"/></svg></div>
       <div class="body">
         <h2>服務頻率追蹤</h2>
         <p>比對居服單位服務紀錄與核定計畫、標準排程，標記異常交個管追蹤</p>
       </div>
       <div class="arrow">›</div>
     </a>
+    </div>
+  </div>
+
+  <div class="pane" id="pane-cloud" hidden>
+    <p class="hint">個案總表與評鑑資料，點選卡片即可前往。</p>
+    <div class="grid">
+    <a class="card d" href="https://lelinsihuoffice-aa02.github.io/-care-tools/eval.html">
+      <div class="icon" title="雲"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 19h10.5a4.5 4.5 0 0 0 .7-8.95A6 6 0 0 0 6.6 9.1 5 5 0 0 0 7 19z"/></svg></div>
+      <div class="body">
+        <h2>雲端資料庫</h2>
+        <p>個案總表與評鑑時效報表：派案、出備、AA01、複評，自動計算工作天並匯出 Excel</p>
+      </div>
+      <div class="arrow">›</div>
+    </a>
+    </div>
   </div>
 </div>
+
+<script>
+// 分頁切換；網址加上 #cloud 可以直接開在雲端資料庫分頁
+(function(){
+  var tabs = document.querySelectorAll('.tab');
+  function show(name){
+    if(name !== 'cloud') name = 'work';
+    tabs.forEach(function(t){ t.classList.toggle('on', t.dataset.tab === name); });
+    document.getElementById('pane-work').hidden = name !== 'work';
+    document.getElementById('pane-cloud').hidden = name !== 'cloud';
+  }
+  tabs.forEach(function(t){ t.addEventListener('click', function(){ history.replaceState(null, '', '#' + t.dataset.tab); show(t.dataset.tab); }); });
+  show(location.hash.slice(1));
+})();
+</script>
 
 <footer class="foot">如連結無法開啟，請確認網路連線或聯繫系統管理者。</footer>
 
