@@ -46,6 +46,7 @@
   .grid td{padding:6px 8px;border-bottom:1px solid #f0e8dc;white-space:nowrap;vertical-align:middle}
   .grid tr.click:hover td{background:#FBF3E6;cursor:pointer}
   .grid td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .grid tr.curmonth td{background:#fff3c4;font-weight:700;border-top:2px solid #e8b931;border-bottom:2px solid #e8b931}
   .grid th.num{text-align:right}
   .cols2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:12px}
   @media (max-width:900px){.cols2{grid-template-columns:minmax(0,1fr)}}
@@ -1492,6 +1493,7 @@ function UnitStatReport({ db, month, user, refresh, kind, title, picker }) {
   const book = useMemo(() => unitStatBook(kind, db, hist, month), [db, hist, kind, month]);
   const years = [...new Set(book[0] ? book[0].rows.map(r => r.m.slice(0, 4)) : [])];
   const [yr, setYr] = useState(month.slice(0, 4)), [cat, setCat] = useState('B單位'), [busy, setBusy] = useState(false);
+  useEffect(() => setYr(month.slice(0, 4)), [month]);   // 上方月份換年時，表格跟著跳到那一年
   const sheet = book.find(b => b.cat === cat) || book[0];
   const rows = sheet ? sheet.rows.filter(r => r.m.startsWith(yr)) : [];
   const cols = sheet ? sheet.cols.filter(c => sheet.rows.some(r => r.v[c])) : [];   // 畫面只列有數字的單位
@@ -1518,7 +1520,7 @@ function UnitStatReport({ db, month, user, refresh, kind, title, picker }) {
       return html`<button class=${cat === b.cat ? 'on' : ''} onClick=${() => setCat(b.cat)}>${b.cat}<b>${n}</b></button>`; })}</div>
     ${sheet && html`<div class="tw"><table class="grid">
       <thead><tr><th>月份</th><th>來源</th>${showCols.map(c => html`<th class="num" style="white-space:normal;min-width:90px;max-width:160px" title=${c}>${db.resolveUnit(c)}</th>`)}<th class="num">合計</th></tr></thead>
-      <tbody>${rows.map(r => html`<tr><td>${roc(r.m + '-01').slice(0, -3)}</td>
+      <tbody>${rows.map(r => html`<tr class=${r.m === month ? 'curmonth' : ''}><td>${roc(r.m + '-01').slice(0, -3)}${r.m === month ? html` <span class="tag t-warn">本月</span>` : ''}</td>
         <td>${r.src && html`<span class=${'tag ' + (r.src === '系統' ? 't-new' : 't-close')}>${r.src}</span>`}</td>
         ${showCols.map(c => html`<td class="num">${r.v[c] || ''}</td>`)}<td class="num"><b>${Object.values(r.v).reduce((a, b) => a + b, 0) || ''}</b></td></tr>`)}
         <tr><td><b>總計</b></td><td></td>${showCols.map(c => html`<td class="num"><b>${tot(c) || ''}</b></td>`)}<td class="num"><b>${showCols.reduce((a, c) => a + tot(c), 0)}</b></td></tr>
