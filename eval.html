@@ -113,6 +113,12 @@
 .pie{padding:12px 14px}.pie-h{font-weight:700;display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
 .pie-b{display:flex;gap:10px;align-items:center}.pie-b svg{flex:none}.pie-l{border-collapse:collapse;font-size:13px;flex:1;min-width:0}
 .pie-l td{padding:2px 4px;white-space:nowrap}.pie-l i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 14px}.kpi b{display:block;font-size:24px;margin-top:2px;font-variant-numeric:tabular-nums}
+.rpt-cols{grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);margin-bottom:16px}
+.rpt th{text-align:center}.rpt th.num{text-align:right}.rpt th.grp{text-align:center;border-bottom:1px solid var(--line);background:#efe5d6}
+.rpt th.sub2{position:static;font-weight:500;color:var(--sub)}.rpt tr:first-child th{position:static}
+.rpt tr:first-child th:first-child{text-align:left}.rpt td.zero{color:#c9bfb1}.rpt tr.tot td{border-top:2px solid var(--line);background:#faf6f0}
 </style>
 </head>
 <body>
@@ -2087,6 +2093,37 @@ function PieBoard({ rows }) {
   return html`<div class="pies">${PIE_CATS.filter(c => by[c]).map(c => html`<${PieChart} title=${c} items=${by[c]} />`)}</div>`;
 }
 
+// ================= 月報畫面（只是顯示方式；匯出的 Excel 格式不變） =================
+function MonthlyView({ month, db }) {
+  const r = monthlyReport(month, db), st = r.stat, n = v => +v || 0, fmt = v => n(v).toLocaleString('zh-TW');
+  const rows = st.slice(3, 3 + RG4.length + 1); // 四鄉 + 總計：[地區, 初評, 出備, 重開案, 轉入, 在案, 結案, 轉出, 居家, 交通, 沐浴車, 居喘]
+  const kv = Object.fromEntries(st.filter(x => x.length === 2).map(([k, v]) => [k, v]));
+  const bill = st.filter(x => ['AA01', 'AA02', 'AA02-360', '吃不到錢'].includes(x[0]));
+  const bTot = st[st.length - 1];
+  const cell = (v, b) => html`<td class=${'num' + (n(v) ? '' : ' zero')}>${b ? html`<b>${n(v)}</b>` : n(v)}</td>`;
+  const kpi = [['新案', kv['新案']], ['在案', kv['在案']], ['結案（當月）', kv['結案(當月)']], ['轉外縣市', kv['轉外縣市']], ['總人數', kv['總人數']], ['核銷金額', '$' + fmt(bTot[3])]];
+  return html`
+    <div class="kpis">${kpi.map(([k, v]) => html`<div class="kpi"><div class="sub">${k}</div><b>${typeof v === 'string' ? v : n(v)}</b></div>`)}</div>
+    <div class="cols2 rpt-cols">
+      <div><h3>各地區個案統計</h3>
+        <div class="tw" style="max-height:none"><table class="grid rpt">
+          <tr><th rowspan="2">地區</th><th colspan="5" class="grp">新案</th><th rowspan="2" class="num">在案</th><th rowspan="2" class="num">結案</th><th rowspan="2" class="num">轉出</th><th colspan="4" class="grp">轉介樂臨</th></tr>
+          <tr>${['初評', '出備', '重開案', '轉入', '小計'].map(h => html`<th class="num sub2">${h}</th>`)}${['居家', '交通', '沐浴車', '居喘'].map(h => html`<th class="num sub2">${h}</th>`)}</tr>
+          ${rows.map(x => { const tot = x[0] === '總計'; return html`<tr class=${tot ? 'tot' : ''}><td>${tot ? html`<b>總計</b>` : x[0]}</td>
+            ${[1, 2, 3, 4].map(i => cell(x[i], tot))}${cell(n(x[1]) + n(x[2]) + n(x[3]) + n(x[4]), true)}
+            ${[5, 6, 7, 8, 9, 10, 11].map(i => cell(x[i], tot))}</tr>`; })}
+        </table></div></div>
+      <div><h3>核銷</h3>
+        <div class="tw" style="max-height:none"><table class="grid rpt">
+          <tr><th>項目</th><th class="num">件數</th><th class="num">單價</th><th class="num">金額</th></tr>
+          ${bill.map(x => html`<tr><td>${x[0]}</td>${cell(x[1])}<td class="num">${x[2] ? '$' + fmt(x[2]) : '—'}</td><td class=${'num' + (n(x[3]) ? '' : ' zero')}>$${fmt(x[3])}</td></tr>`)}
+          <tr class="tot"><td><b>總計</b></td>${cell(bTot[1], true)}<td></td><td class="num"><b>$${fmt(bTot[3])}</b></td></tr>
+        </table></div></div>
+    </div>
+    <h3>分析圖 <span class="sub" style="font-weight:400">（各類人數與比例；匯出的 Excel 另有分析表）</span></h3>
+    <${PieBoard} rows=${publishRows(month, db)} />`;
+}
+
 function StatReport({ db, month, user, refresh, rkey: key, picker }) {
   const y = month.slice(0, 4), yy = +y - 1911, kvKey = STAT_KV[key], hist = (db.kv[kvKey] || {}).months || {};
   const [busy, setBusy] = useState(false), [sheet, setSheet] = useState('在案+出備+新案');
@@ -2166,7 +2203,7 @@ function StatReport({ db, month, user, refresh, rkey: key, picker }) {
     body = blk ? html`<div class="tw" style="max-height:none"><table class="grid">${blk.map(r => html`<tr>${r.map(c => html`<td colspan=${c.span || 1} style=${'white-space:pre-wrap;vertical-align:top;' + (c.b ? 'font-weight:700' : '')}>${String(c.t ?? '')}</td>`)}</tr>`)}</table></div>`
       : html`<div class="card empty">${rocMonth(month)}沒有資料</div>`;
   } else if (key === 'statCms') body = html`<${AoaTable} aoa=${hasSys(month) || !hist[month] ? cmsSheetAoa(month, db) : hist[month]} />`;
-  else if (key === 'statMonthly') { const r = monthlyReport(month, db); body = html`${hasSys(month) && html`<h3>分析圖</h3><${PieBoard} rows=${publishRows(month, db)} />`}<div class="cols2"><div><h3>統計表</h3><${AoaTable} aoa=${r.stat} /></div><div><h3>分析</h3><${AoaTable} aoa=${r.analysis} /></div></div>`; }
+  else if (key === 'statMonthly') body = hasSys(month) ? html`<${MonthlyView} month=${month} db=${db} />` : html`<div class="card empty">${rocMonth(month)}系統裡沒有總表資料</div>`;
   else { const b = annualBook(y, db, hist, month > todayMonth() ? month : todayMonth());
     body = html`<div class="trigbar">${Object.keys(b.sheets).map(n => html`<button class=${sheet === n ? 'on' : ''} onClick=${() => setSheet(n)}>${n}</button>`)}</div><${AoaTable} aoa=${b.sheets[sheet] || []} maxCols=${15} />`; }
   return html`<div class="page">
