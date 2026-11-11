@@ -483,7 +483,7 @@ function buildReport(key, month, db) {
   const rows = evs.map((e, idx) => {
     const c = db.cases.get(e.caseId);
     const svc = {};
-    for (const k of Object.keys(CAT)) { const raw = (e.services || {})[k] || (c.services || {})[k]; if (raw) svc[k] = db.resolveUnit(raw); }
+    Object.assign(svc, caseUnits(e, c, db.resolveUnit));
     const r = { i: idx + 1, e, c, caseId: e.caseId, month, svc };
     r.k = R.calc(r, db.holidays, ctx);
     return r;
@@ -502,6 +502,25 @@ function cellText(col, r) {
 
 // ---------- 服務單位統計 ----------
 // kind：'new' 新案 / 'reassess' 複評；回傳 { [類別key]: { [單位]: 件數 } }
+// 總表服務欄位裡不是單位名稱的寫法（僅交通、僅日照、無、-…）
+const NOT_UNIT = /^(僅|只有|無$|-+$|\/$|暫停|待)/;
+const isUnitName = v => { const s = String(v || '').replace(/\s+/g, ''); return !!s && !NOT_UNIT.test(s); };
+// 「僅交通」「僅日照」→ 指向哪個服務類別
+function onlyCatOf(v) {
+  const s = String(v || '').replace(/\s+/g, '').replace(/^(僅|只有)/, '');
+  if (!s || s === String(v || '').replace(/\s+/g, '')) return null;
+  const alias = { 送餐: 'meal', 餐飲: 'meal', 營養餐飲: 'meal', 專業: 'prof', 復能: 'prof', 日照喘息: 'dayresp', 機構喘息: 'inst', 居家喘息: 'resp', 居家: 'home', 居服: 'home' };
+  if (alias[s]) return alias[s];
+  const hit = CATS.find(c => s === c.label || s === c.stat || s === c.col || s.startsWith(c.label));
+  return hit ? hit.key : null;
+}
+// 一個個案在某個月各服務類別的單位（不是單位名稱的不算；「僅交通」但交通欄沒填 → 交通記「（未填單位）」）
+function caseUnits(e, c, resolveUnit) {
+  const out = {}, src = k => (e && (e.services || {})[k]) || (c.services || {})[k] || '';
+  for (const cat of CATS) { const raw = src(cat.key); if (isUnitName(raw)) out[cat.key] = resolveUnit(raw); }
+  for (const cat of CATS) { const t = onlyCatOf(src(cat.key)); if (t && !out[t]) out[t] = '（未填單位）'; }
+  return out;
+}
 function unitStats(kind, month, db) {
   // 新案：觸發是「新案-」開頭的全部項目；複評：只算「複評」（新案-複評等排除）
   const f = unitStatFilter(kind);
@@ -509,12 +528,7 @@ function unitStats(kind, month, db) {
   for (const e of db.events) {
     if (e.month !== month || !f(e) || !db.cases.has(e.caseId)) continue;
     const c = db.cases.get(e.caseId);
-    for (const cat of CATS) {
-      const raw = (e.services || {})[cat.key] || (c.services || {})[cat.key];
-      if (!raw) continue;
-      const u = db.resolveUnit(raw);
-      (out[cat.key] = out[cat.key] || {})[u] = (out[cat.key][u] || 0) + 1;
-    }
+    for (const [k, u] of Object.entries(caseUnits(e, c, db.resolveUnit))) (out[k] = out[k] || {})[u] = (out[k][u] || 0) + 1;
   }
   return out;
 }
@@ -1679,7 +1693,7 @@ function UnitsCard({ db, user, refresh }) {
   // 找出資料裡出現、但還沒對應到單位主檔的名稱
   const unmatched = useMemo(() => {
     const known = new Set(db.units.map(u => u.short || u.name)), out = new Map();
-    const add = raw => { if (!raw) return; const r = db.resolveUnit(raw); if (!known.has(r)) out.set(r, (out.get(r) || 0) + 1); };
+    const add = raw => { if (!isUnitName(raw)) return; const r = db.resolveUnit(raw); if (!known.has(r)) out.set(r, (out.get(r) || 0) + 1); };
     for (const c of db.cases.values()) Object.values(c.services || {}).forEach(add);
     for (const e of db.events) Object.values(e.services || {}).forEach(add);
     return [...out.entries()].sort((a, b) => b[1] - a[1]);
