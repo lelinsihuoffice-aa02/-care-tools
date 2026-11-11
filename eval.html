@@ -1,0 +1,1106 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>評鑑時效追蹤</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#faf6f0;--card:#fff;--line:#E4D5BE;--ink:#3d3529;--sub:#8C8071;--green:#7C9473;--soft:#E3EADD;
+    --red:#dc2626;--redbg:#fee2e2;--org:#b45309;--orgbg:#fef3c7;--blue:#1d4ed8;--bluebg:#dbeafe;--ok:#15803d;--okbg:#dcfce7}
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:'Noto Sans TC',system-ui,sans-serif;font-size:14px}
+  button{font-family:inherit;cursor:pointer}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink)}
+  @media (hover:none) and (pointer:coarse){input,select,textarea{font-size:16px}}
+  #app{zoom:var(--z, 1)}
+  .top{background:#efe6da;padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .brand{font-weight:700;font-size:15px;margin-right:6px}
+  .brand a{color:var(--sub);font-weight:400;font-size:12px;margin-left:8px;text-decoration:none}
+  .tabbtn{border:none;background:transparent;padding:8px 12px;border-radius:10px;color:#5a4a3a}
+  .tabbtn.on{background:rgba(124,148,115,.2);color:var(--green);font-weight:700}
+  .grow{flex:1}
+  .inp{padding:7px 10px;border:1px solid var(--line);border-radius:12px;background:#fff;min-width:0}
+  .inp.bad{border-color:var(--red);background:var(--redbg)}
+  .btn{background:var(--green);color:#fff;border:none;padding:8px 16px;border-radius:10px;font-weight:500;white-space:nowrap}
+  .btn.gray{background:#A69C8E}.btn.light{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .btn.red{background:var(--red)}.btn.sm{padding:4px 10px;font-size:12px}
+  .btn:disabled{opacity:.5;cursor:default}
+  .page{padding:14px;max-width:1600px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:12px}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  h2{margin:0 0 4px;font-size:19px} h3{margin:0 0 10px;font-size:15px}
+  .sub{color:var(--sub);font-size:12px}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:12px;font-weight:600;white-space:nowrap}
+  .t-new{background:var(--bluebg);color:var(--blue)}.t-close{background:#f1f5f9;color:#64748b}.t-ev{background:var(--soft);color:var(--green)}
+  .t-warn{background:var(--redbg);color:var(--red)}.t-ok{background:var(--okbg);color:var(--ok)}.t-org{background:var(--orgbg);color:var(--org)}
+  .tw{overflow:auto;border:1px solid var(--line);border-radius:14px;max-height:calc((100vh - 210px) / var(--z, 1));background:#fff}
+  table.grid{border-collapse:separate;border-spacing:0;font-size:13px;width:max-content;min-width:100%}
+  .grid th{position:sticky;top:0;background:#f4ede3;font-weight:600;text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:2}
+  .grid td{padding:6px 8px;border-bottom:1px solid #f0e8dc;white-space:nowrap;vertical-align:middle}
+  .grid tr.click:hover td{background:#FBF3E6;cursor:pointer}
+  .grid td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .grid td.flag{background:var(--redbg);color:var(--red);font-weight:700}
+  .grid td.need{background:#fff7ed}
+  .grid td .inp{padding:4px 8px;border-radius:8px;font-size:13px}
+  .grid th .hint{font-weight:400;color:var(--sub);font-size:11px;display:block}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 12px}
+  .chip b{display:block;font-size:18px;color:var(--green)}
+  .modal{position:fixed;inset:0;background:rgba(61,53,41,.35);z-index:100;display:flex;justify-content:flex-end}
+  .drawer{background:var(--bg);width:min(980px,100%);height:100%;overflow:auto;padding:16px;box-shadow:-8px 0 30px rgba(0,0,0,.15)}
+  .form{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px 12px}
+  .form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--sub)}
+  .form label .inp{color:var(--ink)}
+  .sect{font-weight:700;color:var(--green);margin:16px 0 8px}
+  .hist{display:flex;gap:6px;flex-wrap:wrap}
+  .hist button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:4px 10px;font-size:12px}
+  .hist button.on{background:var(--green);color:#fff;border-color:var(--green)}
+  .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:200}
+  .gate .box{background:#fff;border-radius:18px;padding:32px 36px;box-shadow:0 10px 40px rgba(0,0,0,.15);width:340px;text-align:center}
+  .gate input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #ddd;margin:12px 0}
+  .gate .btn{width:100%}
+  .empty{text-align:center;color:var(--sub);padding:50px 10px}
+  .toast{position:fixed;right:20px;bottom:20px;color:#fff;padding:12px 18px;border-radius:14px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:420px}
+  .cols3{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+  .kv{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #eee}
+  .fz{position:fixed;left:16px;bottom:16px;z-index:1000;display:flex;align-items:center;background:#fff;border:1px solid var(--line);border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.15);overflow:hidden}
+  .fz button{border:none;background:#fff;color:var(--green);font-weight:700;padding:8px 14px;font-size:16px;cursor:pointer}
+  .fz .lv{font-size:13px;color:var(--sub);min-width:46px;text-align:center;cursor:pointer}
+  @media (max-width:700px){.page{padding:8px}.top{gap:4px}.tabbtn{padding:6px 8px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="fz" title="調整字體大小">
+  <button id="fzDown" aria-label="縮小字體">A−</button>
+  <span class="lv" id="fzLv" title="恢復預設大小"></span>
+  <button id="fzUp" aria-label="放大字體">A＋</button>
+</div>
+<script>
+(function(){
+  var KEY = 'evalZoom', DEF = 1, MIN = 0.8, MAX = 1.6, STEP = 0.1, z = DEF;
+  try{ var v = parseFloat(localStorage.getItem(KEY)); if(v >= MIN && v <= MAX) z = v; }catch(e){}
+  function apply(){
+    z = Math.round(Math.min(MAX, Math.max(MIN, z)) * 100) / 100;
+    document.documentElement.style.setProperty('--z', z);
+    document.getElementById('fzLv').textContent = Math.round(z * 100) + '%';
+    try{ localStorage.setItem(KEY, z); }catch(e){}
+  }
+  document.getElementById('fzDown').onclick = function(){ z -= STEP; apply(); };
+  document.getElementById('fzUp').onclick = function(){ z += STEP; apply(); };
+  document.getElementById('fzLv').onclick = function(){ z = DEF; apply(); };
+  apply();
+})();
+</script>
+<script type="module">
+import { ConvexClient, ConvexHttpClient } from "https://esm.sh/convex@1.46.0/browser";
+import { html, render, useState, useEffect, useMemo, useRef } from "https://unpkg.com/htm@3.1.1/preact/standalone.module.js";
+import * as XLSX from "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
+
+// ★ 部署後把這裡換成新 Convex 專案的網址（eval-backend 資料夾 .env.local 裡的 CONVEX_URL）
+const EVAL_URL = "https://agreeable-dachshund-648.convex.cloud";
+const PORTAL_URL = "https://lelinsihuoffice-aa02.github.io/-care-tools/";
+const ORG_TITLE = "樂臨企業有限公司附設雲林縣私立樂臨居家長照機構–A級單位(台西區)";
+
+// ================= CORE-START（純邏輯：日期、時效、報表；不碰畫面與資料庫） =================
+const pad = n => String(n).padStart(2, '0');
+const WDN = ['日', '一', '二', '三', '四', '五', '六'];
+
+// ---------- 日期 ----------
+// 一律存成西元 'YYYY-MM-DD'；接受民國 115/10/12、115.10.12、1151012、115年10月12日、西元、Excel 日期序號
+function parseDate(x) {
+  if (x === null || x === undefined || x === '') return '';
+  if (x instanceof Date && !isNaN(x)) return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
+  if (typeof x === 'number') {
+    if (x > 20000 && x < 80000) { // Excel 序號
+      const d = new Date(Date.UTC(1899, 11, 30) + x * 86400000);
+      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+    }
+    x = String(x);
+  }
+  let s = String(x).trim().replace(/[年月.\-－／\s]/g, '/').replace(/日/g, '').replace(/\/+/g, '/').replace(/\/$/, '');
+  let y, m, d, mm;
+  if ((mm = s.match(/^(\d{2,4})\/(\d{1,2})\/(\d{1,2})$/))) { y = +mm[1]; m = +mm[2]; d = +mm[3]; }
+  else if ((mm = s.match(/^(\d{3})(\d{2})(\d{2})$/))) { y = +mm[1]; m = +mm[2]; d = +mm[3]; }
+  else if ((mm = s.match(/^(\d{4})(\d{2})(\d{2})$/))) { y = +mm[1]; m = +mm[2]; d = +mm[3]; }
+  else return '';
+  if (y < 1000) y += 1911;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return '';
+  return `${y}-${pad(m)}-${pad(d)}`;
+}
+const toUTC = iso => { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+const fromUTC = t => { const d = new Date(t); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };
+const addDays = (iso, n) => fromUTC(toUTC(iso) + n * 86400000);
+const calDays = (a, b) => (a && b) ? Math.round((toUTC(b) - toUTC(a)) / 86400000) : null;
+const weekday = iso => new Date(toUTC(iso)).getUTCDay();
+function addMonths(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1 + n, 1));
+  const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(Math.min(d, last))}`;
+}
+// 民國顯示
+function roc(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${+y - 1911}/${m}/${d}`; }
+function rocMonth(mk) { const [y, m] = mk.split('-'); return `${+y - 1911}年${+m}月`; }
+const monthOf = iso => iso ? iso.slice(0, 7) : '';
+function shiftMonth(mk, n) { return addMonths(mk + '-01', n).slice(0, 7); }
+
+// ---------- 工作天 ----------
+// holidays：{ 'YYYY-MM-DD': '假日' | '颱風假' | '補班' }
+function isWorkday(iso, holidays) {
+  const k = holidays[iso];
+  if (k === '補班') return true;
+  if (k) return false;
+  const w = weekday(iso);
+  return w !== 0 && w !== 6;
+}
+// 起算日當天不算，從隔天數到截止日（含）。截止日早於起算日時回傳負數。
+function workDays(a, b, holidays) {
+  if (!a || !b) return null;
+  if (a === b) return 0;
+  const sign = b > a ? 1 : -1;
+  let [from, to] = sign > 0 ? [a, b] : [b, a];
+  let n = 0, d = addDays(from, 1);
+  for (let guard = 0; d <= to && guard < 4000; guard++, d = addDays(d, 1)) if (isWorkday(d, holidays)) n++;
+  return n * sign;
+}
+// 兩日期相差的「月+天」文字，以及是否超過 n 個月（期限 = 起算日加 n 個月的同一日）
+function monthSpan(a, b) {
+  if (!a || !b) return '';
+  let months = 0;
+  while (addMonths(a, months + 1) <= b) months++;
+  const days = calDays(addMonths(a, months), b);
+  return (months ? `${months}個月` : '') + (days || !months ? `${days}天` : '');
+}
+const overMonths = (a, b, n) => !!(a && b && b > addMonths(a, n));
+
+// ---------- 觸發 ----------
+const TRIGGERS = ['新案-初評', '新案-出備', '新案-轉入-初評', '新案-轉入-複評', '新案-轉入-AA01', '新案-轉入-AA02', '出轉初',
+  '複評', 'AA01', '上月新案-初評', '上月新案-出備', '上月沒吃到錢', '結案-', '結案400-', '上月結案'];
+// 統一寫法：去空白、全形符號轉半形、「轉入AA01」補上 -
+function normTrigger(t) {
+  let s = String(t || '').replace(/\s+/g, '').replace(/[－—–]/g, '-').replace(/ＡＡ/g, 'AA').toUpperCase().replace(/^新案-轉入(?!-)/, '新案-轉入-');
+  return s;
+}
+const isNewTrigger = t => { t = normTrigger(t); return t.startsWith('新案') || t === '出轉初'; };
+const isCloseTrigger = t => normTrigger(t).startsWith('結案');
+
+// ---------- 地區 ----------
+const REGIONS = { '04': '四湖', '05': '台西', '06': '麥寮', '07': '東勢' };
+function parseCaseNo(no) {
+  const m = String(no || '').replace(/\s/g, '').match(/^(.+?)-(\d{2})-(\d+)-(\d+)$/);
+  if (!m) return null;
+  return { prefix: m[1], region: m[2], seq: +m[3], reopen: +m[4] };
+}
+const regionOf = no => { const p = parseCaseNo(no); return p ? (REGIONS[p.region] || p.region) : '未知'; };
+
+// ---------- 服務類別 ----------
+// key：存在資料裡的代號；label：畫面名稱；col：總表欄名；stat：服務單位統計表的工作表名
+const CATS = [
+  { key: 'home', label: '居家', col: '居服單位', stat: 'B單位' },
+  { key: 'prof', label: '專業碼', col: '復能', stat: 'C碼' },
+  { key: 'traffic', label: '交通', col: '交通', stat: '交通' },
+  { key: 'ctraffic', label: '社區交通', col: '社區交通', stat: '社區交通' },
+  { key: 'resp', label: '居喘', col: '居喘', stat: '居喘' },
+  { key: 'day', label: '日照', col: '日照', stat: '日照' },
+  { key: 'dayresp', label: '日喘', col: '日照喘息', stat: '日喘' },
+  { key: 'short', label: '短照', col: '短照(S)', stat: '短照' },
+  { key: 'inst', label: '機喘', col: '機構喘息', stat: '機喘' },
+  { key: 'meal', label: 'OT01', col: '送餐', stat: '餐飲(OT)' },
+  { key: 'family', label: '家托', col: '家托', stat: '家托' },
+  { key: 'bath', label: '沐浴車', col: '沐浴車', stat: '沐浴車' },
+  { key: 'aids', label: '輔具', col: '輔具', stat: '輔具' },
+  { key: 'small', label: '小規機', col: '小規機', stat: '小規機' },
+];
+const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
+
+// ---------- 服務單位名稱統一 ----------
+const normName = s => String(s || '').replace(/[\s ]/g, '').replace(/⾧/g, '長').replace(/^雲林縣-/, '').replace(/（/g, '(').replace(/）/g, ')');
+// units：[{ name, short, aliases:[] }]；回傳統一後的顯示名稱（有簡稱用簡稱）
+function makeUnitResolver(units) {
+  const exact = new Map(), list = [];
+  for (const u of units) {
+    const show = u.short || u.name;
+    for (const n of [u.name, u.short, ...(u.aliases || [])]) if (n) exact.set(normName(n), show);
+    if (u.short) list.push([normName(u.short), show]);
+  }
+  return raw => {
+    const n = normName(raw);
+    if (!n) return '';
+    if (exact.has(n)) return exact.get(n);
+    const hit = list.find(([s]) => n.includes(s) || s.includes(n));
+    return hit ? hit[1] : String(raw).trim();
+  };
+}
+
+// ---------- 原因選項 ----------
+const OPTS = {
+  referBLate: ['1.個管人力不足', '2.聯絡不到家屬/個案', '3.B單位拒絕服務', '4.照專逾3天簽審', '5.其他'],
+  dispatchMech: ['1.個案意願', '2.輪派', '3.唯一提供單位'],
+  bLate: ['1.服務單位人力不足', '2.個案住院', '3.個案無需求暫停服務', '4.聯絡不到家屬/個案', '5.案家服務特別需求', '6.其他'],
+  assignMech: ['1.個案意願', '2.輪派'],
+  aa01Reason: ['1.家屬因素', '2.個案因素', '3.重新開案', '4.其他'],
+};
+
+// ---------- 報表 ----------
+// 每份報表 = 篩選條件 + 欄位定義。欄位：
+//   h 標題；v(r) 顯示值；date 欄位為日期（顯示民國）；num 為天數；bad(r) 回傳警示文字；
+//   edit 為可在報表直接填寫的事件欄位（opts 下拉、type:'date' 日期、其他為文字）
+const cmsNum = c => parseInt(String(c || '').replace(/\D/g, ''), 10) || null;
+// 督導審核日：出備個案改用出院日期
+const supDate = r => normTrigger(r.e.trigger) === '新案-出備' ? r.e.discharge : r.e.supervisor;
+
+const REPORTS = {
+  dispatch: {
+    title: '個管員派案時效及品質名冊', note: '當月新案（含出轉初）',
+    filter: e => isNewTrigger(e.trigger),
+    cols: [
+      { h: '序號', v: r => r.i },
+      { h: '姓名', v: r => r.c.name },
+      { h: '身分證號', v: r => r.c.idNo },
+      { h: 'CMS', v: r => r.c.cms },
+      { h: '照專評估日期', date: 1, v: r => r.e.assess },
+      { h: '轉介A單位日期', date: 1, v: r => r.e.referA },
+      { h: '督導審核日期', date: 1, v: r => supDate(r), hint: '出備個案顯示出院日期' },
+      { h: '個管照顧計畫送審日期', date: 1, v: r => r.e.submit },
+      { h: '照專簽審日期', date: 1, v: r => r.e.approve },
+      { h: '照會B單位日期', date: 1, v: r => r.e.referB },
+      { h: '訪案及計畫擬定(工作天)', num: 1, v: r => r.k.plan, bad: r => r.k.plan > 3 ? '逾3天' : r.k.plan < 0 ? '日期順序錯誤' : '' },
+      { h: '逾3天未完成計畫擬定原因', edit: 'planLate', need: r => r.k.plan > 3 },
+      { h: '照管中心評估後轉介至A(日曆天)', num: 1, v: r => r.k.toA },
+      { h: '個管照會B單位(工作天)', num: 1, v: r => r.k.toB, bad: r => r.k.toB > 3 ? '逾3天' : r.k.toB < 0 ? '日期順序錯誤' : '' },
+      { h: '逾3天未完成照會B單位原因', edit: 'referBLate', opts: OPTS.referBLate, need: r => r.k.toB > 3 },
+      { h: '派案B單位機制', edit: 'dispatchMech', opts: OPTS.dispatchMech },
+      { h: 'B單位第一次提供服務日期', edit: 'bFirst', type: 'date' },
+      { h: '服務連結時效(日曆天)', num: 1, v: r => r.k.link, bad: r => r.k.link > 6 ? '超過3+3天，請檢視' : '' },
+      { h: 'B單位逾3+3天未提供服務原因', edit: 'bLate', opts: OPTS.bLate, need: r => r.k.link > 6 },
+      { h: '服務逾期追蹤日期', edit: 'followDate', type: 'date' },
+      { h: '服務逾期追蹤結果', edit: 'followResult' },
+      { h: '照專派貴單位的機制', edit: 'assignMech', opts: OPTS.assignMech },
+    ],
+    calc: (r, H) => ({
+      plan: workDays(supDate(r), r.e.submit, H),
+      toA: calDays(r.e.assess, r.e.referA),
+      toB: workDays(r.e.approve, r.e.referB, H),
+      link: calDays(r.e.referB, r.e.bFirst),
+    }),
+    summary: rows => [
+      ['訪案及計畫擬定3天內完成率', rate(rows, r => r.k.plan, x => x <= 3)],
+      ['照管中心評估後轉介至A平均天數', avg(rows, r => r.k.toA)],
+      ['個管照會B單位平均天數（工作天）', avg(rows, r => r.k.toB)],
+    ],
+  },
+  discharge: {
+    title: '出院準備服務銜接時效性', note: '當月「新案-出備」，排除出轉初與重開案',
+    filter: e => normTrigger(e.trigger) === '新案-出備',
+    cols: [
+      { h: '序號', v: r => r.i },
+      { h: '姓名', v: r => r.c.name },
+      { h: '身分證號', v: r => r.c.idNo },
+      { h: 'CMS', v: r => r.c.cms },
+      { h: '出院日期', edit: 'discharge', type: 'date' },
+      { h: '個管訪視日期', date: 1, v: r => r.e.visit },
+      { h: '照專簽審日期', date: 1, v: r => r.e.approve },
+      { h: '出院至訪視(工作天)', num: 1, v: r => r.k.dv, bad: r => r.e.discharge && r.e.visit && r.e.visit <= r.e.discharge ? '訪視日須晚於出院日' : r.k.dv > 3 ? '逾3天' : '' },
+      { h: '逾3天未完成計畫擬定原因', edit: 'dcLate', need: r => r.k.dv > 3 },
+      { h: '訪視至計畫通過(日曆天)', num: 1, v: r => r.k.va, bad: r => r.k.va > 3 ? '逾3天' : r.k.va < 0 ? '日期順序錯誤' : '' },
+      { h: '逾3天計畫未通過原因', edit: 'dcApproveLate', need: r => r.k.va > 3 },
+    ],
+    calc: (r, H) => ({ dv: workDays(r.e.discharge, r.e.visit, H), va: calDays(r.e.visit, r.e.approve) }),
+    summary: rows => [
+      ['個案出院至訪視平均天數（工作天）', avg(rows, r => r.k.dv)],
+      ['訪視至計畫通過平均天數（日曆天）', avg(rows, r => r.k.va)],
+    ],
+  },
+  aa01: {
+    title: 'AA01重新擬定名單時效性', note: '當月觸發 AA01，排除新案-AA01',
+    filter: e => normTrigger(e.trigger) === 'AA01',
+    cols: [
+      { h: '姓名', v: r => r.c.name },
+      { h: '身分證字號', v: r => r.c.idNo },
+      { h: 'CMS', v: r => r.c.cms },
+      { h: '初(複)評時間', date: 1, v: r => r.k.base, hint: 'CMS 8 級取照專評估日與上次個管訪視日較新者' },
+      { h: 'AA01時間', date: 1, v: r => r.e.visit },
+      { h: '初複評與AA01時間', v: r => monthSpan(r.k.base, r.e.visit), bad: r => r.k.over ? '超過6個月' : '' },
+      { h: '超過六個月原因', edit: 'aa01Reason', opts: OPTS.aa01Reason, need: r => r.k.over },
+    ],
+    calc: (r, H, ctx) => {
+      let base = r.e.assess || '';
+      if (cmsNum(r.c.cms) === 8) {
+        const prev = ctx.prevVisit(r.caseId, r.month, r.e.visit);
+        if (prev && prev > base) base = prev;
+      }
+      return { base, over: overMonths(base, r.e.visit, 6) };
+    },
+    summary: rows => [['超過6個月件數', rows.filter(r => r.k.over).length]],
+  },
+  reassess: {
+    title: '複評名單核定項目', note: '當月觸發複評，排除新案-複評',
+    filter: e => normTrigger(e.trigger) === '複評',
+    cols: [
+      { h: '姓名', v: r => r.c.name },
+      { h: '身分證字號', v: r => r.c.idNo },
+      { h: '複評時間', date: 1, v: r => r.e.assess },
+      ...['home', 'traffic', 'bath', 'resp', 'day', 'inst', 'dayresp', 'prof', 'meal', 'aids'].map(k => ({ h: CAT[k].label, v: r => r.svc[k] || '' })),
+    ],
+    calc: () => ({}),
+    summary: () => [],
+  },
+};
+function avg(rows, f) {
+  const xs = rows.map(f).filter(x => typeof x === 'number');
+  return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length * 10) / 10 : '—';
+}
+function rate(rows, f, ok) {
+  const xs = rows.map(f).filter(x => typeof x === 'number');
+  return xs.length ? `${Math.round(xs.filter(ok).length / xs.length * 1000) / 10}%（${xs.filter(ok).length}/${xs.length}）` : '—';
+}
+
+// db：{ cases: Map(id→case), events: [event], holidays: {date→kind}, resolveUnit }
+// 事件 event = { _id, caseId, month, ...欄位 }；個案 case = { _id, caseNo, ...欄位 }
+function buildReport(key, month, db) {
+  const R = REPORTS[key];
+  const evs = db.events.filter(e => e.month === month && R.filter(e) && db.cases.has(e.caseId));
+  evs.sort((a, b) => String(db.cases.get(a.caseId).caseNo).localeCompare(String(db.cases.get(b.caseId).caseNo), 'zh-Hant', { numeric: true }));
+  const ctx = {
+    prevVisit(caseId, mk, before) {
+      let best = '';
+      for (const e of db.events) if (e.caseId === caseId && e.month < mk && e.visit && (!before || e.visit < before) && e.visit > best) best = e.visit;
+      return best;
+    },
+  };
+  const rows = evs.map((e, idx) => {
+    const c = db.cases.get(e.caseId);
+    const svc = {};
+    for (const k of Object.keys(CAT)) { const raw = (e.services || {})[k] || (c.services || {})[k]; if (raw) svc[k] = db.resolveUnit(raw); }
+    const r = { i: idx + 1, e, c, caseId: e.caseId, month, svc };
+    r.k = R.calc(r, db.holidays, ctx);
+    return r;
+  });
+  return { R, rows, summary: R.summary(rows) };
+}
+// 報表某一格的顯示文字（畫面與匯出共用）
+function cellText(col, r) {
+  const val = col.edit ? r.e[col.edit] : col.v(r);
+  if (val === null || val === undefined) return '';
+  if (col.date || col.type === 'date') return roc(val);
+  return String(val);
+}
+
+// ---------- 服務單位統計 ----------
+// kind：'new' 新案 / 'reassess' 複評；回傳 { [類別key]: { [單位]: 件數 } }
+function unitStats(kind, month, db) {
+  const f = kind === 'new' ? (e => isNewTrigger(e.trigger)) : (e => normTrigger(e.trigger) === '複評');
+  const out = {};
+  for (const e of db.events) {
+    if (e.month !== month || !f(e) || !db.cases.has(e.caseId)) continue;
+    const c = db.cases.get(e.caseId);
+    for (const cat of CATS) {
+      const raw = (e.services || {})[cat.key] || (c.services || {})[cat.key];
+      if (!raw) continue;
+      const u = db.resolveUnit(raw);
+      (out[cat.key] = out[cat.key] || {})[u] = (out[cat.key][u] || 0) + 1;
+    }
+  }
+  return out;
+}
+
+// ---------- 月統計（在案、新案、結案、最新總數） ----------
+// 開案月 = 第一筆新案觸發的月份，沒有則用開案日期、申請日期
+// 結案月 = 第一筆結案觸發的月份
+function caseMonths(db) {
+  const info = new Map();
+  for (const [id, c] of db.cases) info.set(id, { open: monthOf(c.openDate) || monthOf(c.applyDate) || '', close: '' });
+  const evs = [...db.events].sort((a, b) => a.month.localeCompare(b.month));
+  for (const e of evs) {
+    const x = info.get(e.caseId); if (!x) continue;
+    if (isNewTrigger(e.trigger) && (!x.openEv)) { x.open = e.month; x.openEv = true; }
+    if (isCloseTrigger(e.trigger) && !x.close) x.close = e.month;
+  }
+  return info;
+}
+function srcGroup(src) {
+  const s = String(src || '');
+  if (s.includes('出備')) return '出備';
+  if (s.includes('轉入')) return '轉入';
+  if (s.includes('初評')) return '初評';
+  return '未填';
+}
+function monthSummary(month, db) {
+  const info = caseMonths(db), prev = shiftMonth(month, -1);
+  const regs = [...Object.values(REGIONS), '未知'];
+  const blank = () => Object.fromEntries(regs.map(r => [r, 0]));
+  const s = { inCase: blank(), newCase: blank(), closed: blank(), latest: blank(), src: { 出備: 0, 初評: 0, 轉入: 0, 未填: 0 }, anomaly: [] };
+  for (const [id, c] of db.cases) {
+    const x = info.get(id); if (!x || !x.open) continue;
+    // 結案早於開案（例如同一個編號結案後又重開）：資料有問題，列出來請人工檢查
+    if (x.close && x.close < x.open) { if (x.open <= month) s.anomaly.push(c.caseNo); continue; }
+    const rg = regionOf(c.caseNo);
+    const activeEnd = m => x.open <= m && !(x.close && x.close <= m);
+    if (activeEnd(prev)) { s.inCase[rg]++; s.src[srcGroup(c.src)]++; }
+    if (x.open === month) s.newCase[rg]++;
+    if (x.close === month && x.open <= month) s.closed[rg]++;
+    if (activeEnd(month)) s.latest[rg]++;
+  }
+  const sum = o => Object.values(o).reduce((a, b) => a + b, 0);
+  s.total = { inCase: sum(s.inCase), newCase: sum(s.newCase), closed: sum(s.closed), latest: sum(s.latest) };
+  s.check = s.total.inCase + s.total.newCase - s.total.closed === s.total.latest;
+  return s;
+}
+// 當月觸發計數（核銷用，單價待確認後再加入）
+function triggerCounts(month, db) {
+  const out = {};
+  for (const e of db.events) if (e.month === month && e.trigger && db.cases.has(e.caseId)) { const t = normTrigger(e.trigger); out[t] = (out[t] || 0) + 1; }
+  return out;
+}
+
+// ---------- Excel 總表匯入 ----------
+// 總表欄名 → 個案欄位（c）或事件欄位（e）或服務類別（s）
+const IMPORT_MAP = {
+  '編號': ['caseNo'], '觸發': ['e', 'trigger'], '申請來源': ['c', 'src'], '申請來源備註': ['c', 'srcNote'],
+  'A結束服務日期': ['c', 'aEnd', 'date'], '系統結案日期': ['c', 'sysClose', 'date'], '姓名': ['c', 'name'], '性別': ['c', 'gender'],
+  '身分證號': ['c', 'idNo'], '身分證字號': ['c', 'idNo'], '出生日期': ['c', 'birth', 'date'], 'CMS': ['c', 'cms'], '身分別': ['c', 'identity'],
+  '居住': ['c', 'living'], '失智': ['c', 'dementia'], '身障': ['c', 'disability'], '身障等級': ['c', 'disLevel'],
+  '申請日期': ['c', 'applyDate', 'date'], '開案日期': ['c', 'openDate', 'date'],
+  '指派A單位日期': ['e', 'referA', 'date'], '轉介A單位日期': ['e', 'referA', 'date'], '照專評估日期': ['e', 'assess', 'date'],
+  '訪視日期': ['e', 'visit', 'date'], '送審日期': ['e', 'submit', 'date'], '督導簽審日期': ['e', 'supervisor', 'date'],
+  '審核日期': ['e', 'approve', 'date'], '照會B單位': ['e', 'referB', 'date'], '居服進場時間': ['c', 'homeStart', 'date'],
+  '服務代碼': ['e', 'codes'], '居住地': ['c', 'area'], '地址': ['c', 'address'], '聯絡人': ['c', 'contact'], '聯絡電話': ['c', 'phone'],
+  '出院日期': ['e', 'discharge', 'date'],
+};
+for (const cat of CATS) if (cat.col) IMPORT_MAP[cat.col] = ['s', cat.key];
+const normHeader = h => String(h || '').replace(/\s+/g, '').replace(/\(最新\)|（最新）/g, '').trim();
+
+// aoa：工作表的二維陣列（SheetJS sheet_to_json header:1）。回傳 { rows, unknownHeaders, headerRow }
+function parseSummarySheet(aoa, month) {
+  let hr = aoa.findIndex(row => row && row.some(x => normHeader(x) === '編號') && row.some(x => normHeader(x) === '姓名'));
+  if (hr < 0) throw new Error('找不到標題列（需要有「編號」和「姓名」兩欄）');
+  const heads = aoa[hr].map(normHeader);
+  const unknown = heads.filter(h => h && !IMPORT_MAP[h] && h !== '年齡' && h !== '服務項目數');
+  const rows = [];
+  for (let i = hr + 1; i < aoa.length; i++) {
+    const row = aoa[i]; if (!row) continue;
+    const c = { services: {} }, e = { services: {} }; let caseNo = '';
+    heads.forEach((h, j) => {
+      const m = IMPORT_MAP[h]; if (!m) return;
+      let val = row[j]; if (val === undefined || val === null) val = '';
+      if (m[0] === 'caseNo') { caseNo = String(val).replace(/\s/g, ''); return; }
+      if (m[2] === 'date') val = parseDate(val); else val = String(val).trim();
+      if (m[0] === 'c') c[m[1]] = val;
+      else if (m[0] === 'e') e[m[1]] = val;
+      else if (m[0] === 's' && val && val !== '-') { c.services[m[1]] = val; e.services[m[1]] = val; }
+    });
+    if (!caseNo || !parseCaseNo(caseNo)) continue; // 跳過範例列、說明列、空白列
+    const hasTrigger = !!e.trigger;
+    if (hasTrigger) e.trigger = normTrigger(e.trigger);
+    // 個案也存一份最新日期，總表畫面不用回頭找事件
+    c.latest = { referA: e.referA, assess: e.assess, visit: e.visit, submit: e.submit, supervisor: e.supervisor, approve: e.approve, referB: e.referB };
+    rows.push({ caseNo, c, e: hasTrigger ? e : null, month });
+  }
+  return { rows, unknownHeaders: unknown, headerRow: hr };
+}
+
+// 2026 年（民國 115 年）行政機關放假日（平日部分），來源：人事行政總處辦公日曆表
+const HOLIDAYS_2026 = [
+  ['2026-01-01', '元旦'], ['2026-02-16', '春節'], ['2026-02-17', '春節'], ['2026-02-18', '春節'], ['2026-02-19', '春節'], ['2026-02-20', '春節'],
+  ['2026-02-27', '和平紀念日補假'], ['2026-04-03', '兒童節補假'], ['2026-04-06', '清明節補假'], ['2026-05-01', '勞動節'],
+  ['2026-06-19', '端午節'], ['2026-09-25', '中秋節'], ['2026-09-28', '教師節'], ['2026-10-09', '國慶日補假'],
+  ['2026-10-26', '光復節補假'], ['2026-12-25', '行憲紀念日'],
+];
+// ================= CORE-END =================
+
+// ================= Convex 連線與登入（與其他系統同一組團隊密碼） =================
+const SHARED_EMAIL = 'team@careapp-aa02.local';
+const CONFIGURED = !/請換成/.test(EVAL_URL);
+const REFRESH_KEY = 'evalRefreshToken';
+const conn = (() => {
+  if (!CONFIGURED) return null;
+  const client = new ConvexClient(EVAL_URL), http = new ConvexHttpClient(EVAL_URL);
+  let token = null, inFlight = null, resolveReady;
+  const ready = new Promise(r => { resolveReady = r; });
+  async function fetchToken({ forceRefreshToken }) {
+    if (!forceRefreshToken && token) return token;
+    if (inFlight) return inFlight;
+    let rt = null; try { rt = localStorage.getItem(REFRESH_KEY); } catch (e) { }
+    if (!rt) return null;
+    inFlight = (async () => {
+      try {
+        const r = await http.action('auth:signIn', { refreshToken: rt });
+        if (r && r.tokens) { token = r.tokens.token; localStorage.setItem(REFRESH_KEY, r.tokens.refreshToken); resolveReady(); return token; }
+      } catch (e) { console.error('[換 token 失敗]', e); }
+      try { localStorage.removeItem(REFRESH_KEY); } catch (e) { }
+      token = null; return null;
+    })().finally(() => { inFlight = null; });
+    return inFlight;
+  }
+  client.setAuth(fetchToken);
+  async function signIn(pw, flow) {
+    const r = await http.action('auth:signIn', { provider: 'password', params: { email: SHARED_EMAIL, password: pw, flow: flow || 'signIn' } });
+    if (!r || !r.tokens) throw new Error('登入失敗');
+    token = r.tokens.token; localStorage.setItem(REFRESH_KEY, r.tokens.refreshToken);
+    client.setAuth(fetchToken); resolveReady();
+  }
+  const hasSaved = () => { try { return !!localStorage.getItem(REFRESH_KEY); } catch (e) { return false; } };
+  return { client, ready, fetchToken, signIn, hasSaved };
+})();
+async function signIn(pw) {
+  try { await conn.signIn(pw); }
+  catch (e1) {
+    // 新資料庫第一次使用時還沒有帳號，用這組密碼建立
+    try { await conn.signIn(pw, 'signUp'); }
+    catch (e2) { console.error(e1, e2); throw new Error('密碼錯誤，請再試一次'); }
+  }
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function call(kind, name, args) {
+  await conn.ready;
+  for (let i = 0; ; i++) {
+    try { return kind === 'q' ? await conn.client.query(name, args || {}) : await conn.client.mutation(name, args || {}); }
+    catch (e) { if (i < 5 && /未登入/.test(e.message || '')) { await sleep(1000); continue; } throw e; }
+  }
+}
+
+// ================= 本機快取（IndexedDB）+ 增量同步 =================
+// 第一次開啟會下載全部資料，之後只下載別人改過的部分，大幅節省 Convex 免費額度。
+const IDB = {
+  db: null,
+  async open() {
+    if (this.db) return this.db;
+    this.db = await new Promise((res, rej) => {
+      const r = indexedDB.open('evalCache', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    return this.db;
+  },
+  async get(k) { try { const db = await this.open(); return await new Promise(res => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(undefined); }); } catch (e) { return undefined; } },
+  async set(k, v) { try { const db = await this.open(); await new Promise(res => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = res; }); } catch (e) { } },
+  async clear() { try { const db = await this.open(); await new Promise(res => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').clear(); t.oncomplete = res; t.onerror = res; }); } catch (e) { } },
+};
+const TABLES = ['cases', 'events', 'units', 'holidays'];
+const CACHE_KEY = 'cache:' + EVAL_URL;
+const store = { rows: { cases: new Map(), events: new Map(), units: new Map(), holidays: new Map() }, since: { cases: 0, events: 0, units: 0, holidays: 0 } };
+async function loadCache() {
+  const c = await IDB.get(CACHE_KEY);
+  if (!c) return;
+  for (const t of TABLES) { store.rows[t] = new Map((c.rows[t] || []).map(x => [x._id, x])); store.since[t] = c.since[t] || 0; }
+}
+let syncing = null;
+async function syncAll() {
+  if (syncing) return syncing;
+  syncing = (async () => {
+    let changed = 0;
+    for (const t of TABLES) {
+      let cursor = null, max = store.since[t];
+      for (; ;) {
+        const r = await call('q', 'data:sync', { table: t, since: store.since[t], paginationOpts: { numItems: 500, cursor } });
+        for (const x of r.page) {
+          const old = store.rows[t].get(x._id);
+          if (!old || old.updatedAt !== x.updatedAt || old.d !== x.d || old.deleted !== x.deleted) changed++;
+          if (x.deleted) store.rows[t].delete(x._id); else store.rows[t].set(x._id, x);
+          if (x.updatedAt > max) max = x.updatedAt;
+        }
+        if (r.isDone) break;
+        cursor = r.continueCursor;
+      }
+      store.since[t] = max;
+    }
+    if (changed) await IDB.set(CACHE_KEY, { since: store.since, rows: Object.fromEntries(TABLES.map(t => [t, [...store.rows[t].values()]])) });
+    return changed;
+  })().finally(() => { syncing = null; });
+  return syncing;
+}
+const J = s => { try { return JSON.parse(s); } catch (e) { return {}; } };
+// 把快取轉成計算用的資料
+function buildDb() {
+  const cases = new Map();
+  for (const x of store.rows.cases.values()) cases.set(x._id, { ...J(x.d), _id: x._id, caseNo: x.caseNo });
+  const events = [...store.rows.events.values()].map(x => ({ ...J(x.d), _id: x._id, caseId: x.caseId, month: x.month }));
+  const units = [...store.rows.units.values()].map(x => ({ ...J(x.d), _id: x._id }));
+  const holidays = {}, holidayList = [];
+  for (const x of store.rows.holidays.values()) { const d = J(x.d); holidays[x.date] = d.kind || '假日'; holidayList.push({ ...d, _id: x._id, date: x.date }); }
+  holidayList.sort((a, b) => a.date.localeCompare(b.date));
+  return { cases, events, units, holidays, holidayList, resolveUnit: makeUnitResolver(units), info: caseMonths({ cases, events }) };
+}
+
+// ================= 小元件 =================
+const todayMonth = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+const sortNo = (a, b) => String(a.caseNo).localeCompare(String(b.caseNo), 'zh-Hant', { numeric: true });
+let toastFn = () => { };
+const toast = (msg, err) => toastFn(msg, err);
+
+// 日期輸入：輸入民國（115/10/12、1151012）或西元皆可，存成西元
+function DateInput({ value, onChange, style, ph }) {
+  const [txt, setTxt] = useState(roc(value)), [bad, setBad] = useState(false);
+  useEffect(() => { setTxt(roc(value)); setBad(false); }, [value]);
+  const commit = () => {
+    const t = txt.trim();
+    if (!t) { setBad(false); if (value) onChange(''); return; }
+    const iso = parseDate(t);
+    if (!iso) { setBad(true); return; }
+    setBad(false); setTxt(roc(iso)); if (iso !== value) onChange(iso);
+  };
+  return html`<input class=${'inp' + (bad ? ' bad' : '')} style=${style || 'width:110px'} value=${txt} placeholder=${ph || '年/月/日'}
+    title=${bad ? '日期格式不正確' : ''} onInput=${e => setTxt(e.target.value)} onBlur=${commit} onKeyDown=${e => e.key === 'Enter' && e.target.blur()} />`;
+}
+function TextCell({ value, onChange, opts, width }) {
+  const [txt, setTxt] = useState(value || '');
+  useEffect(() => setTxt(value || ''), [value]);
+  if (opts) return html`<select class="inp" style=${'width:' + (width || 150) + 'px'} value=${value || ''} onChange=${e => onChange(e.target.value)}>
+    <option value=""></option>${opts.map(o => html`<option value=${o}>${o}</option>`)}
+    ${value && !opts.includes(value) ? html`<option value=${value}>${value}</option>` : ''}</select>`;
+  return html`<input class="inp" style=${'width:' + (width || 170) + 'px'} value=${txt} onInput=${e => setTxt(e.target.value)}
+    onBlur=${() => { if ((txt || '') !== (value || '')) onChange(txt); }} onKeyDown=${e => e.key === 'Enter' && e.target.blur()} />`;
+}
+function ConfirmBtn({ label, onYes, cls }) {
+  const [arm, setArm] = useState(false);
+  useEffect(() => { if (arm) { const t = setTimeout(() => setArm(false), 4000); return () => clearTimeout(t); } }, [arm]);
+  return html`<button class=${'btn ' + (arm ? 'red' : (cls || 'light'))} onClick=${() => arm ? (setArm(false), onYes()) : setArm(true)}>${arm ? '再按一次確認' : label}</button>`;
+}
+
+// ================= Excel 匯出 =================
+function sheetFromAoa(aoa, widths, merges) {
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  if (widths) ws['!cols'] = widths.map(w => ({ wch: w }));
+  if (merges) ws['!merges'] = merges;
+  return ws;
+}
+function reportAoa(key, month, db) {
+  const { R, rows, summary } = buildReport(key, month, db);
+  const head = R.cols.map(c => c.h);
+  const aoa = [[`${ORG_TITLE}\n${rocMonth(month)}-${R.title}`], head, ...rows.map(r => R.cols.map(c => cellText(c, r)))];
+  if (summary.length) { aoa.push([]); for (const [k, v] of summary) aoa.push([k, String(v)]); }
+  return sheetFromAoa(aoa, R.cols.map(c => Math.max(8, Math.min(26, c.h.length * 2))), [{ s: { r: 0, c: 0 }, e: { r: 0, c: head.length - 1 } }]);
+}
+function exportReport(key, month, db, wholeYear) {
+  const wb = XLSX.utils.book_new(), R = REPORTS[key];
+  if (wholeYear) {
+    const y = month.slice(0, 4);
+    for (let m = 1; m <= 12; m++) XLSX.utils.book_append_sheet(wb, reportAoa(key, `${y}-${pad(m)}`, db), `${m}月`);
+    XLSX.writeFile(wb, `${+y - 1911}年${R.title}.xlsx`);
+  } else {
+    XLSX.utils.book_append_sheet(wb, reportAoa(key, month, db), rocMonth(month));
+    XLSX.writeFile(wb, `${rocMonth(month)}${R.title}.xlsx`);
+  }
+}
+// 服務單位統計：每個服務類別一個工作表，列 = 月份，欄 = 單位（與原本統計表相同格式）
+function exportUnitStats(kind, year, db) {
+  const wb = XLSX.utils.book_new();
+  const months = Array.from({ length: 12 }, (_, i) => `${year}-${pad(i + 1)}`);
+  const per = months.map(m => unitStats(kind, m, db));
+  for (const cat of CATS) {
+    const units = [...new Set(per.flatMap(p => Object.keys(p[cat.key] || {})))].sort();
+    const aoa = [['月份', ...units, '合計']];
+    months.forEach((m, i) => { const o = per[i][cat.key] || {}; const vals = units.map(u => o[u] || ''); aoa.push([roc(m + '-01').slice(0, -3), ...vals, units.reduce((a, u) => a + (o[u] || 0), 0) || '']); });
+    aoa.push(['總計', ...units.map(u => per.reduce((a, p) => a + ((p[cat.key] || {})[u] || 0), 0)), per.reduce((a, p) => a + Object.values(p[cat.key] || {}).reduce((x, y) => x + y, 0), 0)]);
+    XLSX.utils.book_append_sheet(wb, sheetFromAoa(aoa, [8, ...units.map(u => Math.min(30, Math.max(8, u.length * 2))), 6]), cat.stat);
+  }
+  XLSX.writeFile(wb, `${+year - 1911}年${kind === 'new' ? '新案' : '複評'}服務單位統計.xlsx`);
+}
+
+// ================= 總表 =================
+const CASE_FIELDS = [
+  ['name', '姓名'], ['gender', '性別', ['男', '女']], ['idNo', '身分證號'], ['birth', '出生日期', 'date'], ['cms', 'CMS'],
+  ['identity', '身分別'], ['living', '居住'], ['dementia', '失智'], ['disability', '身障（重鑑日/類別）'], ['disLevel', '身障等級', ['輕度', '中度', '重度', '極重度']],
+  ['src', '申請來源', ['初評', '出備', '轉入']], ['srcNote', '申請來源備註'], ['applyDate', '申請日期', 'date'], ['openDate', '開案日期', 'date'],
+  ['aEnd', 'A結束服務日期', 'date'], ['sysClose', '系統結案日期', 'date'], ['homeStart', '居服進場時間', 'date'],
+  ['area', '居住地'], ['address', '地址'], ['contact', '聯絡人'], ['phone', '聯絡電話'],
+];
+const EVENT_DATES = [['assess', '照專評估日期'], ['referA', '轉介(指派)A單位日期'], ['discharge', '出院日期'], ['visit', '個管訪視日期'],
+  ['supervisor', '督導審核日期'], ['submit', '照顧計畫送審日期'], ['approve', '照專簽審日期'], ['referB', '照會B單位日期'], ['bFirst', 'B單位第一次提供服務日期']];
+const latestOf = (db, c, k) => {
+  let best = { m: '', v: (c.latest || {})[k] || '' };
+  for (const e of db.events) if (e.caseId === c._id && e[k] && e.month >= best.m) best = { m: e.month, v: e[k] };
+  return best.v;
+};
+
+function SummaryView({ db, month, user, refresh }) {
+  const [q, setQ] = useState(''), [reg, setReg] = useState('全部'), [onlyEv, setOnlyEv] = useState(false), [all, setAll] = useState(false);
+  const [edit, setEdit] = useState(null);
+  const evOf = useMemo(() => { const m = new Map(); for (const e of db.events) if (e.month === month) m.set(e.caseId, e); return m; }, [db, month]);
+  const list = useMemo(() => [...db.cases.values()].filter(c => {
+    const x = db.info.get(c._id) || {};
+    const inList = all || !x.open || (x.open <= month && !(x.close && x.close < month));
+    if (!inList) return false;
+    if (reg !== '全部' && regionOf(c.caseNo) !== reg) return false;
+    if (onlyEv && !evOf.get(c._id)) return false;
+    if (q && !(String(c.name || '').includes(q) || String(c.idNo || '').includes(q) || String(c.caseNo).includes(q))) return false;
+    return true;
+  }).sort(sortNo), [db, month, q, reg, onlyEv, all, evOf]);
+  const nNew = list.filter(c => isNewTrigger((evOf.get(c._id) || {}).trigger)).length;
+  return html`<div class="page">
+    <div class="bar">
+      <input class="inp" style="width:220px" placeholder="搜尋姓名、身分證、編號" value=${q} onInput=${e => setQ(e.target.value)} />
+      <select class="inp" value=${reg} onChange=${e => setReg(e.target.value)}>${['全部', ...Object.values(REGIONS)].map(r => html`<option value=${r}>${r}</option>`)}</select>
+      <label class="sub"><input type="checkbox" checked=${onlyEv} onChange=${e => setOnlyEv(e.target.checked)} /> 只看本月有觸發</label>
+      <label class="sub"><input type="checkbox" checked=${all} onChange=${e => setAll(e.target.checked)} /> 含已結案</label>
+      <span class="grow"></span>
+      <span class="sub">共 ${list.length} 案，本月新案 ${nNew}</span>
+      <button class="btn" onClick=${() => setEdit({ isNew: true })}>＋ 新增個案</button>
+    </div>
+    ${db.cases.size === 0 ? html`<div class="card empty">還沒有資料。可以到「匯入」把個案總表 Excel 匯入，或按「新增個案」。</div>` : html`
+    <div class="tw"><table class="grid">
+      <thead><tr><th>編號</th><th>姓名</th><th>CMS</th><th>來源</th><th>${rocMonth(month)}觸發</th><th>照專評估</th><th>訪視</th><th>照專簽審</th><th>照會B</th><th>居服單位</th><th>狀態</th></tr></thead>
+      <tbody>${list.map(c => {
+        const e = evOf.get(c._id), x = db.info.get(c._id) || {};
+        const closed = x.close && x.close <= month;
+        return html`<tr class="click" onClick=${() => setEdit({ id: c._id })}>
+          <td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${c.cms}</td><td>${c.src}</td>
+          <td>${e && e.trigger ? html`<span class=${'tag ' + (isNewTrigger(e.trigger) ? 't-new' : isCloseTrigger(e.trigger) ? 't-close' : 't-ev')}>${e.trigger}</span>` : ''}</td>
+          <td>${roc(latestOf(db, c, 'assess'))}</td><td>${roc(latestOf(db, c, 'visit'))}</td><td>${roc(latestOf(db, c, 'approve'))}</td><td>${roc(latestOf(db, c, 'referB'))}</td>
+          <td>${db.resolveUnit((c.services || {}).home || '')}</td>
+          <td>${closed ? html`<span class="tag t-close">已結案</span>` : ''}</td></tr>`;
+      })}</tbody></table></div>`}
+    ${edit && html`<${CaseEditor} db=${db} month=${month} user=${user} id=${edit.id} onClose=${() => setEdit(null)} refresh=${refresh} />`}
+  </div>`;
+}
+
+function CaseEditor({ db, month, user, id, onClose, refresh }) {
+  const orig = id ? db.cases.get(id) : null;
+  const nextNo = rg => { let mx = 0; for (const c of db.cases.values()) { const p = parseCaseNo(c.caseNo); if (p && p.region === rg && p.seq > mx) mx = p.seq; } return `台-${rg}-${String(mx + 1).padStart(3, '0')}-1`; };
+  const [caseNo, setCaseNo] = useState(orig ? orig.caseNo : nextNo('05'));
+  const [c, setC] = useState(() => ({ ...(orig || {}), services: { ...((orig || {}).services || {}) } }));
+  const [em, setEm] = useState(month);
+  const evOrig = useMemo(() => db.events.find(e => e.caseId === id && e.month === em) || null, [db, id, em]);
+  const [ev, setEv] = useState(() => ({ ...(evOrig || {}), services: { ...((evOrig || {}).services || {}) } }));
+  useEffect(() => setEv({ ...(evOrig || {}), services: { ...((evOrig || {}).services || {}) } }), [evOrig]);
+  const [busy, setBusy] = useState(false);
+  const hist = useMemo(() => db.events.filter(e => e.caseId === id).sort((a, b) => b.month.localeCompare(a.month)), [db, id]);
+  const unitNames = useMemo(() => [...new Set(db.units.map(u => u.short || u.name).filter(Boolean))], [db]);
+
+  const diff = (a, b) => { const out = {}; for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { if (k.startsWith('_') || k === 'caseId' || k === 'month' || k === 'caseNo') continue; if (JSON.stringify(a[k] ?? '') !== JSON.stringify(b[k] ?? '')) out[k] = b[k] ?? ''; } return out; };
+  const save = async () => {
+    if (!caseNo.trim() || !parseCaseNo(caseNo)) return toast('編號格式應為 台-05-178-1', true);
+    if (!String(c.name || '').trim()) return toast('請填寫姓名', true);
+    if (ev.discharge && ev.visit && ev.visit <= ev.discharge) return toast('個管訪視日期必須晚於出院日期（出院當天不能訪視）', true);
+    setBusy(true);
+    try {
+      let cid = id;
+      const cp = diff(orig || {}, c);
+      if (!id || Object.keys(cp).length || caseNo !== orig.caseNo) cid = await call('m', 'data:saveCase', { id, caseNo: caseNo.trim(), d: JSON.stringify(id ? cp : c), by: user });
+      const ep = diff(evOrig || {}, ev);
+      if (Object.keys(ep).length) await call('m', 'data:patchEvent', { caseId: cid, month: em, patch: JSON.stringify(ep), by: user });
+      await refresh(); toast('已儲存'); onClose();
+    } catch (e) { console.error(e); toast('儲存失敗：' + (e.message || e), true); }
+    setBusy(false);
+  };
+  const del = async () => {
+    setBusy(true);
+    try { await call('m', 'data:remove', { table: 'cases', id, by: user }); await refresh(); toast('已刪除個案'); onClose(); }
+    catch (e) { toast('刪除失敗：' + e.message, true); }
+    setBusy(false);
+  };
+  const delEv = async () => {
+    try { await call('m', 'data:remove', { table: 'events', id: evOrig._id, by: user }); await refresh(); toast(`已刪除 ${rocMonth(em)} 的觸發紀錄`); }
+    catch (e) { toast('刪除失敗：' + e.message, true); }
+  };
+  const field = (obj, set) => ([k, label, t]) => html`<label>${label}
+    ${t === 'date' ? html`<${DateInput} style="width:100%" value=${obj[k] || ''} onChange=${v => set({ ...obj, [k]: v })} />`
+      : Array.isArray(t) ? html`<input class="inp" list=${'dl-' + k} value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} /><datalist id=${'dl-' + k}>${t.map(o => html`<option value=${o} />`)}</datalist>`
+        : html`<input class="inp" value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} />`}</label>`;
+
+  return html`<div class="modal" onClick=${e => e.target === e.currentTarget && onClose()}><div class="drawer">
+    <div class="bar"><h2 style="margin:0">${id ? `${orig.name}　${orig.caseNo}` : '新增個案'}</h2><span class="grow"></span>
+      ${id && html`<${ConfirmBtn} label="刪除個案" onYes=${del} />`}
+      <button class="btn light" onClick=${onClose}>關閉</button><button class="btn" disabled=${busy} onClick=${save}>${busy ? '儲存中…' : '儲存'}</button></div>
+    <div class="card">
+      <div class="sect" style="margin-top:0">基本資料</div>
+      <div class="form">
+        <label>個案編號<span style="display:flex;gap:4px"><input class="inp" style="flex:1" value=${caseNo} onInput=${e => setCaseNo(e.target.value)} />
+          ${!id && html`<select class="inp" title="依地區自動編號" onChange=${e => setCaseNo(nextNo(e.target.value))}>${Object.entries(REGIONS).map(([k, v]) => html`<option value=${k} selected=${k === '05'}>${v}</option>`)}</select>`}</span>
+          <span class="sub">地區：${regionOf(caseNo)}；尾數 1 新案、2 重開案</span></label>
+        ${CASE_FIELDS.map(field(c, setC))}
+      </div>
+      <div class="sect">目前服務單位</div>
+      <div class="form">${CATS.map(cat => html`<label>${cat.label}<input class="inp" list="dl-units" value=${c.services[cat.key] || ''}
+        onInput=${e => setC({ ...c, services: { ...c.services, [cat.key]: e.target.value } })} /></label>`)}</div>
+      <datalist id="dl-units">${unitNames.map(u => html`<option value=${u} />`)}</datalist>
+    </div>
+    <div class="card">
+      <div class="bar" style="margin-bottom:4px"><div class="sect" style="margin:0">觸發紀錄</div>
+        <label class="sub">月份 <input class="inp" type="month" value=${em} onChange=${e => e.target.value && setEm(e.target.value)} /></label>
+        <span class="grow"></span>${evOrig && html`<${ConfirmBtn} label=${'刪除' + rocMonth(em) + '觸發'} onYes=${delEv} />`}</div>
+      ${hist.length > 0 && html`<div class="hist" style="margin-bottom:10px">${hist.map(e => html`<button class=${e.month === em ? 'on' : ''} onClick=${() => setEm(e.month)}>${rocMonth(e.month)} ${e.trigger || ''}</button>`)}</div>`}
+      <div class="form">
+        <label>觸發<input class="inp" list="dl-trig" value=${ev.trigger || ''} onInput=${e => setEv({ ...ev, trigger: e.target.value })} onBlur=${e => setEv({ ...ev, trigger: normTrigger(e.target.value) })} />
+          <datalist id="dl-trig">${TRIGGERS.map(t => html`<option value=${t} />`)}</datalist></label>
+        ${EVENT_DATES.map(([k, label]) => html`<label>${label}<${DateInput} style="width:100%" value=${ev[k] || ''} onChange=${v => setEv({ ...ev, [k]: v })} /></label>`)}
+        <label>服務代碼<input class="inp" value=${ev.codes || ''} onInput=${e => setEv({ ...ev, codes: e.target.value })} /></label>
+      </div>
+      ${ev.discharge && ev.visit && ev.visit <= ev.discharge && html`<div class="tag t-warn" style="margin-top:8px">個管訪視日期必須晚於出院日期</div>`}
+      <div class="sub" style="margin-top:8px">逾期原因、派案機制、追蹤結果等欄位，可以直接在「評鑑報表」裡填寫。</div>
+    </div>
+  </div></div>`;
+}
+
+// ================= 評鑑報表 =================
+function ReportView({ db, month, user, refresh }) {
+  const [key, setKey] = useState('dispatch');
+  const rep = useMemo(() => buildReport(key, month, db), [key, month, db]);
+  const save = async (r, field, val) => {
+    try { await call('m', 'data:patchEvent', { caseId: r.caseId, month, patch: JSON.stringify({ [field]: val }), by: user }); await refresh(); }
+    catch (e) { toast('儲存失敗：' + e.message, true); }
+  };
+  const bad = rep.rows.reduce((n, r) => n + (rep.R.cols.some(c => c.bad && c.bad(r)) ? 1 : 0), 0);
+  const missing = rep.rows.reduce((n, r) => n + (rep.R.cols.some(c => c.need && c.need(r) && !r.e[c.edit]) ? 1 : 0), 0);
+  return html`<div class="page">
+    <div class="bar">
+      <select class="inp" value=${key} onChange=${e => setKey(e.target.value)}>${Object.entries(REPORTS).map(([k, R]) => html`<option value=${k}>${R.title}</option>`)}</select>
+      <span class="sub">${rep.R.note}</span><span class="grow"></span>
+      <button class="btn light" onClick=${() => exportReport(key, month, db, false)}>匯出${rocMonth(month)} Excel</button>
+      <button class="btn light" onClick=${() => exportReport(key, month, db, true)}>匯出${+month.slice(0, 4) - 1911}年整年（12 個工作表）</button>
+    </div>
+    <div class="chips">
+      <div class="chip"><span class="sub">${rocMonth(month)}名單</span><b>${rep.rows.length} 案</b></div>
+      <div class="chip"><span class="sub">有逾期或異常</span><b style=${bad ? 'color:var(--red)' : ''}>${bad} 案</b></div>
+      <div class="chip"><span class="sub">逾期但未填原因</span><b style=${missing ? 'color:var(--org)' : ''}>${missing} 案</b></div>
+      ${rep.summary.map(([k, v]) => html`<div class="chip"><span class="sub">${k}</span><b>${v}</b></div>`)}
+    </div>
+    ${rep.rows.length === 0 ? html`<div class="card empty">${rocMonth(month)}沒有符合條件的個案</div>` : html`
+    <div class="tw"><table class="grid">
+      <thead><tr>${rep.R.cols.map(c => html`<th>${c.h}${c.hint && html`<span class="hint">${c.hint}</span>`}</th>`)}</tr></thead>
+      <tbody>${rep.rows.map(r => html`<tr>${rep.R.cols.map(col => {
+        if (col.edit) {
+          const need = col.need && col.need(r) && !r.e[col.edit];
+          return html`<td class=${need ? 'need' : ''} title=${need ? '逾期，請填寫原因' : ''}>${col.type === 'date'
+            ? html`<${DateInput} value=${r.e[col.edit] || ''} onChange=${v => save(r, col.edit, v)} />`
+            : html`<${TextCell} value=${r.e[col.edit]} opts=${col.opts} onChange=${v => save(r, col.edit, v)} />`}</td>`;
+        }
+        const msg = col.bad ? col.bad(r) : '';
+        return html`<td class=${(col.num ? 'num ' : '') + (msg ? 'flag' : '')} title=${msg}>${cellText(col, r)}${msg && !col.num ? html` <span class="tag t-warn">${msg}</span>` : ''}</td>`;
+      })}</tr>`)}</tbody></table></div>
+    <div class="sub" style="margin-top:8px">紅色＝逾期或日期有問題（滑鼠移上去看說明）；橘色＝逾期但還沒填原因。工作天已排除週末、國定假日與颱風假（在「設定」維護）。</div>`}
+  </div>`;
+}
+
+// ================= 統計 =================
+function StatsView({ db, month }) {
+  const [sub, setSub] = useState('month');
+  const ms = useMemo(() => monthSummary(month, db), [db, month]);
+  const tc = useMemo(() => triggerCounts(month, db), [db, month]);
+  const us = useMemo(() => sub === 'month' ? null : unitStats(sub, month, db), [db, month, sub]);
+  const regs = [...Object.values(REGIONS), ...(ms.latest['未知'] ? ['未知'] : [])];
+  return html`<div class="page">
+    <div class="bar">
+      ${[['month', '月統計'], ['new', '新案服務單位統計'], ['reassess', '複評服務單位統計']].map(([k, l]) => html`<button class=${'tabbtn' + (sub === k ? ' on' : '')} onClick=${() => setSub(k)}>${l}</button>`)}
+      <span class="grow"></span>
+      ${sub !== 'month' && html`<button class="btn light" onClick=${() => exportUnitStats(sub, month.slice(0, 4), db)}>匯出${+month.slice(0, 4) - 1911}年整年 Excel</button>`}
+    </div>
+    ${sub === 'month' ? html`<div class="cols3">
+      <div class="card"><h3>${rocMonth(month)}各區案量</h3>
+        <table class="grid" style="width:100%"><thead><tr><th>地區</th><th>在案</th><th>新案</th><th>結案</th><th>最新總數</th></tr></thead>
+        <tbody>${regs.map(r => html`<tr><td>${r}</td><td class="num">${ms.inCase[r]}</td><td class="num">${ms.newCase[r]}</td><td class="num">${ms.closed[r]}</td><td class="num">${ms.latest[r]}</td></tr>`)}
+        <tr><td><b>總計</b></td><td class="num"><b>${ms.total.inCase}</b></td><td class="num"><b>${ms.total.newCase}</b></td><td class="num"><b>${ms.total.closed}</b></td><td class="num"><b>${ms.total.latest}</b></td></tr></tbody></table>
+        <div class="sub" style="margin-top:8px">在案＝上月最新總數；最新總數＝在案＋新案－結案 ${ms.check ? html`<span class="tag t-ok">核對相符</span>` : html`<span class="tag t-warn">核對不符</span>`}</div>
+        ${ms.anomaly.length > 0 && html`<div class="sub" style="margin-top:6px;color:var(--red)">有 ${ms.anomaly.length} 案的結案月份早於開案月份，未列入計算，請檢查：${ms.anomaly.join('、')}</div>`}</div>
+      <div class="card"><h3>在案來源（上月結轉）</h3>
+        ${['出備', '初評', '轉入', '未填'].map(k => html`<div class="kv"><span>(總)${k}</span><b>${ms.src[k]}</b></div>`)}
+        <div class="kv"><span>合計</span><b>${ms.src.出備 + ms.src.初評 + ms.src.轉入 + ms.src.未填}</b></div>
+        ${ms.src.未填 > 0 && html`<div class="sub" style="margin-top:6px">有 ${ms.src.未填} 案沒有填申請來源，請到總表補上。</div>`}</div>
+      <div class="card"><h3>${rocMonth(month)}觸發計數</h3>
+        ${Object.keys(tc).length === 0 ? html`<div class="sub">本月沒有觸發紀錄</div>` : Object.entries(tc).sort((a, b) => b[1] - a[1]).map(([k, v]) => html`<div class="kv"><span>${k}</span><b>${v}</b></div>`)}
+        <div class="sub" style="margin-top:6px">核銷金額待確認各觸發對應的單價後加入。</div></div>
+    </div>` : html`<div class="cols3">${CATS.filter(cat => us[cat.key]).map(cat => html`<div class="card"><h3>${cat.stat}</h3>
+        ${Object.entries(us[cat.key]).sort((a, b) => b[1] - a[1]).map(([u, n]) => html`<div class="kv"><span>${u}</span><b>${n}</b></div>`)}</div>`)}
+      ${Object.keys(us).length === 0 && html`<div class="card empty">${rocMonth(month)}沒有${sub === 'new' ? '新案' : '複評'}的服務單位資料</div>`}</div>`}
+  </div>`;
+}
+
+// ================= 匯入 =================
+function guessMonth(name) {
+  const s = String(name).replace(/\s/g, '');
+  let m = s.match(/(\d{3})年?(\d{1,2})月?/); if (m && +m[2] >= 1 && +m[2] <= 12) return `${+m[1] + 1911}-${pad(+m[2])}`;
+  m = s.match(/^(\d{1,2})月$/); if (m) return `${new Date().getFullYear()}-${pad(+m[1])}`;
+  return '';
+}
+function ImportView({ db, user, refresh, month }) {
+  const [wb, setWb] = useState(null), [fname, setFname] = useState(''), [sheet, setSheet] = useState(''), [mk, setMk] = useState(month);
+  const [busy, setBusy] = useState(false), [prog, setProg] = useState(''), [result, setResult] = useState(null);
+  const parsed = useMemo(() => {
+    if (!wb || !sheet) return null;
+    try { return parseSummarySheet(XLSX.utils.sheet_to_json(wb.Sheets[sheet], { header: 1, raw: true, defval: '' }), mk); }
+    catch (e) { return { error: e.message }; }
+  }, [wb, sheet, mk]);
+  const pick = async f => {
+    if (!f) return;
+    setResult(null); setFname(f.name);
+    try {
+      const w = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      setWb(w); const first = w.SheetNames[w.SheetNames.length - 1]; setSheet(first); const g = guessMonth(first); if (g) setMk(g);
+    } catch (e) { toast('無法讀取這個檔案：' + e.message, true); }
+  };
+  const byNo = useMemo(() => new Set([...db.cases.values()].map(c => c.caseNo)), [db]);
+  const run = async () => {
+    setBusy(true); const st = { created: 0, updated: 0, unchanged: 0, events: 0 };
+    try {
+      const rows = parsed.rows, B = 80;
+      for (let i = 0; i < rows.length; i += B) {
+        setProg(`匯入中… ${Math.min(i + B, rows.length)} / ${rows.length}`);
+        const r = await call('m', 'data:importBatch', { rows: rows.slice(i, i + B).map(x => ({ caseNo: x.caseNo, caseD: JSON.stringify(x.c), month: x.month, eventD: x.e ? JSON.stringify(x.e) : undefined })), by: user });
+        for (const k in st) st[k] += r[k];
+      }
+      await refresh(); setResult(st); toast('匯入完成');
+    } catch (e) { console.error(e); toast('匯入失敗：' + e.message, true); }
+    setProg(''); setBusy(false);
+  };
+  return html`<div class="page"><div class="card">
+    <h2>匯入個案總表 Excel</h2>
+    <div class="sub" style="margin-bottom:12px;line-height:1.8">一次匯入一個月份的工作表。系統用「編號」比對個案：已存在的會更新，新的會新增；Excel 空白的欄位不會把系統裡已填的資料清掉。<br/>有填「觸發」的列，會建立該月份的觸發紀錄（日期取該列的最新日期）。同一個月重複匯入不會產生重複資料。</div>
+    <div class="bar"><input type="file" accept=".xlsx,.xls" onChange=${e => pick(e.target.files[0])} />
+      ${wb && html`<select class="inp" value=${sheet} onChange=${e => { setSheet(e.target.value); setResult(null); const g = guessMonth(e.target.value); if (g) setMk(g); }}>${wb.SheetNames.map(n => html`<option value=${n}>${n}</option>`)}</select>
+        <label class="sub">這張工作表是 <input class="inp" type="month" value=${mk} onChange=${e => { if (e.target.value) { setMk(e.target.value); setResult(null); } }} /> 的總表</label>`}</div>
+    ${parsed && parsed.error && html`<div class="tag t-warn">${parsed.error}</div>`}
+    ${parsed && parsed.rows && html`<div>
+      <div class="chips">
+        <div class="chip"><span class="sub">個案列數</span><b>${parsed.rows.length}</b></div>
+        <div class="chip"><span class="sub">系統裡已有</span><b>${parsed.rows.filter(r => byNo.has(r.caseNo)).length}</b></div>
+        <div class="chip"><span class="sub">新個案</span><b>${parsed.rows.filter(r => !byNo.has(r.caseNo)).length}</b></div>
+        <div class="chip"><span class="sub">${rocMonth(mk)}有觸發</span><b>${parsed.rows.filter(r => r.e).length}</b></div>
+      </div>
+      ${parsed.unknownHeaders.length > 0 && html`<div class="sub" style="margin-bottom:8px">以下欄位系統不認得，不會匯入：${parsed.unknownHeaders.join('、')}</div>`}
+      <div class="tw" style="max-height:300px"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>觸發</th><th>照專評估</th><th>訪視</th><th>照專簽審</th><th>居服單位</th></tr></thead>
+        <tbody>${parsed.rows.slice(0, 30).map(r => html`<tr><td>${r.caseNo}</td><td>${r.c.name}</td><td>${r.e ? r.e.trigger : ''}</td><td>${roc(r.c.latest.assess)}</td><td>${roc(r.c.latest.visit)}</td><td>${roc(r.c.latest.approve)}</td><td>${r.c.services.home || ''}</td></tr>`)}</tbody></table></div>
+      ${parsed.rows.length > 30 && html`<div class="sub">只顯示前 30 列</div>`}
+      <div class="bar" style="margin-top:12px"><button class="btn" disabled=${busy || !parsed.rows.length} onClick=${run}>${busy ? prog : `匯入 ${parsed.rows.length} 列到 ${rocMonth(mk)}`}</button>
+        ${result && html`<span class="tag t-ok">完成：新增 ${result.created}、更新 ${result.updated}、未變動 ${result.unchanged}、觸發紀錄 ${result.events}</span>`}</div>
+    </div>`}
+    ${!wb && html`<div class="sub">${fname || '請選擇個案總表 Excel 檔'}</div>`}
+  </div></div>`;
+}
+
+// ================= 設定：服務單位、假日 =================
+function UnitsCard({ db, user, refresh }) {
+  const [edit, setEdit] = useState(null), [q, setQ] = useState('');
+  const save = async () => {
+    if (!String(edit.name || '').trim()) return toast('請填寫單位全名', true);
+    const d = { name: edit.name.trim(), short: (edit.short || '').trim(), aliases: String(edit.aliasesText ?? (edit.aliases || []).join('\n')).split(/\n/).map(s => s.trim()).filter(Boolean), cats: edit.cats || [] };
+    try { await call('m', 'data:saveUnit', { id: edit._id, d: JSON.stringify(d), by: user }); await refresh(); setEdit(null); toast('已儲存'); }
+    catch (e) { toast('儲存失敗：' + e.message, true); }
+  };
+  const del = async u => { try { await call('m', 'data:remove', { table: 'units', id: u._id, by: user }); await refresh(); } catch (e) { toast('刪除失敗：' + e.message, true); } };
+  // 找出資料裡出現、但還沒對應到單位主檔的名稱
+  const unmatched = useMemo(() => {
+    const known = new Set(db.units.map(u => u.short || u.name)), out = new Map();
+    const add = raw => { if (!raw) return; const r = db.resolveUnit(raw); if (!known.has(r)) out.set(r, (out.get(r) || 0) + 1); };
+    for (const c of db.cases.values()) Object.values(c.services || {}).forEach(add);
+    for (const e of db.events) Object.values(e.services || {}).forEach(add);
+    return [...out.entries()].sort((a, b) => b[1] - a[1]);
+  }, [db]);
+  const list = db.units.filter(u => !q || (u.name + u.short + (u.aliases || []).join()).includes(q)).sort((a, b) => (a.short || a.name).localeCompare(b.short || b.name, 'zh-Hant'));
+  return html`<div class="card">
+    <div class="bar"><h3 style="margin:0">服務單位主檔</h3><span class="sub">統一同一單位的不同寫法，統計時才不會被拆成兩個</span><span class="grow"></span>
+      <input class="inp" placeholder="搜尋" value=${q} onInput=${e => setQ(e.target.value)} /><button class="btn" onClick=${() => setEdit({ cats: [] })}>＋ 新增單位</button></div>
+    ${edit && html`<div class="card" style="background:#FDFBF6"><div class="form">
+      <label>單位全名<input class="inp" value=${edit.name || ''} onInput=${e => setEdit({ ...edit, name: e.target.value })} /></label>
+      <label>簡稱（報表顯示用）<input class="inp" value=${edit.short || ''} onInput=${e => setEdit({ ...edit, short: e.target.value })} /></label>
+      <label style="grid-column:1/-1">其他寫法（一行一個，例如舊名稱、少了「事業」兩字的寫法）<textarea class="inp" rows="3" value=${edit.aliasesText ?? (edit.aliases || []).join('\n')} onInput=${e => setEdit({ ...edit, aliasesText: e.target.value })}></textarea></label>
+      <div style="grid-column:1/-1"><span class="sub">服務類別</span><div class="hist" style="margin-top:4px">${CATS.map(cat => html`<button class=${(edit.cats || []).includes(cat.key) ? 'on' : ''}
+        onClick=${() => { const s = new Set(edit.cats || []); s.has(cat.key) ? s.delete(cat.key) : s.add(cat.key); setEdit({ ...edit, cats: [...s] }); }}>${cat.stat}</button>`)}</div></div>
+    </div><div class="bar" style="margin-top:10px"><button class="btn" onClick=${save}>儲存</button><button class="btn light" onClick=${() => setEdit(null)}>取消</button></div></div>`}
+    <div class="tw" style="max-height:420px"><table class="grid"><thead><tr><th>簡稱</th><th>全名</th><th>其他寫法</th><th>類別</th><th></th></tr></thead>
+      <tbody>${list.map(u => html`<tr><td><b>${u.short}</b></td><td>${u.name}</td><td class="sub">${(u.aliases || []).join('、')}</td><td>${(u.cats || []).map(k => CAT[k] ? CAT[k].stat : k).join('、')}</td>
+        <td><button class="btn sm light" onClick=${() => setEdit({ ...u })}>編輯</button> <${ConfirmBtn} label="刪除" onYes=${() => del(u)} /></td></tr>`)}</tbody></table></div>
+    ${unmatched.length > 0 && html`<div style="margin-top:10px"><div class="sub">資料裡出現、但還沒建立主檔的單位名稱（點一下建立）：</div>
+      <div class="hist" style="margin-top:6px">${unmatched.slice(0, 60).map(([n, k]) => html`<button onClick=${() => setEdit({ name: n, short: n.length <= 6 ? n : '', cats: [] })}>${n}（${k}）</button>`)}</div></div>`}
+  </div>`;
+}
+function HolidaysCard({ db, user, refresh }) {
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [nd, setNd] = useState(''), [kind, setKind] = useState('颱風假'), [name, setName] = useState('');
+  const list = db.holidayList.filter(h => h.date.startsWith(year));
+  const add = async items => {
+    try { await call('m', 'data:saveHolidays', { items: items.map(([date, kind, name]) => ({ date, d: JSON.stringify({ kind, name }) })), by: user }); await refresh(); toast('已儲存'); }
+    catch (e) { toast('儲存失敗：' + e.message, true); }
+  };
+  const del = async h => { try { await call('m', 'data:remove', { table: 'holidays', id: h._id, by: user }); await refresh(); } catch (e) { toast('刪除失敗：' + e.message, true); } };
+  return html`<div class="card">
+    <div class="bar"><h3 style="margin:0">假日日曆</h3><span class="sub">計算工作天時會跳過週末和這裡的日期；補班日會算成工作天</span><span class="grow"></span>
+      <select class="inp" value=${year} onChange=${e => setYear(e.target.value)}>${[2025, 2026, 2027].map(y => html`<option value=${y}>${y - 1911}年</option>`)}</select>
+      ${year === '2026' && html`<button class="btn light" onClick=${() => add(HOLIDAYS_2026.map(([d, n]) => [d, '假日', n]))}>載入115年國定假日</button>`}</div>
+    <div class="bar"><${DateInput} value=${nd} onChange=${setNd} />
+      <select class="inp" value=${kind} onChange=${e => setKind(e.target.value)}>${['颱風假', '假日', '補班'].map(k => html`<option value=${k}>${k}</option>`)}</select>
+      <input class="inp" placeholder="說明（例：康芮颱風）" value=${name} onInput=${e => setName(e.target.value)} />
+      <button class="btn" disabled=${!nd} onClick=${async () => { await add([[nd, kind, name]]); setNd(''); setName(''); }}>加入</button></div>
+    ${list.length === 0 ? html`<div class="sub">${+year - 1911}年還沒有設定假日</div>` : html`<table class="grid"><thead><tr><th>日期</th><th>星期</th><th>類型</th><th>說明</th><th></th></tr></thead>
+      <tbody>${list.map(h => html`<tr><td>${roc(h.date)}</td><td>${WDN[new Date(h.date + 'T00:00:00').getDay()]}</td>
+        <td><span class=${'tag ' + (h.kind === '補班' ? 't-org' : h.kind === '颱風假' ? 't-new' : 't-ev')}>${h.kind}</span></td><td>${h.name}</td>
+        <td><${ConfirmBtn} label="刪除" onYes=${() => del(h)} /></td></tr>`)}</tbody></table>`}
+  </div>`;
+}
+
+// ================= 主畫面 =================
+function Login({ onDone }) {
+  const [pw, setPw] = useState(''), [msg, setMsg] = useState('請輸入團隊共用密碼'), [busy, setBusy] = useState(false);
+  const go = async () => { if (!pw) return; setBusy(true); try { await signIn(pw); onDone(); } catch (e) { setMsg(e.message || '登入失敗'); } setBusy(false); };
+  if (!CONFIGURED) return html`<div class="gate"><div class="box"><div style="font-size:18px;font-weight:700;color:var(--green)">評鑑時效追蹤</div>
+    <div class="sub" style="margin-top:8px;line-height:1.7">尚未設定資料庫。<br/>請在 eval.html 裡把 EVAL_URL 換成新 Convex 專案的網址。</div></div></div>`;
+  return html`<div class="gate"><div class="box">
+    <div style="font-size:18px;font-weight:700;color:var(--green)">評鑑時效追蹤</div>
+    <div class="sub" style="margin-top:6px">${msg}</div>
+    <input type="password" value=${pw} onInput=${e => setPw(e.target.value)} onKeyDown=${e => e.key === 'Enter' && go()} placeholder="密碼" />
+    <button class="btn" disabled=${busy} onClick=${go}>${busy ? '登入中…' : '登入'}</button></div></div>`;
+}
+
+function App() {
+  const [authed, setAuthed] = useState(false), [checking, setChecking] = useState(true);
+  const [user, setUser] = useState(() => { try { return localStorage.getItem('caUserName') || ''; } catch (e) { return ''; } });
+  const [tab, setTab] = useState('summary'), [month, setMonth] = useState(todayMonth());
+  const [db, setDb] = useState(null), [loading, setLoading] = useState(false), [toastMsg, setToastMsg] = useState(null);
+  toastFn = (msg, err) => { setToastMsg({ msg, err }); setTimeout(() => setToastMsg(null), err ? 6000 : 2500); };
+
+  const refresh = async () => {
+    setLoading(true);
+    try { await syncAll(); setDb(buildDb()); }
+    catch (e) { console.error(e); toast('同步失敗：' + (e.message || e), true); }
+    setLoading(false);
+  };
+  useEffect(() => { (async () => {
+    if (CONFIGURED && conn.hasSaved() && await conn.fetchToken({ forceRefreshToken: false })) setAuthed(true);
+    setChecking(false);
+  })(); }, []);
+  useEffect(() => { if (!authed) return; (async () => { await loadCache(); if (store.since.cases) setDb(buildDb()); await refresh(); })(); }, [authed]);
+  // 切回這個分頁時，抓別人剛改過的資料（只抓變動的部分）
+  useEffect(() => {
+    if (!authed) return;
+    const f = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', f);
+    const t = setInterval(f, 5 * 60 * 1000);
+    return () => { document.removeEventListener('visibilitychange', f); clearInterval(t); };
+  }, [authed]);
+  const logout = async () => { try { localStorage.removeItem(REFRESH_KEY); } catch (e) { } await IDB.clear(); location.reload(); };
+
+  if (checking) return html`<div class="empty">載入中…</div>`;
+  if (!authed) return html`<${Login} onDone=${() => setAuthed(true)} />`;
+  if (!user) return html`<div class="gate"><div class="box"><div style="font-weight:700;color:var(--green)">你是哪一位？</div>
+    <div class="sub" style="margin-top:6px">修改紀錄會記下這個名字</div>
+    <input id="nm" placeholder="請輸入你的名字" onKeyDown=${e => { if (e.key === 'Enter' && e.target.value.trim()) { localStorage.setItem('caUserName', e.target.value.trim()); setUser(e.target.value.trim()); } }} />
+    <button class="btn" onClick=${() => { const v = document.getElementById('nm').value.trim(); if (v) { localStorage.setItem('caUserName', v); setUser(v); } }}>確定</button></div></div>`;
+
+  const TABS = [['summary', '總表'], ['report', '評鑑報表'], ['stats', '統計'], ['import', '匯入'], ['settings', '設定']];
+  return html`<div>
+    <div class="top">
+      <span class="brand">評鑑時效追蹤<a href=${PORTAL_URL}>← 回入口網頁</a></span>
+      ${TABS.map(([k, l]) => html`<button class=${'tabbtn' + (tab === k ? ' on' : '')} onClick=${() => setTab(k)}>${l}</button>`)}
+      <span class="grow"></span>
+      <label class="sub">月份 <input class="inp" type="month" value=${month} onChange=${e => e.target.value && setMonth(e.target.value)} /></label>
+      <button class="btn light" disabled=${loading} onClick=${refresh}>${loading ? '同步中…' : '重新整理'}</button>
+      <span class="sub">${user}</span><button class="btn sm gray" onClick=${logout} title="登出並清除這台電腦的暫存資料">登出</button>
+    </div>
+    ${!db ? html`<div class="empty">第一次開啟，正在下載資料…</div>`
+      : tab === 'summary' ? html`<${SummaryView} db=${db} month=${month} user=${user} refresh=${refresh} />`
+      : tab === 'report' ? html`<${ReportView} db=${db} month=${month} user=${user} refresh=${refresh} />`
+      : tab === 'stats' ? html`<${StatsView} db=${db} month=${month} />`
+      : tab === 'import' ? html`<${ImportView} db=${db} month=${month} user=${user} refresh=${refresh} />`
+      : html`<div class="page"><${HolidaysCard} db=${db} user=${user} refresh=${refresh} /><${UnitsCard} db=${db} user=${user} refresh=${refresh} /></div>`}
+    ${toastMsg && html`<div class="toast" style=${'background:' + (toastMsg.err ? 'var(--red)' : 'var(--green)')}>${toastMsg.msg}</div>`}
+  </div>`;
+}
+render(html`<${App} />`, document.getElementById('app'));
+</script>
+</body>
+</html>
