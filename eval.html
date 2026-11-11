@@ -1115,6 +1115,18 @@ function publishRows(month, db) {
   const b = billing(month, db), c = k => b.total.c[k] || 0;
   add('核銷件數', [['AA01(1700)', c('1700')], ['AA02(400)', c('400')], ['AA02(360)', c('360')], ['吃不到錢', c('none')]]);
   add('核銷金額', [['AA01(1700)', c('1700') * 1700], ['AA02(400)', c('400') * 400], ['AA02(360)', c('360') * 360], ['總計', b.total.amt]]);
+  // ---- 給 Google 試算表「月報範本」用：派案單位、計畫類型、統計表（依地區） ----
+  const pu = {};
+  for (const id of newIdList) {
+    const cs = db.cases.get(id), e = S.newEvents.find(x => x.caseId === id), units = caseUnits(e, cs, db.resolveUnit);
+    for (const [k, u] of Object.entries(units)) if (u !== '（未填單位）') { const key = u + catWord(k); pu[key] = (pu[key] || 0) + 1; }
+    if ((codeCounts(e.codes || latestCodes(db, cs, month)).輔具 || 0) > 0) pu['輔具'] = (pu['輔具'] || 0) + 1;
+  }
+  add('派案單位', Object.entries(pu).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant')));
+  const src = {}; for (const e of db.events) if (e.month === month && db.cases.has(e.caseId)) { const k = sourceKind(e.trigger); if (k) src[k] = (src[k] || 0) + 1; }
+  add('計畫類型', [['初評', src.初評 || 0], ['出備', src.出備 || 0], ['複評', src.複評 || 0], ['出→初', src['出→初'] || 0], ['AA01', src.AA01 || 0], ['AA02', c('400') + c('360')]]);
+  const st = monthlyReport(month, db).stat, COLS = ['初評', '出備', '重開案', '轉入', '在案', '結案', '轉出', '居家', '交通', '沐浴車', '居喘'];
+  for (const r of st.slice(3, 3 + RG4.length)) COLS.forEach((col, j) => rows.push(['統計表', `${r[0]}-${col}`, +r[j + 1] || 0]));
   return rows.map(([cat, k, v]) => [cat, k, v]);
 }
 
@@ -2164,7 +2176,7 @@ function CaseView({ d }) {
 
 // ================= 圓餅圖（跟 Google 試算表 / Excel 連線用同一份數字 publishRows） =================
 const PIE_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
-const PIE_CATS = ['個案狀態', '地區', '性別', '身分別', '年齡', 'CMS級數', '轉介樂臨', '核銷件數'];
+const PIE_CATS = ['派案單位', '轉介樂臨', '計畫類型', '個案狀態', '地區', '性別', '身分別', '年齡', 'CMS級數', '核銷件數'];
 function PieChart({ title, items }) {
   const total = items.reduce((a, [, v]) => a + (+v || 0), 0), R = 70, C = 80;
   let ang = -Math.PI / 2;
@@ -2186,6 +2198,8 @@ function PieChart({ title, items }) {
 }
 function PieBoard({ rows }) {
   const by = {}; for (const [c, k, v] of rows) (by[c] = by[c] || []).push([k, v]);
+  // 超過 8 項（例如派案單位）：前 7 項照列，其餘併成「其他」，顏色才不會重複
+  for (const c of Object.keys(by)) if (by[c].length > 8) { const it = [...by[c]].sort((a, b) => b[1] - a[1]); by[c] = [...it.slice(0, 7), ['其他', it.slice(7).reduce((a, x) => a + (+x[1] || 0), 0)]]; }
   return html`<div class="pies">${PIE_CATS.filter(c => by[c]).map(c => html`<${PieChart} title=${c} items=${by[c]} />`)}</div>`;
 }
 
@@ -2257,6 +2271,13 @@ function StatReport({ db, month, user, refresh, rkey: key, picker }) {
         XLSX.writeFile(wb, `${yy}年新案CMS統計.xlsx`);
       } else if (key === 'statMonthly') {
         const r = monthlyReport(month, db), wb = XLSX.utils.book_new();
+        // 第一個工作表「圓餅圖」：派案單位、樂臨派案服務、計畫類型（跟原本月報同位置）
+        const pr = publishRows(month, db), get = c => pr.filter(x => x[0] === c).map(x => [x[1], x[2]]), mm = `${+month.slice(5)}月`;
+        const A = [], units = get('派案單位'), nU = Math.max(12, Math.min(units.length, 28));
+        for (let i = 0; i < nU; i++) A[2 + i] = [i ? '' : mm, ...(units[i] || ['', ''])];
+        const svc = Object.fromEntries(get('轉介樂臨')); [['樂臨居家', '居家'], ['樂臨交通', '交通'], ['樂臨沐浴車', '沐浴車'], ['樂臨喘息', '居喘']].forEach(([l, k], i) => A[31 + i] = [i ? '' : mm, l, svc[k] || 0]);
+        const plan = get('計畫類型'); plan.forEach(([k, v], i) => A[52 + i] = [i ? '' : mm, k, v]); A[58] = ['', '總計', plan.reduce((a, [, v]) => a + v, 0)];
+        XLSX.utils.book_append_sheet(wb, sheetFromAoa(fillRows(A), [8, 18, 8], [{ s: { r: 2, c: 0 }, e: { r: 2 + nU - 1, c: 0 } }, { s: { r: 31, c: 0 }, e: { r: 34, c: 0 } }, { s: { r: 52, c: 0 }, e: { r: 58, c: 0 } }]), '圓餅圖');
         XLSX.utils.book_append_sheet(wb, sheetFromAoa(fillRows(r.stat), [12, 8, 8, 8, 8, 8, 8, 8, 12, 12, 12, 12]), '統計表');
         XLSX.utils.book_append_sheet(wb, sheetFromAoa(fillRows(r.analysis), [12, 8, 10]), '分析圖');
         XLSX.writeFile(wb, `${rocMonth(month)}月報.xlsx`);
