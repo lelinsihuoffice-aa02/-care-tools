@@ -725,21 +725,24 @@ const closureKey = (idNo, sysClose, name) => `${String(idNo || name || '').trim(
 const isDeath = r => /死亡/.test(r || '');
 // 結案清單 = 系統裡兩個結案日期都填了的個案 ＋ 匯入／補登的結案紀錄（同一人同一天系統結案只算一次）
 function closureList(db) {
-  const out = [], keys = new Set();
+  const out = [], keys = new Set(), info = db.info || caseMonths(db);
   for (const c of db.cases.values()) {
-    if (!closedOffMonth(c)) continue;
+    // 已結案（兩個日期都填）＋ 辦理中（有結案觸發或填了其中一個日期，但系統結案日還沒填）
+    const x = info.get(c._id) || {};
+    if (!closedOffMonth(c) && !c.aEnd && !c.sysClose && !x.close) continue;
     const k = closureKey(c.idNo, c.sysClose, c.name); keys.add(k);
     let codes = '', best = '';
     for (const e of db.events) if (e.caseId === c._id && e.codes && e.month >= best) { best = e.month; codes = e.codes; }
-    out.push({ from: 'case', id: c._id, caseNo: c.caseNo, name: c.name || '', idNo: c.idNo || '', aEnd: c.aEnd, sysClose: c.sysClose,
+    out.push({ from: 'case', order: Infinity, id: c._id, caseNo: c.caseNo, name: c.name || '', idNo: c.idNo || '', aEnd: c.aEnd, sysClose: c.sysClose,
       reason: normReason(c.closeReason), area: regionOf(c.caseNo), codes });
   }
   for (const x of (db.closures || [])) {
     if (keys.has(x.key)) continue;
-    out.push({ from: 'import', id: x._id, key: x.key, caseNo: '', name: x.name || '', idNo: x.idNo || '', aEnd: x.aEnd || '', sysClose: x.sysClose || '',
+    out.push({ from: 'import', order: typeof x.order === 'number' ? x.order : Infinity, id: x._id, key: x.key, caseNo: '', name: x.name || '', idNo: x.idNo || '', aEnd: x.aEnd || '', sysClose: x.sysClose || '',
       reason: normReason(x.reason), area: normArea(x.area), codes: x.codes || '' });
   }
-  return out.sort((a, b) => (b.sysClose || '').localeCompare(a.sysClose || '') || a.name.localeCompare(b.name, 'zh-Hant'));
+  // 預設照 Excel 原本的列順序；系統裡新結案的排在後面（依系統結案日期由舊到新）
+  return out.sort((a, b) => (a.order - b.order) || (a.sysClose || '').localeCompare(b.sysClose || '') || a.name.localeCompare(b.name, 'zh-Hant'));
 }
 // 依地區、結案原因統計
 function closureStats(list) {
@@ -769,6 +772,7 @@ function parseClosureSheet(aoa) {
       d[k] = k === 'aEnd' || k === 'sysClose' ? parseDate(typeof v === 'string' ? v.trim() : v) : String(v).trim(); });
     if (!d.name && !d.idNo && !d.sysClose && !d.reason) continue;
     d.reason = normReason(d.reason); d.area = normArea(d.area);
+    d.order = i;   // 記住在 Excel 裡的列順序
     // 沒有姓名和身分證時無法辨識是誰，改用整列內容＋列號當 key（同一個檔案重複匯入仍不會重複）
     const key = d.idNo || d.name ? closureKey(d.idNo, d.sysClose, d.name) : `?${i}|${d.sysClose}|${d.aEnd}|${d.area}|${d.reason}|${d.codes}`;
     if (seen.has(key)) continue; seen.add(key);
@@ -1215,33 +1219,41 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
 function ClosedView({ db, user, refresh, openCase }) {
   const all = useMemo(() => closureList(db), [db]);
   const years = useMemo(() => [...new Set(all.map(x => (x.sysClose || '').slice(0, 4)).filter(Boolean))].sort().reverse(), [all]);
-  const [yr, setYr] = useState(''), [rg, setRg] = useState(''), [rs, setRs] = useState(''), [q, setQ] = useState('');
+  const [yr, setYr] = useState(''), [rg, setRg] = useState(''), [rs, setRs] = useState(''), [q, setQ] = useState(''), [sortBy, setSortBy] = useState('excel');
   const [edit, setEdit] = useState(null), [imp, setImp] = useState(false);
-  const byYear = yr ? all.filter(x => (x.sysClose || '').startsWith(yr)) : all;
+  const sorted = sortBy === 'excel' ? all : [...all].sort((a, b) => (b.sysClose || '').localeCompare(a.sysClose || ''));
+  // 選年度時，還沒填系統結案日的也一起列出（不然會找不到）
+  const byYear = yr ? sorted.filter(x => !x.sysClose || x.sysClose.startsWith(yr)) : sorted;
+  const [onlyPending, setOnlyPending] = useState(false);
+  const nPending = byYear.filter(x => !x.sysClose).length;
   const st = useMemo(() => closureStats(byYear), [byYear]);
-  const list = byYear.filter(x => (!rg || x.area === rg) && (!rs || (x.reason || '未填') === rs) &&
+  const list = byYear.filter(x => (!onlyPending || !x.sysClose) && (!rg || x.area === rg) && (!rs || (x.reason || '未填') === rs) &&
     (!q || x.name.includes(q) || x.idNo.toUpperCase().includes(q.toUpperCase()) || x.caseNo.includes(q)));
   const noReason = byYear.filter(x => !x.reason).length;
   return html`<div>
     <div class="bar">
       <select class="inp" value=${yr} onChange=${e => setYr(e.target.value)}><option value="">全部年度</option>${years.map(y => html`<option value=${y}>${+y - 1911}年</option>`)}</select>
       <input class="inp" style="width:200px" placeholder="搜尋姓名、身分證、編號" value=${q} onInput=${e => setQ(e.target.value)} />
+      <span class="ampm"><button class=${sortBy === 'excel' ? 'on' : ''} onClick=${() => setSortBy('excel')}>原本順序</button><button class=${sortBy === 'date' ? 'on' : ''} onClick=${() => setSortBy('date')}>依結案日期</button></span>
       <span class="grow"></span>
       <button class="btn light" onClick=${() => setImp(true)}>匯入結案 Excel</button>
       <button class="btn light" onClick=${() => setEdit({})}>＋ 補登結案紀錄</button>
       <button class="btn" disabled=${!byYear.length} onClick=${() => exportClosures(byYear, yr)}>匯出結案報表</button>
     </div>
+    <div class="trigbar"><span class="sub">狀態：</span>
+      <button class=${!onlyPending ? 'on' : ''} onClick=${() => setOnlyPending(false)}>全部<b>${byYear.length}</b></button>
+      <button class=${onlyPending ? 'on' : ''} onClick=${() => setOnlyPending(!onlyPending)}>未填系統結案日<b>${nPending}</b></button></div>
     <div class="trigbar"><span class="sub">地區：</span>${[['', '全部', byYear.length], ...Object.values(REGIONS).map(r => [r, r, st.byReg[r] || 0])].map(([k, l, n]) =>
       html`<button class=${rg === k ? 'on' : ''} onClick=${() => setRg(rg === k ? '' : k)}>${l}<b>${n}</b></button>`)}</div>
     <div class="trigbar"><span class="sub">原因：</span>${st.reasons.map(k =>
       html`<button class=${rs === k ? 'on' : ''} onClick=${() => setRs(rs === k ? '' : k)}>${k}<b>${st.byReason[k]}</b></button>`)}</div>
     ${noReason > 0 && html`<div class="sub" style="margin-bottom:8px;color:var(--org)">有 ${noReason} 筆沒有填結案原因（點「未填」可以列出來）。</div>`}
-    <div class="sub" style="margin-bottom:8px">系統裡 A結束服務日期和系統結案日期都填好的個案會自動列在這裡（來源「系統」），舊資料用「匯入結案 Excel」帶入（來源「匯入」）。</div>
+    <div class="sub" style="margin-bottom:8px">系統裡辦理結案的個案會自動列在這裡（來源「系統」，系統結案日還沒填的也會列出，標「未填」），舊資料用「匯入結案 Excel」帶入（來源「匯入」）。</div>
     ${list.length === 0 ? html`<div class="card empty">沒有符合條件的結案紀錄</div>` : html`
     <div class="tw"><table class="grid">
       <thead><tr><th>姓名</th><th>身分證號</th><th>編號</th><th>A個管結案</th><th>系統結案</th><th>結案原因</th><th>居住地</th><th>服務代碼</th><th>來源</th></tr></thead>
       <tbody>${list.slice(0, 1000).map(x => html`<tr class="click" onClick=${() => x.from === 'case' ? openCase(x.id) : setEdit(x)}>
-        <td><b>${x.name}</b></td><td>${x.idNo}</td><td>${x.caseNo}</td><td>${roc(x.aEnd)}</td><td>${roc(x.sysClose)}</td>
+        <td><b>${x.name}</b></td><td>${x.idNo}</td><td>${x.caseNo}</td><td>${x.aEnd ? roc(x.aEnd) : html`<span class="tag t-org">未填</span>`}</td><td>${x.sysClose ? roc(x.sysClose) : html`<span class="tag t-org">未填</span>`}</td>
         <td>${x.reason ? html`<span class=${'tag ' + (isDeath(x.reason) ? 't-close' : 't-ev')}>${x.reason}</span>` : html`<span class="tag t-org">未填</span>`}</td>
         <td>${x.area}</td><td style="max-width:260px;overflow:hidden;text-overflow:ellipsis" title=${x.codes}>${x.codes}</td>
         <td><span class=${'tag ' + (x.from === 'case' ? 't-new' : 't-close')}>${x.from === 'case' ? '系統' : '匯入'}</span></td></tr>`)}</tbody></table></div>
@@ -1259,7 +1271,6 @@ function ClosureEditor({ rec, user, refresh, onClose }) {
   const [busy, setBusy] = useState(false);
   const save = async () => {
     if (!d.name.trim() && !d.idNo.trim()) return toast('請填寫姓名或身分證號', true);
-    if (!d.sysClose) return toast('請填寫系統結案日期', true);
     setBusy(true);
     try { await call('m', 'data:saveClosure', { id: rec.id, key: closureKey(d.idNo, d.sysClose, d.name), d: JSON.stringify(d), by: user }); await refresh(); toast('已儲存'); onClose(); }
     catch (e) { toast('儲存失敗：' + e.message, true); }
@@ -1299,7 +1310,7 @@ function ClosureImport({ db, user, refresh, onClose }) {
   return html`<div class="modal" onClick=${e => e.target === e.currentTarget && onClose()}><div class="drawer" style="width:min(820px,100%)">
     <div class="bar"><h2 style="margin:0">匯入結案 Excel</h2><span class="grow"></span><button class="btn light" onClick=${onClose}>關閉</button></div>
     <div class="card">
-      <div class="sub" style="margin-bottom:10px;line-height:1.8">請選「結案總表」這一張（各區的工作表內容重複，不用匯入）。用「身分證號＋系統結案日期」比對，重複匯入不會產生重複資料，之後有新增可以整份再匯入一次。</div>
+      <div class="sub" style="margin-bottom:10px;line-height:1.8">會照 Excel 原本的列順序排列。請選「結案總表」這一張（各區的工作表內容重複，不用匯入）。用「身分證號＋系統結案日期」比對，重複匯入不會產生重複資料，之後有新增可以整份再匯入一次。</div>
       <div class="bar"><input type="file" accept=".xlsx,.xls" onChange=${e => pick(e.target.files[0])} />
         ${wb && html`<select class="inp" value=${sheet} onChange=${e => { setSheet(e.target.value); setResult(null); }}>${wb.SheetNames.map(n => html`<option value=${n}>${n}</option>`)}</select>`}</div>
       ${parsed && parsed.error && html`<div class="tag t-warn">${parsed.error}</div>`}
