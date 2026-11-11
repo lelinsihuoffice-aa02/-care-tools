@@ -724,22 +724,42 @@ const normReason = r => {
 const closureKey = (idNo, sysClose, name) => `${String(idNo || name || '').trim().toUpperCase()}|${sysClose || ''}`;
 const isDeath = r => /死亡/.test(r || '');
 // 結案清單 = 系統裡兩個結案日期都填了的個案 ＋ 匯入／補登的結案紀錄（同一人同一天系統結案只算一次）
+// 同一人：有身分證比身分證，沒有就比姓名
+const personKey = (idNo, name) => { const id = String(idNo || '').replace(/\s/g, '').toUpperCase(); return id ? 'id:' + id : name ? 'nm:' + String(name).replace(/\s/g, '') : ''; };
+// 匯入紀錄和系統個案是不是同一次結案：系統結案日相同最準，其次 A結束日相同，再其次其中一邊日期還沒填、且 A結束日相差 90 天內
+function sameClosureScore(s, x) {
+  if (s.sysClose && x.sysClose) return s.sysClose === x.sysClose ? 3 : 0;
+  if (s.aEnd && x.aEnd && s.aEnd === x.aEnd) return 2;
+  if (!s.aEnd || !x.aEnd) return 1;
+  return Math.abs(calDays(s.aEnd, x.aEnd)) <= 90 ? 1 : 0;
+}
 function closureList(db) {
-  const out = [], keys = new Set(), info = db.info || caseMonths(db);
+  const out = [], info = db.info || caseMonths(db), byPerson = new Map();
   for (const c of db.cases.values()) {
     // 已結案（兩個日期都填）＋ 辦理中（有結案觸發或填了其中一個日期，但系統結案日還沒填）
     const x = info.get(c._id) || {};
     if (!closedOffMonth(c) && !c.aEnd && !c.sysClose && !x.close) continue;
-    const k = closureKey(c.idNo, c.sysClose, c.name); keys.add(k);
     let codes = '', best = '';
     for (const e of db.events) if (e.caseId === c._id && e.codes && e.month >= best) { best = e.month; codes = e.codes; }
-    out.push({ from: 'case', order: Infinity, id: c._id, caseNo: c.caseNo, name: c.name || '', idNo: c.idNo || '', aEnd: c.aEnd, sysClose: c.sysClose,
-      reason: normReason(c.closeReason), area: regionOf(c.caseNo), codes });
+    const row = { from: 'case', order: Infinity, id: c._id, caseNo: c.caseNo, name: c.name || '', idNo: c.idNo || '', aEnd: c.aEnd || '', sysClose: c.sysClose || '',
+      reason: normReason(c.closeReason), area: regionOf(c.caseNo), codes };
+    out.push(row);
+    const pk = personKey(row.idNo, row.name);
+    if (pk) (byPerson.get(pk) || byPerson.set(pk, []).get(pk)).push(row);
   }
+  // 匯入紀錄：同一人同一次結案已經在系統裡 → 合併成一列（位置照 Excel，缺的欄位互相補），不重複列出
   for (const x of (db.closures || [])) {
-    if (keys.has(x.key)) continue;
-    out.push({ from: 'import', order: typeof x.order === 'number' ? x.order : Infinity, id: x._id, key: x.key, caseNo: '', name: x.name || '', idNo: x.idNo || '', aEnd: x.aEnd || '', sysClose: x.sysClose || '',
-      reason: normReason(x.reason), area: normArea(x.area), codes: x.codes || '' });
+    const imp = { from: 'import', order: typeof x.order === 'number' ? x.order : Infinity, id: x._id, key: x.key, caseNo: '', name: x.name || '', idNo: x.idNo || '',
+      aEnd: x.aEnd || '', sysClose: x.sysClose || '', reason: normReason(x.reason), area: normArea(x.area), codes: x.codes || '' };
+    const cands = (byPerson.get(personKey(imp.idNo, imp.name)) || []).filter(s => !s.importId).map(s => [sameClosureScore(s, imp), s]).filter(([sc]) => sc > 0).sort((a, b) => b[0] - a[0]);
+    if (cands.length) {
+      const s = cands[0][1];
+      s.from = 'both'; s.importId = imp.id; s.order = imp.order;
+      for (const k of ['aEnd', 'sysClose', 'reason', 'codes']) if (!s[k] && imp[k]) s[k] = imp[k];
+      if (!s.area && imp.area) s.area = imp.area;
+      continue;
+    }
+    out.push(imp);
   }
   // 預設照 Excel 原本的列順序；系統裡新結案的排在後面（依系統結案日期由舊到新）
   return out.sort((a, b) => (a.order - b.order) || (a.sysClose || '').localeCompare(b.sysClose || '') || a.name.localeCompare(b.name, 'zh-Hant'));
@@ -1252,11 +1272,11 @@ function ClosedView({ db, user, refresh, openCase }) {
     ${list.length === 0 ? html`<div class="card empty">沒有符合條件的結案紀錄</div>` : html`
     <div class="tw"><table class="grid">
       <thead><tr><th>姓名</th><th>身分證號</th><th>編號</th><th>A個管結案</th><th>系統結案</th><th>結案原因</th><th>居住地</th><th>服務代碼</th><th>來源</th></tr></thead>
-      <tbody>${list.slice(0, 1000).map(x => html`<tr class="click" onClick=${() => x.from === 'case' ? openCase(x.id) : setEdit(x)}>
+      <tbody>${list.slice(0, 1000).map(x => html`<tr class="click" onClick=${() => x.from === 'import' ? setEdit(x) : openCase(x.id)}>
         <td><b>${x.name}</b></td><td>${x.idNo}</td><td>${x.caseNo}</td><td>${x.aEnd ? roc(x.aEnd) : html`<span class="tag t-org">未填</span>`}</td><td>${x.sysClose ? roc(x.sysClose) : html`<span class="tag t-org">未填</span>`}</td>
         <td>${x.reason ? html`<span class=${'tag ' + (isDeath(x.reason) ? 't-close' : 't-ev')}>${x.reason}</span>` : html`<span class="tag t-org">未填</span>`}</td>
         <td>${x.area}</td><td style="max-width:260px;overflow:hidden;text-overflow:ellipsis" title=${x.codes}>${x.codes}</td>
-        <td><span class=${'tag ' + (x.from === 'case' ? 't-new' : 't-close')}>${x.from === 'case' ? '系統' : '匯入'}</span></td></tr>`)}</tbody></table></div>
+        <td><span class=${'tag ' + (x.from === 'import' ? 't-close' : 't-new')} title=${x.from === 'both' ? '匯入的紀錄和系統個案是同一次結案，已合併成一列' : ''}>${x.from === 'case' ? '系統' : x.from === 'both' ? '系統＋匯入' : '匯入'}</span></td></tr>`)}</tbody></table></div>
     ${list.length > 1000 && html`<div class="sub">只顯示前 1000 筆，請用年度或地區篩選</div>`}`}
     ${edit && html`<${ClosureEditor} rec=${edit} user=${user} refresh=${refresh} onClose=${() => setEdit(null)} />`}
     ${imp && html`<${ClosureImport} db=${db} user=${user} refresh=${refresh} onClose=${() => setImp(false)} />`}
