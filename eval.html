@@ -109,6 +109,10 @@
   .fz button{border:none;background:#fff;color:var(--green);font-weight:700;padding:8px 14px;font-size:16px;cursor:pointer}
   .fz .lv{font-size:13px;color:var(--sub);min-width:46px;text-align:center;cursor:pointer}
   @media (max-width:700px){.page{padding:8px}.top{gap:4px}.tabbtn{padding:6px 8px}}
+.pies{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:16px}
+.pie{padding:12px 14px}.pie-h{font-weight:700;display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.pie-b{display:flex;gap:10px;align-items:center}.pie-b svg{flex:none}.pie-l{border-collapse:collapse;font-size:13px;flex:1;min-width:0}
+.pie-l td{padding:2px 4px;white-space:nowrap}.pie-l i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 </style>
 </head>
 <body>
@@ -2056,6 +2060,33 @@ function AoaTable({ aoa, maxCols }) {
   return html`<div class="tw" style="max-height:none"><table class="grid">${rows.map((r, i) => html`<tr>${Array.from({ length: n }, (_, j) => {
     const v = r[j] ?? ''; return html`<td class=${typeof v === 'number' ? 'num' : ''} style=${i === 0 || /總計|合計/.test(r[0]) ? 'font-weight:700' : ''}>${typeof v === 'number' && v > 0 && v < 1 && !Number.isInteger(v) ? Math.round(v * 1000) / 10 + '%' : String(v)}</td>`; })}</tr>`)}</table></div>`;
 }
+// ================= 圓餅圖（跟 Google 試算表 / Excel 連線用同一份數字 publishRows） =================
+const PIE_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+const PIE_CATS = ['個案狀態', '地區', '性別', '身分別', '年齡', 'CMS級數', '轉介樂臨', '核銷件數'];
+function PieChart({ title, items }) {
+  const total = items.reduce((a, [, v]) => a + (+v || 0), 0), R = 70, C = 80;
+  let ang = -Math.PI / 2;
+  const pt = a => `${(C + R * Math.cos(a)).toFixed(2)},${(C + R * Math.sin(a)).toFixed(2)}`;
+  const pct = v => total ? Math.round(v / total * 1000) / 10 : 0;
+  const slices = items.map(([k, v], i) => {
+    v = +v || 0; const a0 = ang, a1 = ang + (total ? v / total : 0) * Math.PI * 2; ang = a1;
+    if (!v) return null;
+    const tip = `${k}：${v}（${pct(v)}%）`, col = PIE_COLORS[i % PIE_COLORS.length];
+    if (v === total) return html`<circle cx=${C} cy=${C} r=${R} fill=${col}><title>${tip}</title></circle>`;
+    return html`<path d=${`M${C},${C} L${pt(a0)} A${R},${R} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${pt(a1)} Z`} fill=${col} stroke="#fff" stroke-width="2" stroke-linejoin="round"><title>${tip}</title></path>`;
+  });
+  return html`<div class="card pie">
+    <div class="pie-h">${title}<span class="sub">共 ${total}</span></div>
+    ${total ? html`<div class="pie-b"><svg viewBox="0 0 160 160" width="120" height="120" role="img" aria-label=${title + '圓餅圖'}>${slices}</svg>
+      <table class="pie-l">${items.map(([k, v], i) => html`<tr><td><i style=${'background:' + PIE_COLORS[i % PIE_COLORS.length]}></i>${k}</td><td class="num">${+v || 0}</td><td class="num sub">${pct(+v || 0)}%</td></tr>`)}</table></div>`
+      : html`<div class="sub" style="padding:20px 0">本月沒有資料</div>`}
+  </div>`;
+}
+function PieBoard({ rows }) {
+  const by = {}; for (const [c, k, v] of rows) (by[c] = by[c] || []).push([k, v]);
+  return html`<div class="pies">${PIE_CATS.filter(c => by[c]).map(c => html`<${PieChart} title=${c} items=${by[c]} />`)}</div>`;
+}
+
 function StatReport({ db, month, user, refresh, rkey: key, picker }) {
   const y = month.slice(0, 4), yy = +y - 1911, kvKey = STAT_KV[key], hist = (db.kv[kvKey] || {}).months || {};
   const [busy, setBusy] = useState(false), [sheet, setSheet] = useState('在案+出備+新案');
@@ -2110,10 +2141,24 @@ function StatReport({ db, month, user, refresh, rkey: key, picker }) {
     try {
       const ms = months.filter(hasSys);
       for (const mk of ms) await call('m', 'data:saveKv', { key: 'pub:monthly:' + mk, d: JSON.stringify({ month: roc(mk + '-01').slice(0, -3), rows: publishRows(mk, db) }), by: user });
-      await refresh(); toast(`已更新 ${ms.map(rocMonth).join('、') || '（今年沒有系統資料）'}的 Excel 連線資料`);
+      await refresh(); toast(`已同步 ${ms.map(rocMonth).join('、') || '（今年沒有系統資料）'}到試算表連線`);
     } catch (e) { toast('更新失敗：' + e.message, true); }
     setBusy(false);
   };
+  // 自動同步：打開月報時，今年各月數字有變動才寫入（沒變動不寫，省額度）→ Google 試算表 / Excel 跟系統圖表永遠同一份數字
+  const syncing = useRef(false);
+  useEffect(() => {
+    if (key !== 'statMonthly' || syncing.current) return;
+    const todo = months.filter(hasSys).map(mk => ({ mk, rows: publishRows(mk, db) }))
+      .filter(({ mk, rows }) => JSON.stringify((db.kv['pub:monthly:' + mk] || {}).rows || null) !== JSON.stringify(rows));
+    if (!todo.length) return;
+    syncing.current = true;
+    (async () => {
+      try { for (const { mk, rows } of todo) await call('m', 'data:saveKv', { key: 'pub:monthly:' + mk, d: JSON.stringify({ month: roc(mk + '-01').slice(0, -3), rows }), by: user }); await refresh(); }
+      catch (e) { console.error(e); }
+      syncing.current = false;
+    })();
+  }, [db, key, y]);
   const desc = { statDispatch: '當月新案（新案-開頭）的派案單位、核定服務代碼數，以及指定／輪派名單', statCms: '當月新案的 CMS、身分福利別、性別、障礙等級', statCase: '當月各來源件數（依地區），以及新案、上月未吃到錢、結案名單', statMonthly: '當月新案、在案、結案、轉介樂臨、核銷，以及個案結構分析', statAnnual: '整年每月的新案、在案、出備、結案、性別、身分別、CMS、居住區域、障礙等級' }[key];
   let body;
   if (key === 'statDispatch' || key === 'statCase') {
@@ -2121,18 +2166,18 @@ function StatReport({ db, month, user, refresh, rkey: key, picker }) {
     body = blk ? html`<div class="tw" style="max-height:none"><table class="grid">${blk.map(r => html`<tr>${r.map(c => html`<td colspan=${c.span || 1} style=${'white-space:pre-wrap;vertical-align:top;' + (c.b ? 'font-weight:700' : '')}>${String(c.t ?? '')}</td>`)}</tr>`)}</table></div>`
       : html`<div class="card empty">${rocMonth(month)}沒有資料</div>`;
   } else if (key === 'statCms') body = html`<${AoaTable} aoa=${hasSys(month) || !hist[month] ? cmsSheetAoa(month, db) : hist[month]} />`;
-  else if (key === 'statMonthly') { const r = monthlyReport(month, db); body = html`<div class="cols2"><div><h3>統計表</h3><${AoaTable} aoa=${r.stat} /></div><div><h3>分析</h3><${AoaTable} aoa=${r.analysis} /></div></div>`; }
+  else if (key === 'statMonthly') { const r = monthlyReport(month, db); body = html`${hasSys(month) && html`<h3>分析圖</h3><${PieBoard} rows=${publishRows(month, db)} />`}<div class="cols2"><div><h3>統計表</h3><${AoaTable} aoa=${r.stat} /></div><div><h3>分析</h3><${AoaTable} aoa=${r.analysis} /></div></div>`; }
   else { const b = annualBook(y, db, hist, month > todayMonth() ? month : todayMonth());
     body = html`<div class="trigbar">${Object.keys(b.sheets).map(n => html`<button class=${sheet === n ? 'on' : ''} onClick=${() => setSheet(n)}>${n}</button>`)}</div><${AoaTable} aoa=${b.sheets[sheet] || []} maxCols=${15} />`; }
   return html`<div class="page">
     <div class="bar">${picker}<span class="sub">${desc}</span><span class="grow"></span>
       ${kvKey && html`<label class="btn light" style="cursor:pointer">${busy ? '處理中…' : `匯入舊檔（${key === 'statDispatch' || key === 'statCase' ? 'Word' : 'Excel'}）`}<input type="file" accept=${key === 'statDispatch' || key === 'statCase' ? '.docx' : '.xlsx,.xls'} style="display:none" onChange=${e => { importOld(e.target.files[0]); e.target.value = ''; }} /></label>`}
-      ${key === 'statMonthly' && html`<button class="btn light" disabled=${busy} onClick=${publish} title="把今年各月的統計數字更新到 Excel 連線網址（只有數字，沒有個資）">更新 Excel 連線資料</button>`}
+      ${key === 'statMonthly' && html`<button class="btn light" disabled=${busy} onClick=${publish} title="打開月報時會自動同步；這個按鈕是手動再同步一次（只有數字，沒有個資）">立即同步試算表</button>`}
       <button class="btn" disabled=${busy} onClick=${exportIt}>${key === 'statMonthly' ? `匯出${rocMonth(month)}月報` : `匯出${yy}年${key === 'statDispatch' || key === 'statCase' ? ' Word' : ' Excel'}`}</button></div>
     ${strip}
     ${key !== 'statMonthly' && key !== 'statAnnual' && !hasSys(month) && hist[month] && html`<div class="sub" style="margin-bottom:8px"><span class="tag t-close">匯入的舊資料</span> ${rocMonth(month)}系統裡沒有資料，顯示匯入的舊檔內容。</div>`}
     ${body}
-    ${key === 'statMonthly' && html`<div class="sub" style="margin-top:8px">圓餅圖：按「更新 Excel 連線資料」後，在已設定好連線的 Excel 檔按「資料 → 全部重新整理」，圖表就會更新。${(() => { const n = Object.keys(db.kv).filter(k => k.startsWith('pub:monthly:')).sort(); return n.length ? `目前已發布：${n.map(k => rocMonth(k.slice(12))).join('、')}` : '目前還沒有發布過。'; })()}</div>`}
+    ${key === 'statMonthly' && html`<div class="sub" style="margin-top:8px">Google 試算表／Excel：打開這頁時會自動同步今年各月數字，試算表那邊重新整理就會跟上面的圓餅圖一樣。${(() => { const n = Object.keys(db.kv).filter(k => k.startsWith('pub:monthly:')).sort(); return n.length ? `目前已發布：${n.map(k => rocMonth(k.slice(12))).join('、')}` : '目前還沒有發布過。'; })()}</div>`}
   </div>`;
 }
 
