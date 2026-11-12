@@ -128,6 +128,10 @@ table.rpt2{width:auto;min-width:0}.rpt2 th{position:static;padding:8px 14px}.rpt
 .namecards{align-items:start;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
 .ncard{padding:12px 16px}.nhead{font-weight:700;margin-bottom:6px}.nsub{font-weight:600;color:var(--green);margin-top:8px}.nnames{line-height:1.7}
 .note-txt{white-space:pre-wrap;line-height:1.7}
+.cset{display:grid;grid-template-columns:minmax(220px,auto) minmax(280px,1fr) minmax(300px,1fr);gap:12px;align-items:start;margin-bottom:18px}
+@media (max-width:1100px){.cset{grid-template-columns:1fr}}
+.hbars{display:flex;flex-direction:column;gap:5px}.hb-row{display:grid;grid-template-columns:minmax(80px,max-content) 1fr 34px;gap:8px;align-items:center;font-size:13px}
+.hb-k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}.hb-track{height:12px;background:#f3ede4;border-radius:0 4px 4px 0}.hb-track i{display:block;height:100%;background:#2a78d6;border-radius:0 4px 4px 0;min-width:1px}.hb-v{text-align:right;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -1061,6 +1065,51 @@ function parseMonthSheets(sheets, fallbackYear) {
 }
 
 // ---------- 月報（統計表＋分析） ----------
+// 原本月報的地區順序：統計表 四湖、台西、麥寮、東勢；分析圖 四湖、東勢、麥寮、台西
+const ST_RG = ['四湖', '台西', '麥寮', '東勢'], AN_RG = ['四湖', '東勢', '麥寮', '台西'];
+// ---------- 月報「圓餅圖」工作表 ----------
+// (1) 派案單位：當月新案的指定＋輪派單位（同一單位同一服務合計人數），樂臨的四項固定排最前面，輔具最後
+// (2) 樂臨派案服務：直接取 (1) 裡樂臨居家／交通車／沐浴車／居喘
+// (3) 計畫類型：總表觸發分類；「-」與「新案-轉入-AA02」算 AA02
+const PIE_WORD = { home: '居家', traffic: '交通車', resp: '居喘', day: '日照', dayresp: '日喘', bath: '沐浴車', meal: '營養餐飲', prof: '專業服務' };
+const PIE_ORDER = ['home', 'resp', 'day', 'dayresp', 'traffic', 'ctraffic', 'bath', 'meal', 'prof'];
+function planKind(raw) {
+  const t = normTrigger(raw);
+  if (!t) return /-/.test(String(raw || '')) ? 'AA02' : '';
+  if (/AA02$/.test(t)) return 'AA02';
+  return sourceKind(t);
+}
+function pieSheet(month, db) {
+  const S = monthSets(month, db), evs = [...new Map(S.newEvents.map(e => [e.caseId, e])).values()];
+  const cnt = new Map(), ord = new Map(); let aids = 0;
+  for (const e of evs) {
+    const c = db.cases.get(e.caseId), units = caseUnits(e, c, db.resolveUnit);
+    for (const [k, u] of Object.entries(units)) {
+      if (k === 'aids' || u === '（未填單位）') continue;
+      const name = u + (PIE_WORD[k] || CAT[k].label);
+      cnt.set(name, (cnt.get(name) || 0) + 1);
+      const oi = PIE_ORDER.indexOf(k); ord.set(name, oi < 0 ? 99 : oi);
+    }
+    if (units.aids || (codeCounts(e.codes || latestCodes(db, c, month)).輔具 || 0) > 0) aids++;
+  }
+  const LL = ['樂臨居家', '樂臨交通車', '樂臨沐浴車', '樂臨居喘'];
+  const rest = [...cnt.keys()].filter(k => !LL.includes(k)).sort((a, b) => ord.get(a) - ord.get(b) || cnt.get(b) - cnt.get(a) || a.localeCompare(b, 'zh-Hant'));
+  const units = [...LL.map(k => [k, cnt.get(k) || 0]), ...rest.map(k => [k, cnt.get(k)]), ['輔具', aids]];
+  const leling = [['樂臨居家', cnt.get('樂臨居家') || 0], ['樂臨交通', cnt.get('樂臨交通車') || 0], ['樂臨沐浴車', cnt.get('樂臨沐浴車') || 0], ['樂臨喘息', cnt.get('樂臨居喘') || 0]];
+  // 跟核銷同一群個案、同一個觸發（本月沒填就用自動帶入的；沒有觸發＝「-」→ AA02）
+  const pk = {}, info = db.info || caseMonths(db), auto = autoTriggers(month, db), evOf = new Map();
+  for (const e of db.events) if (e.month === month && db.cases.has(e.caseId)) evOf.set(e.caseId, e);
+  for (const [id] of db.cases) {
+    const x = info.get(id) || {}; if ((x.open && x.open > month) || (x.close && x.close < month)) continue;
+    const e = evOf.get(id), t = (e ? normTrigger(e.trigger) : '') || auto.get(id) || '';
+    // 核銷選「沒吃到錢」（含結案預設）→ 算「吃不到錢」，不再算進其他類
+    const fee = e && FEE[e.fee] ? e.fee : defaultFee(t);
+    const k = fee === 'none' ? '吃不到錢' : t ? planKind(t) : 'AA02'; if (k) pk[k] = (pk[k] || 0) + 1;
+  }
+  // 「吃不到錢」這個月有才列出（跟 9 月原檔一樣）；沒有就不列（跟 10 月原檔一樣）
+  const plan = ['初評', '出備', '複評', '出→初', 'AA01', 'AA02', ...(pk.吃不到錢 ? ['吃不到錢'] : [])].map(k => [k, pk[k] || 0]);
+  return { units, leling, plan };
+}
 function monthlyReport(month, db) {
   const S = monthSets(month, db), mm = +month.slice(5), rg = c => regionOf(c.caseNo);
   const newById = new Map(S.newEvents.map(e => [e.caseId, e]));
@@ -1071,7 +1120,7 @@ function monthlyReport(month, db) {
   const ref = {}; for (const [lab, k] of REF) ref[lab] = countBy([...newById.keys()].filter(id => { const c = db.cases.get(id), e = newById.get(id); return isOwnUnit(caseUnits(e, c, db.resolveUnit)[k]); }), db, rg);
   const sum = o => Object.values(o).reduce((a, b) => a + b, 0);
   const stat = [[`${mm}月個案統計(台西區個案總人數)`], ['地區', '新案', '', '', '', '在案', '結案', '轉出', ...REF.map(([l]) => `轉介-\n樂臨${l === '居喘' ? '居喘' : l}`)], ['', ...kinds]];
-  for (const r of RG4) stat.push([r, ...kinds.map(k => (nk[r] || {})[k] || ''), inC[r] || 0, cl[r] || '', out[r] || '', ...REF.map(([l]) => ref[l][r] || '')]);
+  for (const r of ST_RG) stat.push([r, ...kinds.map(k => (nk[r] || {})[k] || ''), inC[r] || 0, cl[r] || '', out[r] || '', ...REF.map(([l]) => ref[l][r] || '')]);
   const nNew = newById.size;
   stat.push(['總計', ...kinds.map(k => RG4.reduce((a, r) => a + ((nk[r] || {})[k] || 0), 0)), sum(inC), sum(cl), sum(out), ...REF.map(([l]) => sum(ref[l]))]);
   const total = S.latest.length;
@@ -1079,15 +1128,15 @@ function monthlyReport(month, db) {
   const b = billing(month, db), c = k => b.total.c[k] || 0;
   stat.push(['AA01', c('1700'), 1700, c('1700') * 1700], ['AA02', c('400'), 400, c('400') * 400], ['AA02-360', c('360'), 360, c('360') * 360], ['吃不到錢', c('none'), 0, 0], ['總計', c('1700') + c('400') + c('360') + c('none'), '', b.total.amt]);
   // 分析
-  const pct = (n, d) => d ? Math.round(n / d * 10000) / 100 + '%' : '';
+  const pct = (n, d) => d ? n / d : 0; // 數字（匯出時格式 0.00%），跟原本月報一樣是 人數÷總人數
   const nkAll = {}; for (const e of newById.values()) { const k = newKind(e.trigger); nkAll[k] = (nkAll[k] || 0) + 1; }
   const A = [['個案狀態', '人數', '比例']];
   const st = [['新案', (nkAll.初評 || 0) + (nkAll.出備 || 0)], ['重開案', nkAll.重開案 || 0], ['轉入', nkAll.轉入 || 0], ['舊案', S.inCase.length], ['結案', S.closed.length], ['轉外縣市', S.out.length]];
-  for (const [k, n] of st) A.push([k, n, pct(n, total)]); A.push(['總人數', total, '100%'], []);
-  const block = (title, rows) => { A.push([title, '人數', '比例']); for (const [k, n] of rows) A.push([k, n, pct(n, total)]); A.push(['總人數', total, '100%'], []); };
+  for (const [k, n] of st) A.push([k, n, pct(n, total)]); A.push(['總人數', total, st.slice(0, 4).reduce((a, [, n]) => a + pct(n, total), 0)], []);
+  const block = (title, rows) => { A.push([title, '人數', '比例']); for (const [k, n] of rows) A.push([k, n, pct(n, total)]); A.push(['總人數', total, rows.reduce((a, [, n]) => a + pct(n, total), 0)], []); };
   const L = S.latest, byR = countBy(L, db, rg), byG = countBy(L, db, genderOf), byI = countBy(L, db, identOf), byC = countBy(L, db, cmsOf);
   const byA = countBy(L, db, c => { const a = ageAt(c, month); return a === null ? '' : a >= 65 ? '65歲以上' : '64歲以下'; });
-  block('地區', RG4.map(r => [r, byR[r] || 0]));
+  block('地區', AN_RG.map(r => [r, byR[r] || 0]));
   block('性別', [['男性', byG.男 || 0], ['女性', byG.女 || 0]]);
   block('身分別', [['一般戶', byI.一般戶 || 0], ['中低收', byI.中低收 || 0], ['低收', byI.低收入戶 || 0]]);
   block('年齡', [['65歲以上', byA['65歲以上'] || 0], ['64歲以下', byA['64歲以下'] || 0]]);
@@ -1116,17 +1165,10 @@ function publishRows(month, db) {
   add('核銷件數', [['AA01(1700)', c('1700')], ['AA02(400)', c('400')], ['AA02(360)', c('360')], ['吃不到錢', c('none')]]);
   add('核銷金額', [['AA01(1700)', c('1700') * 1700], ['AA02(400)', c('400') * 400], ['AA02(360)', c('360') * 360], ['總計', b.total.amt]]);
   // ---- 給 Google 試算表「月報範本」用：派案單位、計畫類型、統計表（依地區） ----
-  const pu = {};
-  for (const id of newIdList) {
-    const cs = db.cases.get(id), e = S.newEvents.find(x => x.caseId === id), units = caseUnits(e, cs, db.resolveUnit);
-    for (const [k, u] of Object.entries(units)) if (u !== '（未填單位）') { const key = u + catWord(k); pu[key] = (pu[key] || 0) + 1; }
-    if ((codeCounts(e.codes || latestCodes(db, cs, month)).輔具 || 0) > 0) pu['輔具'] = (pu['輔具'] || 0) + 1;
-  }
-  add('派案單位', Object.entries(pu).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant')));
-  const src = {}; for (const e of db.events) if (e.month === month && db.cases.has(e.caseId)) { const k = sourceKind(e.trigger); if (k) src[k] = (src[k] || 0) + 1; }
-  add('計畫類型', [['初評', src.初評 || 0], ['出備', src.出備 || 0], ['複評', src.複評 || 0], ['出→初', src['出→初'] || 0], ['AA01', src.AA01 || 0], ['AA02', c('400') + c('360')]]);
+  const ps = pieSheet(month, db);
+  add('派案單位', ps.units); add('樂臨派案服務', ps.leling); add('計畫類型', ps.plan);
   const st = monthlyReport(month, db).stat, COLS = ['初評', '出備', '重開案', '轉入', '在案', '結案', '轉出', '居家', '交通', '沐浴車', '居喘'];
-  for (const r of st.slice(3, 3 + RG4.length)) COLS.forEach((col, j) => rows.push(['統計表', `${r[0]}-${col}`, +r[j + 1] || 0]));
+  for (const r of st.slice(3, 3 + ST_RG.length)) COLS.forEach((col, j) => rows.push(['統計表', `${r[0]}-${col}`, +r[j + 1] || 0]));
   return rows.map(([cat, k, v]) => [cat, k, v]);
 }
 
@@ -1304,6 +1346,96 @@ const HOLIDAYS_2026 = [
   ['2026-06-19', '端午節'], ['2026-09-25', '中秋節'], ['2026-09-28', '教師節'], ['2026-10-09', '國慶日補假'],
   ['2026-10-26', '光復節補假'], ['2026-12-25', '行憲紀念日'],
 ];
+// ---------- 月報 Excel（4.115年10月圓餅圖-台西區.xlsx）：三個工作表＋圖表，名稱照原檔 ----------
+const colL = c => { let s = ''; c++; while (c) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = (c - m - 1) / 26; } return s; };
+function monthlyBookSpec(month, db) {
+  const yy = +month.slice(0, 4) - 1911, MM = month.slice(5), mm = `${MM}月`, r = monthlyReport(month, db), ps = pieSheet(month, db);
+  const ref = (sh, c, r1, r2) => `'${sh}'!$${colL(c)}$${r1 + 1}:$${colL(c)}$${r2 + 1}`;
+  // ---- 圓餅圖 ----
+  const P = `${mm}圓餅圖`, A = [], n = ps.units.length, L0 = 2 + n - 1 + 18, P0 = L0 + 21;
+  ps.units.forEach(([k, v], i) => A[2 + i] = [i ? '' : mm, k, v]);
+  ps.leling.forEach(([k, v], i) => A[L0 + i] = [i ? '' : mm, k, v]);
+  ps.plan.forEach(([k, v], i) => A[P0 + i] = [i ? '' : mm, k, v]);
+  const nP = ps.plan.length; A[P0 + nP] = ['', '總計', ps.plan.reduce((a, [, v]) => a + v, 0)];
+  const mk = (type, title, sh, r1, r2, valCol, from, to, rows) => ({ type, title, cat: ref(sh, valCol === 2 && sh === P ? 1 : 0, r1, r2), val: ref(sh, valCol, r1, r2), cats: rows.map(x => String(x[0])), vals: rows.map(x => +x[1] || 0), from, to });
+  const uRows = ps.units.slice(0, -1), pieCharts = [
+    mk('bar', `${mm}派案單位統計`, P, 2, 2 + uRows.length - 1, 2, [5, 1], [15, 14], uRows),
+    mk('pie', `${mm}派案單位統計`, P, 2, 2 + uRows.length - 1, 2, [17, 0], [26, 14], uRows),
+    mk('bar', `${mm}樂臨派案服務統計`, P, L0, L0 + 3, 2, [6, L0], [13, L0 + 16], ps.leling),
+    mk('pie', `${mm}樂臨派案服務統計`, P, L0, L0 + 3, 2, [17, L0], [25, L0 + 17], ps.leling),
+    mk('bar', `${mm}計畫類型統計`, P, P0, P0 + 4, 2, [6, P0 - 1], [14, P0 + 12], ps.plan.slice(0, 5)),
+    mk('pie', `${mm}計畫類型統計`, P, P0, P0 + 4, 2, [17, P0], [25, P0 + 18], ps.plan.slice(0, 5)),
+  ];
+  // ---- 統計表（總計列新案四格合併成一格，跟原檔一樣） ----
+  const T = `${mm}統計表 `, st = r.stat.map(x => [...(x || [])]);
+  const tot = st[7]; tot.splice(1, 4, [1, 2, 3, 4].reduce((a, j) => a + (+tot[j] || 0), 0), '', '', '');
+  const tMerges = [[0, 0, 0, 11], [1, 0, 2, 0], [1, 1, 1, 4], ...[5, 6, 7, 8, 9, 10, 11].map(c => [1, c, 2, c]), [7, 1, 7, 4]];
+  // ---- 分析圖 ----
+  const N = `${mm}分析圖 `, an = r.analysis, pre = `${yy}年${mm}北港區-`;
+  const blocks = [[1, 6, '個案狀態分析', '個案狀態分析', [5, 0, 12, 15], [12, 0, 19, 15]], [10, 4, '人數分析', '人數分析', [4, 16, 12, 27], [12, 16, 19, 27]],
+    [17, 2, '男女比例分析', '男女分析比例', [5, 27, 12, 38], [12, 27, 19, 38]], [22, 3, '身分別分析', '身分別分析', [5, 39, 12, 54], [12, 39, 19, 54]],
+    [28, 2, '年齡分析', '年齡分析', [5, 55, 12, 71], [12, 55, 19, 71]], [33, 7, 'CMS分析', 'CMS分析圖', [5, 72, 12, 88], [12, 72, 19, 88]]];
+  const anCharts = blocks.flatMap(([top, cnt, bt, pt, ba, pa]) => {
+    const r1 = top, r2 = top + cnt - 1, rows = an.slice(r1, r2 + 1);
+    return [{ type: 'bar', title: pre + bt, cat: ref(N, 0, r1, r2), val: ref(N, 1, r1, r2), cats: rows.map(x => String(x[0])), vals: rows.map(x => +x[1] || 0), from: ba.slice(0, 2), to: ba.slice(2) },
+      { type: 'pie', title: pre + pt, cat: ref(N, 0, r1, r2), val: ref(N, 2, r1, r2), cats: rows.map(x => String(x[0])), vals: rows.map(x => +x[2] || 0), from: pa.slice(0, 2), to: pa.slice(2) }];
+  });
+  const pctCells = []; an.forEach((x, i) => { if (x && typeof x[2] === 'number') pctCells.push(`C${i + 1}`); });
+  return {
+    fileName: `4.${yy}年${mm}圓餅圖-台西區.xlsx`,
+    sheets: [
+      { name: P, aoa: A, cols: [8, 20, 8], merges: [[2, 0, 2 + n - 1, 0], [L0, 0, L0 + 3, 0], [P0, 0, P0 + nP, 0]], charts: pieCharts },
+      { name: T, aoa: st, cols: [18, 14, 11, 11, 11, 13, 13, 10, 14, 15, 15, 15], merges: tMerges, charts: [] },
+      { name: N, aoa: an, cols: [12, 8, 10], merges: [], pct: pctCells, charts: anCharts },
+    ],
+  };
+}
+const xmlEsc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function chartXml(ch) {
+  const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+  const strCache = `<c:strCache><c:ptCount val="${ch.cats.length}"/>${ch.cats.map((v, i) => `<c:pt idx="${i}"><c:v>${xmlEsc(v)}</c:v></c:pt>`).join('')}</c:strCache>`;
+  const numCache = `<c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${ch.vals.length}"/>${ch.vals.map((v, i) => `<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join('')}</c:numCache>`;
+  const pie = ch.type === 'pie';
+  const dl = `<c:dLbls><c:showLegendKey val="0"/><c:showVal val="${pie ? 0 : 1}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="${pie ? 1 : 0}"/><c:showBubbleSize val="0"/></c:dLbls>`;
+  const ser = `<c:ser><c:idx val="0"/><c:order val="0"/>${dl}<c:cat><c:strRef><c:f>${xmlEsc(ch.cat)}</c:f>${strCache}</c:strRef></c:cat><c:val><c:numRef><c:f>${xmlEsc(ch.val)}</c:f>${numCache}</c:numRef></c:val></c:ser>`;
+  const plot = pie ? `<c:pieChart><c:varyColors val="1"/>${ser}<c:firstSliceAng val="0"/></c:pieChart>`
+    : `<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>${ser}<c:gapWidth val="80"/><c:axId val="5001"/><c:axId val="5002"/></c:barChart>`
+      + `<c:catAx><c:axId val="5001"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="0"/><c:tickLblPos val="nextTo"/><c:crossAx val="5002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>`
+      + `<c:valAx><c:axId val="5002"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:tickLblPos val="nextTo"/><c:crossAx val="5001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<c:chartSpace xmlns:c="${C}" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><c:roundedCorners val="0"/><c:chart>`
+    + `<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:pPr><a:defRPr sz="1400" b="1"/></a:pPr><a:r><a:rPr lang="zh-TW" sz="1400" b="1"/><a:t>${xmlEsc(ch.title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`
+    + `<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>${plot}</c:plotArea>${pie ? '<c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>' : ''}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
+}
+function drawingXml(charts) {
+  const a = (tag, [c, r]) => `<xdr:${tag}><xdr:col>${c}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${r}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:${tag}>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">`
+    + charts.map((ch, i) => `<xdr:twoCellAnchor>${a('from', ch.from)}${a('to', ch.to)}<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${i + 2}" name="圖表 ${i + 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId${i + 1}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`).join('')
+    + `</xdr:wsDr>`;
+}
+// 把圖表塞進 SheetJS 產生的 xlsx（zip 是 JSZip 物件；sheets[i].charts 對應 sheet{i+1}.xml）
+async function addChartsToZip(zip, sheets) {
+  let ctypes = await zip.file('[Content_Types].xml').async('string'), chartNo = 0, extra = '';
+  for (let i = 0; i < sheets.length; i++) {
+    const charts = sheets[i].charts || []; if (!charts.length) continue;
+    const sp = `xl/worksheets/sheet${i + 1}.xml`, dn = i + 1;
+    let sx = await zip.file(sp).async('string');
+    if (!/xmlns:r=/.test(sx)) sx = sx.replace('<worksheet ', '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ');
+    sx = sx.replace('</worksheet>', '<drawing r:id="rIdChartDrawing"/></worksheet>');
+    zip.file(sp, sx);
+    const relP = `xl/worksheets/_rels/sheet${i + 1}.xml.rels`, relF = zip.file(relP);
+    const rel = `<Relationship Id="rIdChartDrawing" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing${dn}.xml"/>`;
+    zip.file(relP, relF ? (await relF.async('string')).replace('</Relationships>', rel + '</Relationships>')
+      : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rel}</Relationships>`);
+    zip.file(`xl/drawings/drawing${dn}.xml`, drawingXml(charts));
+    const drels = charts.map((ch, j) => { chartNo++; zip.file(`xl/charts/chart${chartNo}.xml`, chartXml(ch)); extra += `<Override PartName="/xl/charts/chart${chartNo}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`;
+      return `<Relationship Id="rId${j + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${chartNo}.xml"/>`; }).join('');
+    zip.file(`xl/drawings/_rels/drawing${dn}.xml.rels`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${drels}</Relationships>`);
+    extra += `<Override PartName="/xl/drawings/drawing${dn}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`;
+  }
+  zip.file('[Content_Types].xml', ctypes.replace('</Types>', extra + '</Types>'));
+  return zip;
+}
+
 // ================= CORE-END =================
 
 // ================= Convex 連線與登入（與其他系統同一組團隊密碼） =================
@@ -1911,7 +2043,7 @@ function exportClosures(list, yr) {
 
 // ================= 評鑑報表 =================
 const UNIT_REPORTS = { unitNew: ['new', '新案服務單位統計'], unitRe: ['reassess', '複評服務單位統計'] };
-const STAT_REPORTS = { statDispatch: '派案統計（Word）', statCms: '新案CMS統計', statCase: '個案統計（Word）', statMonthly: '月報', statAnnual: '年度統計' };
+const STAT_REPORTS = { statDispatch: '1.New新案統計（Word）', statCms: '2.New新案統計數據', statCase: '3.總人數統計（Word）', statMonthly: '4.月份圓餅圖', statAnnual: '5.數據統計' };
 function ReportView({ db, month, user, refresh }) {
   const [key, setKey] = useState('dispatch');
   const picker = html`<select class="inp" value=${key} onChange=${e => setKey(e.target.value)}>${Object.entries(REPORTS).map(([k, R]) => html`<option value=${k}>${R.title}</option>`)}
@@ -2204,9 +2336,50 @@ function PieBoard({ rows }) {
 }
 
 // ================= 月報畫面（只是顯示方式；匯出的 Excel 格式不變） =================
+// 橫條圖（項目多時也看得清楚）
+function HBarChart({ title, items }) {
+  const max = Math.max(1, ...items.map(([, v]) => +v || 0));
+  return html`<div class="card pie"><div class="pie-h">${title}</div>
+    <div class="hbars">${items.map(([k, v]) => html`<div class="hb-row" title=${`${k}：${+v || 0}`}><span class="hb-k">${k}</span>
+      <span class="hb-track"><i style=${`width:${(+v || 0) / max * 100}%`}></i></span><span class="hb-v">${+v || 0}</span></div>`)}</div></div>`;
+}
+const foldTop = (items, n = 8) => items.length <= n ? items : (it => [...it.slice(0, n - 1), ['其他', it.slice(n - 1).reduce((a, x) => a + (+x[1] || 0), 0)]])([...items].sort((a, b) => b[1] - a[1]));
+// 一組：表格＋長條圖＋圓餅圖（標題照原檔）
+function ChartSet({ head, rows, total, title, barTitle, pieTitle, barItems, pieItems, pct }) {
+  return html`<div class="cset">
+    <div class="tw" style="max-height:none"><table class="grid rpt2"><thead><tr><th></th><th class="num">${head[0]}</th>${pct && html`<th class="num">${head[1]}</th>`}</tr></thead>
+      <tbody>${rows.map(([k, v, p]) => html`<tr><td>${k}</td><td class=${'num' + (+v ? '' : ' zero')}>${+v || 0}</td>${pct && html`<td class="num">${(Math.round((+p || 0) * 10000) / 100).toFixed(2)}%</td>`}</tr>`)}
+      ${total && html`<tr class="tot"><td>${total[0]}</td><td class="num">${total[1]}</td>${pct && html`<td class="num">${(Math.round((+total[2] || 0) * 10000) / 100).toFixed(2)}%</td>`}</tr>`}</tbody></table></div>
+    <${HBarChart} title=${barTitle || title} items=${barItems || rows} />
+    <${PieChart} title=${pieTitle || title} items=${foldTop(pieItems || rows)} />
+  </div>`;
+}
+// 月報：三個小分頁，名稱照原檔（10月圓餅圖／10月統計表／10月分析圖）
 function MonthlyView({ month, db }) {
+  const [tab, setTab] = useState(0), mm = `${month.slice(5)}月`, yy = +month.slice(0, 4) - 1911;
+  const tabs = [`${mm}圓餅圖`, `${mm}統計表`, `${mm}分析圖`];
+  let body;
+  if (tab === 0) {
+    const ps = pieSheet(month, db), sum = a => a.reduce((x, [, v]) => x + (+v || 0), 0);
+    body = html`
+      <h3>${mm}派案單位統計</h3><${ChartSet} head=${['人數']} rows=${ps.units} total=${['總計', sum(ps.units)]} title=${`${mm}派案單位統計`} barItems=${ps.units.slice(0, -1)} pieItems=${ps.units.slice(0, -1)} />
+      <h3>${mm}樂臨派案服務統計</h3><${ChartSet} head=${['人數']} rows=${ps.leling} total=${['總計', sum(ps.leling)]} title=${`${mm}樂臨派案服務統計`} />
+      <h3>${mm}計畫類型統計</h3><${ChartSet} head=${['人數']} rows=${ps.plan} total=${['總計', sum(ps.plan)]} title=${`${mm}計畫類型統計`} barItems=${ps.plan.slice(0, 5)} pieItems=${ps.plan.slice(0, 5)} />
+      <div class="sub">派案單位：當月新案的指定＋輪派單位合計人數。計畫類型：依總表觸發分類，「-」和「新案-轉入-AA02」算 AA02；核銷選「沒吃到錢」的算「吃不到錢」（這個月有才列出）。圖表範圍跟原檔一樣（派案單位不含輔具、計畫類型不含 AA02 和吃不到錢）。</div>`;
+  } else if (tab === 1) body = html`<${StatTableView} month=${month} db=${db} />`;
+  else {
+    const an = monthlyReport(month, db).analysis, pre = `${yy}年${mm}北港區-`;
+    const B = [[0, 6, '個案狀態', '個案狀態分析', '個案狀態分析'], [9, 4, '地區', '人數分析', '人數分析'], [16, 2, '性別', '男女比例分析', '男女分析比例'],
+      [21, 3, '身分別', '身分別分析', '身分別分析'], [27, 2, '年齡', '年齡分析', '年齡分析'], [32, 7, '級數', 'CMS分析', 'CMS分析圖']];
+    body = B.map(([top, n, name, bt, pt]) => { const rows = an.slice(top + 1, top + 1 + n), tot = an[top + 1 + n];
+      return html`<h3>${name}</h3><${ChartSet} head=${['人數', '比例']} pct=${true} rows=${rows} total=${tot} barTitle=${pre + bt} pieTitle=${pre + pt} />`; });
+  }
+  return html`<div class="trigbar" style="margin-bottom:12px">${tabs.map((t, i) => html`<button class=${tab === i ? 'on' : ''} style="font-size:15px;padding:7px 18px" onClick=${() => setTab(i)}>${t}</button>`)}</div>${body}`;
+}
+
+function StatTableView({ month, db }) {
   const r = monthlyReport(month, db), st = r.stat, n = v => +v || 0, fmt = v => n(v).toLocaleString('zh-TW');
-  const rows = st.slice(3, 3 + RG4.length + 1); // 四鄉 + 總計：[地區, 初評, 出備, 重開案, 轉入, 在案, 結案, 轉出, 居家, 交通, 沐浴車, 居喘]
+  const rows = st.slice(3, 3 + ST_RG.length + 1); // 四鄉 + 總計：[地區, 初評, 出備, 重開案, 轉入, 在案, 結案, 轉出, 居家, 交通, 沐浴車, 居喘]
   const kv = Object.fromEntries(st.filter(x => x.length === 2).map(([k, v]) => [k, v]));
   const bill = st.filter(x => ['AA01', 'AA02', 'AA02-360', '吃不到錢'].includes(x[0]));
   const bTot = st[st.length - 1];
@@ -2230,8 +2403,7 @@ function MonthlyView({ month, db }) {
           <tr class="tot"><td><b>總計</b></td>${cell(bTot[1], true)}<td></td><td class="num"><b>$${fmt(bTot[3])}</b></td></tr>
         </table></div></div>
     </div>
-    <h3>分析圖 <span class="sub" style="font-weight:400">（各類人數與比例；匯出的 Excel 另有分析表）</span></h3>
-    <${PieBoard} rows=${publishRows(month, db)} />`;
+`;
 }
 
 function StatReport({ db, month, user, refresh, rkey: key, picker }) {
@@ -2264,27 +2436,26 @@ function StatReport({ db, month, user, refresh, rkey: key, picker }) {
       if (key === 'statDispatch' || key === 'statCase') {
         const blocks = months.map(mk => hasSys(mk) ? (key === 'statDispatch' ? dispatchBlock(dispatchStatMonth(mk, db)) : caseBlock(caseStatMonth(mk, db))) : hist[mk] ? histRowsToBlock(hist[mk]) : null).filter(Boolean);
         if (!blocks.length) throw new Error('今年還沒有資料');
-        await buildWord(blocks, `${yy}年${key === 'statDispatch' ? '派案統計' : '個案統計'}.docx`);
+        await buildWord(blocks, key === 'statDispatch' ? `1.${yy}年New新案統計-台西區.docx` : `3.${yy}年總人數統計-台西區.docx`);
       } else if (key === 'statCms') {
         const wb = XLSX.utils.book_new();
         for (const mk of months) XLSX.utils.book_append_sheet(wb, sheetFromAoa(fillRows(hasSys(mk) || !hist[mk] ? cmsSheetAoa(mk, db) : hist[mk]), [12, 8, 8, 8, 8, 8]), `${mk.slice(5)}月`);
-        XLSX.writeFile(wb, `${yy}年新案CMS統計.xlsx`);
+        XLSX.writeFile(wb, `2.${yy}年New新案統計數據-台西區.xlsx`);
       } else if (key === 'statMonthly') {
-        const r = monthlyReport(month, db), wb = XLSX.utils.book_new();
-        // 第一個工作表「圓餅圖」：派案單位、樂臨派案服務、計畫類型（跟原本月報同位置）
-        const pr = publishRows(month, db), get = c => pr.filter(x => x[0] === c).map(x => [x[1], x[2]]), mm = `${+month.slice(5)}月`;
-        const A = [], units = get('派案單位'), nU = Math.max(12, Math.min(units.length, 28));
-        for (let i = 0; i < nU; i++) A[2 + i] = [i ? '' : mm, ...(units[i] || ['', ''])];
-        const svc = Object.fromEntries(get('轉介樂臨')); [['樂臨居家', '居家'], ['樂臨交通', '交通'], ['樂臨沐浴車', '沐浴車'], ['樂臨喘息', '居喘']].forEach(([l, k], i) => A[31 + i] = [i ? '' : mm, l, svc[k] || 0]);
-        const plan = get('計畫類型'); plan.forEach(([k, v], i) => A[52 + i] = [i ? '' : mm, k, v]); A[58] = ['', '總計', plan.reduce((a, [, v]) => a + v, 0)];
-        XLSX.utils.book_append_sheet(wb, sheetFromAoa(fillRows(A), [8, 18, 8], [{ s: { r: 2, c: 0 }, e: { r: 2 + nU - 1, c: 0 } }, { s: { r: 31, c: 0 }, e: { r: 34, c: 0 } }, { s: { r: 52, c: 0 }, e: { r: 58, c: 0 } }]), '圓餅圖');
-        XLSX.utils.book_append_sheet(wb, sheetFromAoa(fillRows(r.stat), [12, 8, 8, 8, 8, 8, 8, 8, 12, 12, 12, 12]), '統計表');
-        XLSX.utils.book_append_sheet(wb, sheetFromAoa(fillRows(r.analysis), [12, 8, 10]), '分析圖');
-        XLSX.writeFile(wb, `${rocMonth(month)}月報.xlsx`);
+        // 檔名、工作表名稱、圖表標題都照原本的「4.115年10月圓餅圖-台西區.xlsx」
+        const spec = monthlyBookSpec(month, db), wb = XLSX.utils.book_new();
+        for (const sh of spec.sheets) {
+          const ws = sheetFromAoa(fillRows(sh.aoa), sh.cols, sh.merges.map(([r1, c1, r2, c2]) => ({ s: { r: r1, c: c1 }, e: { r: r2, c: c2 } })));
+          for (const ad of sh.pct || []) if (ws[ad]) ws[ad].z = '0.00%';
+          XLSX.utils.book_append_sheet(wb, ws, sh.name);
+        }
+        const JSZip = (await import(JSZIP_URL)).default, zip = await JSZip.loadAsync(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+        await addChartsToZip(zip, spec.sheets);
+        downloadBlob(await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), spec.fileName);
       } else {
         const b = annualBook(y, db, hist, month > todayMonth() ? month : todayMonth()), wb = XLSX.utils.book_new();
         for (const [n, aoa] of Object.entries(b.sheets)) XLSX.utils.book_append_sheet(wb, sheetFromAoa(fillRows(aoa), Array(16).fill(10)), n);
-        XLSX.writeFile(wb, `${yy}年度統計.xlsx`);
+        XLSX.writeFile(wb, `5.${yy}年數據統計-台西區.xlsx`);
       }
     } catch (e) { console.error(e); toast('匯出失敗：' + e.message, true); }
     setBusy(false);
@@ -2326,7 +2497,7 @@ function StatReport({ db, month, user, refresh, rkey: key, picker }) {
     <div class="bar">${picker}<span class="sub">${desc}</span><span class="grow"></span>
       ${kvKey && html`<label class="btn light" style="cursor:pointer">${busy ? '處理中…' : `匯入舊檔（${key === 'statDispatch' || key === 'statCase' ? 'Word' : 'Excel'}）`}<input type="file" accept=${key === 'statDispatch' || key === 'statCase' ? '.docx' : '.xlsx,.xls'} style="display:none" onChange=${e => { importOld(e.target.files[0]); e.target.value = ''; }} /></label>`}
       ${key === 'statMonthly' && html`<button class="btn light" disabled=${busy} onClick=${publish} title="打開月報時會自動同步；這個按鈕是手動再同步一次（只有數字，沒有個資）">立即同步試算表</button>`}
-      <button class="btn" disabled=${busy} onClick=${exportIt}>${key === 'statMonthly' ? `匯出${rocMonth(month)}月報` : `匯出${yy}年${key === 'statDispatch' || key === 'statCase' ? ' Word' : ' Excel'}`}</button></div>
+      <button class="btn" disabled=${busy} onClick=${exportIt}>${key === 'statMonthly' ? `匯出 4.${yy}年${month.slice(5)}月圓餅圖-台西區` : `匯出${yy}年${key === 'statDispatch' || key === 'statCase' ? ' Word' : ' Excel'}`}</button></div>
     ${strip}
     ${key !== 'statMonthly' && key !== 'statAnnual' && !hasSys(month) && hist[month] && html`<div class="sub" style="margin-bottom:8px"><span class="tag t-close">匯入的舊資料</span> ${rocMonth(month)}系統裡沒有資料，顯示匯入的舊檔內容。</div>`}
     ${body}
