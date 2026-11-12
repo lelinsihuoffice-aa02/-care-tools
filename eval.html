@@ -311,6 +311,7 @@ function closeMonthOf(t, evMonth) {
   }
   if (t.startsWith('上月結案')) return shiftMonth(evMonth, -1);
   if (t.startsWith('結案')) return evMonth;
+  if (/\/\s*結案/.test(t)) return evMonth;   // 「複評-1700/結案-」這種：同一個月複評又結案
   return '';
 }
 const isCloseTrigger = t => /^((\d{1,2}月)|上月)?結案/.test(normTrigger(t));
@@ -709,10 +710,13 @@ function caseMonths(db) {
       const cands = [open0, firstListed].filter(m => m && !(f.close && m > f.close));
       f.open = cands.sort()[0] || open0 || firstListed || '';
     }
-    // 最後一段沒打結案觸發，但 A結束服務日期、系統結案日期都填了 → 以較晚的日期月份當結案月
-    const last = eps[eps.length - 1], done = closedOffMonth(c);
-    if (!last.close && done && !(last.open && done < last.open)) last.close = done;
-    info.set(id, { open: last.open, close: last.close, openEv: last.openEv, eps, listed: listed.size ? listed : null });
+    // 結案人數一律看「結案觸發」打在哪個月（例如 2 月就結案、4 月才發現 → 4 月打結案- → 算 4 月），跟 Excel 一樣；
+    // 只填了兩個結案日期、沒打結案觸發 → 不算結案人數（silent），只是之後不再列在總表
+    const last = eps[eps.length - 1], done = closedOffMonth(c), maxListed = listed.size ? [...listed].sort().pop() : '';
+    if (!last.close && done && !(last.open && done < last.open)) {
+      last.close = maxListed && done <= maxListed ? shiftMonth(maxListed, 1) : done; last.silent = true;
+    }
+    info.set(id, { open: last.open, close: last.close, openEv: last.openEv, silent: !!last.silent, eps, listed: listed.size ? listed : null });
   }
   return info;
 }
@@ -721,7 +725,7 @@ function epAt(x, month) {
   if (!x || !x.eps || x.eps.length < 2) return x || {};
   let ep = x.eps[0];
   for (const e of x.eps) if (e.open && e.open <= month) ep = e;
-  return { ...x, open: ep.open, close: ep.close, openEv: ep.openEv };
+  return { ...x, open: ep.open, close: ep.close, openEv: ep.openEv, silent: !!ep.silent };
 }
 // 兩個結案日期都填了 → 回傳較晚那天的月份（這個月還在總表，下個月起移到結案表）
 function closedOffMonth(c) {
@@ -734,6 +738,7 @@ function inSummaryList(c, x, month) {
   const isLast = !x.eps || x.eps.length < 2 || epAt(x, month).open === x.open;
   x = epAt(x, month);
   if (x.open && x.open > month) return false;
+  if (x.silent && x.close && x.close <= month) return false;   // Excel 上已經沒有他了
   if (!isLast) return !x.close || x.close >= month;   // 前面的段落：結案月之後就不列
   if (!x.close || x.close >= month) return true;
   const off = closedOffMonth(c);
@@ -751,7 +756,7 @@ function autoTriggers(month, db) {
     const own = cur.get(id);
     if (own && normTrigger(own.trigger)) continue;
     const x0 = info.get(id) || {}, x = epAt(x0, month);
-    if (x.close && x.close < month) { if (inSummaryList(c, x0, month)) out.set(id, `${+x.close.slice(5)}月結案`); continue; }
+    if (x.close && x.close < month) { if (!x.silent && inSummaryList(c, x0, month)) out.set(id, `${+x.close.slice(5)}月結案`); continue; }
     const pe = last.get(id), pt = pe ? normTrigger(pe.trigger) : '';
     if (pt && !isCloseTrigger(pt) && (!FEE[pe.fee] || pe.fee === 'none'))
       out.set(id, pt.startsWith('新案') ? `${+prev.slice(5)}月${pt}` : '上月沒吃到錢');
@@ -771,6 +776,8 @@ function monthSummary(month, db) {
   const blank = () => Object.fromEntries(regs.map(r => [r, 0]));
   const s = { inCase: blank(), newCase: blank(), closed: blank(), latest: blank(), src: { 出備: 0, 初評: 0, 轉入: 0, 未填: 0 }, anomaly: [],
     ids: { inCase: [], newCase: [], closed: [], latest: [] } };
+  const closeNow = new Set();
+  for (const e of db.events) if (e.month === month && closeMonthOf(e.trigger, month) === month) closeNow.add(e.caseId);
   for (const [id, c] of db.cases) {
     const x0 = info.get(id); if (!x0) continue;
     const x = epAt(x0, month), xp = epAt(x0, prev); if (!x.open) continue;
@@ -781,7 +788,8 @@ function monthSummary(month, db) {
     const activePrev = xp.open && xp.open <= prev && !(xp.close && xp.close <= prev);
     if (activePrev) { s.inCase[rg]++; s.src[srcGroup(c.src)]++; s.ids.inCase.push(id); }
     if (x.open === month) { s.newCase[rg]++; s.ids.newCase.push(id); }
-    if (x.close === month && x.open <= month) { s.closed[rg]++; s.ids.closed.push(id); }
+    // 結案人數：跟 Excel 一樣，只看這個月的觸發是不是「本月結案」（結案-、結案400-、複評-1700/結案-…）
+    if (closeNow.has(id)) { s.closed[rg]++; s.ids.closed.push(id); }
     if (activeEnd(month)) { s.latest[rg]++; s.ids.latest.push(id); }
   }
   const sum = o => Object.values(o).reduce((a, b) => a + b, 0);
@@ -1144,7 +1152,7 @@ function pieSheet(month, db) {
   for (const id of S.withClosed) {
     const e = evOf.get(id), t = (e ? normTrigger(e.trigger) : '') || auto.get(id) || '';
     const fee = e && FEE[e.fee] ? e.fee : defaultFee(t);
-    const k = /^結案/.test(t) ? '結案' : fee === 'none' ? '吃不到錢' : (t && planKind(t.replace(/^(\d{1,2}月|上月)/, ''))) || 'AA02';
+    const k = (/^結案/.test(t) || /\/\s*結案/.test(t)) ? '結案' : fee === 'none' ? '吃不到錢' : (t && planKind(t.replace(/^(\d{1,2}月|上月)/, ''))) || 'AA02';
     pk[k] = (pk[k] || 0) + 1;
   }
   // 「吃不到錢」這個月有才列出（跟 9 月原檔一樣）；沒有就不列（跟 10 月原檔一樣）
@@ -2747,7 +2755,7 @@ function StatsView({ db, month }) {
     ${pick && html`<div class="card"><div class="bar"><h3 style="margin:0">${pick.bill ? `${pick.t}・${pick.k === 'unset' ? '未選金額' : FEE[pick.k].label}` : `${pick.rg || '全部地區'}・${CATN[pick.cat]}`}　${pickList.length} 案</h3><span class="grow"></span>
       <button class="btn light sm" onClick=${() => setPick(null)}>關閉</button></div>
       <div class="tw" style="max-height:420px"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>地區</th><th>申請來源</th><th>開案月</th><th>結案月</th><th>${rocMonth(month)}觸發</th><th>開案日期</th><th>A結束服務</th><th>系統結案</th></tr></thead>
-      <tbody>${pickList.map(c => { const x = db.info.get(c._id) || {}, e = evM.get(c._id); return html`<tr><td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${regionOf(c.caseNo)}</td><td>${c.src}</td>
+      <tbody>${pickList.map(c => { const x = epAt(db.info.get(c._id) || {}, month), e = evM.get(c._id); return html`<tr><td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${regionOf(c.caseNo)}</td><td>${c.src}</td>
         <td>${x.open ? rocMonth(x.open) : ''}</td><td>${x.close ? rocMonth(x.close) : ''}</td><td>${e && normTrigger(e.trigger) || ''}</td>
         <td>${roc(c.openDate)}</td><td>${roc(c.aEnd)}</td><td>${roc(c.sysClose)}</td></tr>`; })}</tbody></table></div></div>`}` : html`<div class="cols3">${CATS.filter(cat => us[cat.key]).map(cat => html`<div class="card"><h3>${cat.stat}</h3>
         ${Object.entries(us[cat.key]).sort((a, b) => b[1] - a[1]).map(([u, n]) => html`<div class="kv"><span>${u}</span><b>${n}</b></div>`)}</div>`)}
@@ -2993,7 +3001,7 @@ function FloatStats({ db, month }) {
       <div class="trigbar" style="margin-bottom:6px">${[['', '全部', all.length], ...regs.map(r => [r, r, all.filter(c => regionOf(c.caseNo) === r).length])].map(([k, l, n]) =>
         html`<button class=${rg === k ? 'on' : ''} onClick=${() => setRg(k)}>${l}<b>${n}</b></button>`)}</div>
       <div class="tw" style="max-height:min(56vh, 460px)"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>地區</th><th>來源</th><th>本月觸發</th><th>開案月</th><th>結案月</th></tr></thead>
-        <tbody>${list.map(c => { const x = db.info.get(c._id) || {}, e = evM.get(c._id); return html`<tr><td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${regionOf(c.caseNo)}</td><td>${c.src}</td>
+        <tbody>${list.map(c => { const x = epAt(db.info.get(c._id) || {}, month), e = evM.get(c._id); return html`<tr><td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${regionOf(c.caseNo)}</td><td>${c.src}</td>
           <td>${e && normTrigger(e.trigger) || ''}</td><td>${x.open ? rocMonth(x.open) : ''}</td><td>${x.close ? rocMonth(x.close) : ''}</td></tr>`; })}</tbody></table></div>
     </div>`}
     <div class="fstats" title="點數字看是哪些個案">
