@@ -786,19 +786,25 @@ function monthSummary(month, db) {
   const s = { inCase: blank(), newCase: blank(), closed: blank(), latest: blank(), src: { 出備: 0, 初評: 0, 轉入: 0, 未填: 0 }, anomaly: [],
     ids: { inCase: [], newCase: [], closed: [], latest: [] } };
   const listedMonths = new Set(); for (const e of db.events) if (e.onList) listedMonths.add(e.month);
+  const trigNow = new Map(), trigPrev = new Map();
+  for (const e of db.events) { if (e.month === month) trigNow.set(e.caseId, e.trigger); else if (e.month === prev) trigPrev.set(e.caseId, e.trigger); }
   const closeNow = new Set();
   for (const e of db.events) if (e.month === month && closeMonthOf(e.trigger, month) === month) closeNow.add(e.caseId);
   for (const [id, c] of db.cases) {
     const x0 = info.get(id); if (!x0) continue;
-    const x = epAt(x0, month), xp = epAt(x0, prev); if (!x.open) continue;
+    const x = epAt(x0, month), xp = epAt(x0, prev);
+    const onSheetAny = [month, prev].some(m => listedMonths.has(m) && x0.evMonths && x0.evMonths.has(m));
+    if (!x.open && !onSheetAny) continue;
     // 結案早於開案（例如同一個編號結案後又重開）：資料有問題，列出來請人工檢查
-    if (x.close && x.close < x.open) { if (x.open <= month) s.anomaly.push(c.caseNo); continue; }
+    if (x.close && x.close < x.open && !onSheetAny) { if (x.open <= month) s.anomaly.push(c.caseNo); continue; }
     const rg = regionOf(c.caseNo);
     // 有匯入 Excel 總表的月份：要那個月的 Excel 上有他才算在案（例如 2 月才第一次出現的舊個案，不算 1 月在案）
     //   系統裡自己新增／編輯過的（那個月有觸發紀錄）也算
     const onSheet = m => !listedMonths.has(m) || (x0.evMonths && x0.evMonths.has(m));
-    const activeEnd = m => x.open <= m && !(x.close && x.close <= m) && onSheet(m);
-    const activePrev = xp.open && xp.open <= prev && !(xp.close && xp.close <= prev) && onSheet(prev);
+    // 有匯入 Excel 的月份，跟 Excel 一樣算：總表上的人，扣掉這個月觸發是結案類（結案-、1月結案-、複評-1700/結案-…）的
+    const sheetActive = m => { const t = (m === month ? trigNow : trigPrev).get(id) || ''; return onSheet(m) && !closeMonthOf(t, m); };
+    const activeEnd = m => listedMonths.has(m) ? sheetActive(m) : x.open <= m && !(x.close && x.close <= m);
+    const activePrev = listedMonths.has(prev) ? sheetActive(prev) : xp.open && xp.open <= prev && !(xp.close && xp.close <= prev);
     if (activePrev) { s.inCase[rg]++; s.src[srcGroup(c.src)]++; s.ids.inCase.push(id); }
     if (x.open === month && onSheet(month)) { s.newCase[rg]++; s.ids.newCase.push(id); }
     // 結案人數：跟 Excel 一樣，只看這個月的觸發是不是「本月結案」（結案-、結案400-、複評-1700/結案-…）
