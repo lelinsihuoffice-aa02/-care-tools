@@ -684,30 +684,44 @@ function unitStatBook(kind, db, hist, toMonth) {
 // 開案月 = 第一筆新案觸發的月份，沒有則用開案日期、申請日期
 // 結案月 = 第一筆結案觸發的月份
 function caseMonths(db) {
-  const info = new Map();
-  for (const [id, c] of db.cases) info.set(id, { open: monthOf(c.openDate) || monthOf(c.applyDate) || '', close: '' });
-  const evs = [...db.events].sort((a, b) => a.month.localeCompare(b.month));
-  for (const e of evs) {
-    const x = info.get(e.caseId); if (!x) continue;
-    if (e.onList) (x.listed = x.listed || new Set()).add(e.month);   // 匯入時這個月的 Excel 總表上有這個人
-    // 新案觸發：第一次開案，或結案後又重開（沿用尾數 2 的同一筆）→ 從這個月重新起算
-    if (isNewTrigger(e.trigger) && (!x.openEv || (x.close && x.close < e.month))) { x.open = e.month; x.openEv = true; x.close = ''; }
-    const cm = closeMonthOf(e.trigger, e.month);
-    if (cm && (!x.close || cm < x.close) && !(x.openEv && cm < x.open)) x.close = cm;
-  }
-  // 沒有開案日期／申請日期，或開案日期比 Excel 總表上第一次出現的月份還晚 → 依第一次出現在總表的月份（新案觸發的月份優先）
-  for (const x of info.values()) {
-    if (!x.listed || x.openEv) continue;
-    // 沒有新案觸發 → 是之前就在案的舊個案：開案月算在第一次出現的前一個月（才不會被當成那個月的新案）
-    const first = shiftMonth([...x.listed].sort()[0], -1);
-    if (!x.open || first < x.open) x.open = first;
-  }
-  // 沒打結案觸發，但 A結束服務日期、系統結案日期都填了 → 以較晚的日期月份當結案月
+  // 一個編號可能有好幾段「開案→結案」（例如 1 月結案、9 月又用同一個編號新案）：每段分開記在 eps，
+  // 看某個月時用 epAt(x, 月份) 取那個月所在的那一段；x.open／x.close 是最後一段
+  const info = new Map(), byCase = new Map();
+  for (const e of [...db.events].sort((a, b) => a.month.localeCompare(b.month))) { if (!byCase.has(e.caseId)) byCase.set(e.caseId, []); byCase.get(e.caseId).push(e); }
   for (const [id, c] of db.cases) {
-    const x = info.get(id), done = closedOffMonth(c);
-    if (!x.close && done && !(x.open && done < x.open)) x.close = done;
+    const open0 = monthOf(c.openDate) || monthOf(c.applyDate) || '', eps = [], listed = new Set();
+    let cur = { open: '', openEv: false, close: '' };
+    for (const e of byCase.get(id) || []) {
+      if (e.onList) listed.add(e.month);   // 匯入時這個月的 Excel 總表上有這個人
+      // 新案觸發：第一次開案，或結案後又重開 → 新的一段
+      if (isNewTrigger(e.trigger) && (!cur.openEv || (cur.close && cur.close < e.month))) {
+        if (cur.openEv || cur.close) eps.push(cur);
+        cur = { open: e.month, openEv: true, close: '' };
+      }
+      const cm = closeMonthOf(e.trigger, e.month);
+      if (cm && (!cur.close || cm < cur.close) && !(cur.openEv && cm < cur.open)) cur.close = cm;
+    }
+    eps.push(cur);
+    // 第一段沒有新案觸發：開案月用開案日期，或第一次出現在 Excel 總表的前一個月（取較早、且不晚於結案月的）
+    const f = eps[0];
+    if (!f.openEv) {
+      const firstListed = listed.size ? shiftMonth([...listed].sort()[0], -1) : '';
+      const cands = [open0, firstListed].filter(m => m && !(f.close && m > f.close));
+      f.open = cands.sort()[0] || open0 || firstListed || '';
+    }
+    // 最後一段沒打結案觸發，但 A結束服務日期、系統結案日期都填了 → 以較晚的日期月份當結案月
+    const last = eps[eps.length - 1], done = closedOffMonth(c);
+    if (!last.close && done && !(last.open && done < last.open)) last.close = done;
+    info.set(id, { open: last.open, close: last.close, openEv: last.openEv, eps, listed: listed.size ? listed : null });
   }
   return info;
+}
+// 某個月所在的那一段開案～結案（沒有分段資料就原樣回傳）
+function epAt(x, month) {
+  if (!x || !x.eps || x.eps.length < 2) return x || {};
+  let ep = x.eps[0];
+  for (const e of x.eps) if (e.open && e.open <= month) ep = e;
+  return { ...x, open: ep.open, close: ep.close, openEv: ep.openEv };
 }
 // 兩個結案日期都填了 → 回傳較晚那天的月份（這個月還在總表，下個月起移到結案表）
 function closedOffMonth(c) {
@@ -717,7 +731,10 @@ function closedOffMonth(c) {
 // 某月是否還顯示在總表（含已結案但還沒補齊兩個結案日期的個案）
 function inSummaryList(c, x, month) {
   if (x.listed && x.listed.has(month)) return true;  // 原本 Excel 那個月的總表上有 → 一定列出
+  const isLast = !x.eps || x.eps.length < 2 || epAt(x, month).open === x.open;
+  x = epAt(x, month);
   if (x.open && x.open > month) return false;
+  if (!isLast) return !x.close || x.close >= month;   // 前面的段落：結案月之後就不列
   if (!x.close || x.close >= month) return true;
   const off = closedOffMonth(c);
   return !(off && off < month);
@@ -733,8 +750,8 @@ function autoTriggers(month, db) {
   for (const [id, c] of db.cases) {
     const own = cur.get(id);
     if (own && normTrigger(own.trigger)) continue;
-    const x = info.get(id) || {};
-    if (x.close && x.close < month) { if (inSummaryList(c, x, month)) out.set(id, `${+x.close.slice(5)}月結案`); continue; }
+    const x0 = info.get(id) || {}, x = epAt(x0, month);
+    if (x.close && x.close < month) { if (inSummaryList(c, x0, month)) out.set(id, `${+x.close.slice(5)}月結案`); continue; }
     const pe = last.get(id), pt = pe ? normTrigger(pe.trigger) : '';
     if (pt && !isCloseTrigger(pt) && (!FEE[pe.fee] || pe.fee === 'none'))
       out.set(id, pt.startsWith('新案') ? `${+prev.slice(5)}月${pt}` : '上月沒吃到錢');
@@ -755,12 +772,14 @@ function monthSummary(month, db) {
   const s = { inCase: blank(), newCase: blank(), closed: blank(), latest: blank(), src: { 出備: 0, 初評: 0, 轉入: 0, 未填: 0 }, anomaly: [],
     ids: { inCase: [], newCase: [], closed: [], latest: [] } };
   for (const [id, c] of db.cases) {
-    const x = info.get(id); if (!x || !x.open) continue;
+    const x0 = info.get(id); if (!x0) continue;
+    const x = epAt(x0, month), xp = epAt(x0, prev); if (!x.open) continue;
     // 結案早於開案（例如同一個編號結案後又重開）：資料有問題，列出來請人工檢查
     if (x.close && x.close < x.open) { if (x.open <= month) s.anomaly.push(c.caseNo); continue; }
     const rg = regionOf(c.caseNo);
     const activeEnd = m => x.open <= m && !(x.close && x.close <= m);
-    if (activeEnd(prev)) { s.inCase[rg]++; s.src[srcGroup(c.src)]++; s.ids.inCase.push(id); }
+    const activePrev = xp.open && xp.open <= prev && !(xp.close && xp.close <= prev);
+    if (activePrev) { s.inCase[rg]++; s.src[srcGroup(c.src)]++; s.ids.inCase.push(id); }
     if (x.open === month) { s.newCase[rg]++; s.ids.newCase.push(id); }
     if (x.close === month && x.open <= month) { s.closed[rg]++; s.ids.closed.push(id); }
     if (activeEnd(month)) { s.latest[rg]++; s.ids.latest.push(id); }
@@ -802,7 +821,7 @@ function billing(month, db) {
   const by = new Map(), info = db.info || caseMonths(db), evOf = new Map(), auto = autoTriggers(month, db);
   for (const e of db.events) if (e.month === month && db.cases.has(e.caseId)) evOf.set(e.caseId, e);
   for (const [id] of db.cases) {
-    const x = info.get(id) || {};
+    const x = epAt(info.get(id) || {}, month);
     if (x.open && x.open > month) continue;            // 還沒開案
     if (x.close && x.close < month) continue;          // 之前已結案、不在本月總表
     const e = evOf.get(id) || null;
@@ -1835,7 +1854,7 @@ function SummaryView({ db, month, user, refresh }) {
   const list = trig === '' ? base : trig === '__any' ? base.filter(c => trigOf(c)) : trig === '__none' ? base.filter(c => !trigOf(c)) : base.filter(c => trigOf(c) === trig);
   const nNew = list.filter(c => isNewTrigger((evOf.get(c._id) || {}).trigger)).length;
   const feeCell = c => {
-    const e = evOf.get(c._id), t = trigOf(c), x = db.info.get(c._id) || {};
+    const e = evOf.get(c._id), t = trigOf(c), x = epAt(db.info.get(c._id) || {}, month);
     if (x.close && x.close < month) return '';                       // 之前已結案，不核銷
     const k = e && FEE[e.fee] ? e.fee : defaultFee(t);
     if (k === 'unset') return '';
@@ -1863,7 +1882,7 @@ function SummaryView({ db, month, user, refresh }) {
     <div class="tw"><table class="grid">
       <thead><tr><th>編號</th><th>姓名</th><th>CMS</th><th>來源</th><th>${rocMonth(month)}觸發</th><th>核銷</th><th>照專評估</th><th>訪視</th><th>照專簽審</th><th>照會B</th><th>居服單位</th><th>狀態</th></tr></thead>
       <tbody>${list.map(c => {
-        const e = evOf.get(c._id), x = db.info.get(c._id) || {}, t = trigOf(c), isAuto = !(e && normTrigger(e.trigger)) && !!t;
+        const e = evOf.get(c._id), x = epAt(db.info.get(c._id) || {}, month), t = trigOf(c), isAuto = !(e && normTrigger(e.trigger)) && !!t;
         const closed = x.close && x.close <= month, waiting = x.close && x.close < month;
         return html`<tr class="click" onClick=${() => setEdit({ id: c._id })}>
           <td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${c.cms}</td><td>${c.src}</td>
