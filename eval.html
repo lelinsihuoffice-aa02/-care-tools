@@ -132,6 +132,7 @@ table.rpt2{width:auto;min-width:0}.rpt2 th{position:static;padding:8px 14px}.rpt
 @media (max-width:1100px){.cset{grid-template-columns:1fr}}
 .hbars{display:flex;flex-direction:column;gap:5px}.hb-row{display:grid;grid-template-columns:minmax(80px,max-content) 1fr 34px;gap:8px;align-items:center;font-size:13px}
 .hb-k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}.hb-track{height:12px;background:#f3ede4;border-radius:0 4px 4px 0}.hb-track i{display:block;height:100%;background:#2a78d6;border-radius:0 4px 4px 0;min-width:1px}.hb-v{text-align:right;font-variant-numeric:tabular-nums}
+.mgrid .rpt2 th,.mgrid .rpt2 td{padding:5px 9px}.mgrid .tw{overflow-x:auto}.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px 18px;align-items:start;margin-bottom:12px}.mgrid .sec h3{margin:0 0 6px}
 </style>
 </head>
 <body>
@@ -2279,7 +2280,7 @@ function exportUnitStatBook(book, title) {
 // ================= 統計報表（派案統計、新案CMS統計、個案統計、月報、年度統計） =================
 const DOCX_URL = 'https://esm.sh/docx@8.5.0', JSZIP_URL = 'https://esm.sh/jszip@3.10.1';
 const downloadBlob = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); };
-const fillRows = aoa => aoa.map(r => r || []);
+const fillRows = aoa => Array.from(aoa || [], r => r || []); // 補上空洞（[ , , x] 這種稀疏陣列 map 會跳過，畫面會當掉）
 // 讀 Word 裡的表格 → [[[格子文字]]]
 async function readWordTables(buf) {
   const JSZip = (await import(JSZIP_URL)).default, zip = await JSZip.loadAsync(buf);
@@ -2356,13 +2357,15 @@ function SecTable({ rows, hl, sumNote }) {
   const labels = tail.length && !tail[0].some(longCell) ? tail.shift() : [];
   const notes = tail.flatMap(r => r.map((v, j) => [labels[j] || '', v]).filter(([, v]) => !isBlank(v)));
   const numCol = Array.from({ length: n }, (_, j) => j > 0 && body.some(r => !isBlank(r[j])) && body.every(r => isBlank(r[j]) || isNumLike(r[j])));
+  const pctCol = Array.from({ length: n }, (_, j) => /比例|%/.test(String(head[j] ?? '')) && numCol[j]);
+  const fmtNum = (v, j) => pctCol[j] && typeof v === 'number' && v <= 1.5 ? Math.round(v * 1000) / 10 + '%' : showVal(v);
   return html`<div class="tw" style="max-height:none"><table class="grid rpt2">
     <thead><tr>${Array.from({ length: n }, (_, j) => html`<th class=${numCol[j] ? 'num' : ''}>${showVal(head[j])}</th>`)}</tr></thead>
     <tbody>${body.map(r => {
       const tot = TOTAL_RE.test(String(r[0] ?? '')), cur = hl && String(r[0] ?? '').trim() === hl;
       return html`<tr class=${tot ? 'tot' : cur ? 'curmonth' : ''}>${Array.from({ length: n }, (_, j) => {
         const v = r[j];
-        if (numCol[j]) return html`<td class=${'num' + (isBlank(v) || +v === 0 ? ' zero' : '')}>${isBlank(v) ? '0' : showVal(v)}</td>`;
+        if (numCol[j]) return html`<td class=${'num' + (isBlank(v) || +v === 0 ? ' zero' : '')}>${isBlank(v) ? (pctCol[j] ? '' : '0') : fmtNum(v, j)}</td>`;
         return html`<td class=${longCell(v) ? 'note' : ''}>${showVal(v)}</td>`;
       })}</tr>`; })}</tbody></table></div>
     ${notes.map(([k, v]) => html`${k && html`<h3 style="margin-top:16px">${k}</h3>`}<div class="namecards" style="margin-top:8px">${String(v).split(/\n\s*\n/).map(p => p.trim()).filter(Boolean).map(p => {
@@ -2370,6 +2373,42 @@ function SecTable({ rows, hl, sumNote }) {
       const m = /^(.*?\d+[位人])((?:四湖|台西|臺西|東勢|麥寮).*)$/.exec(first) || /^(.*?\d+位)(\S.*)$/.exec(first); // 「結案：19位四湖-7人：…」→ 標題和名單分開
       if (m && m[1].length <= 30) { first = m[1]; rest = [m[2], ...rest]; }
       return html`<div class="card ncard"><div class="nhead">${first.replace(/^\(/, '')}</div>${rest.map(l => html`<div class="nnames">${l}</div>`)}</div>`; })}</div>`)}`;
+}
+// 原檔把好幾個月左右並排（一月｜七月）：先用「整欄空白」切成左右幾塊，再各自切段；有月份名稱的段落拆成一個月一張小表
+const MONTH_NAMES = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
+function aoaBands(aoa) {
+  const rows = fillRows(aoa), w = Math.max(0, ...rows.map(r => r.length)), bands = [];
+  const emptyCol = j => rows.every(r => isBlank(r[j]));
+  let start = null;
+  for (let j = 0; j <= w; j++) {
+    if (j < w && !emptyCol(j)) { if (start === null) start = j; }
+    else if (start !== null) { bands.push(rows.map(r => r.slice(start, j))); start = null; }
+  }
+  return bands;
+}
+function monthSections(aoa) {
+  const plain = [], months = [];
+  for (const band of aoaBands(aoa)) for (const sc of aoaSections(band)) {
+    const col0 = sc.rows.map(r => r[0]).filter(x => !isBlank(x)).map(x => String(x).trim());
+    if (col0.length === 1 && MONTH_NAMES.includes(col0[0])) months.push({ title: col0[0], rows: sc.rows.map(r => r.slice(1)), mi: MONTH_NAMES.indexOf(col0[0]) });
+    else plain.push(sc);
+  }
+  months.sort((a, b) => a.mi - b.mi);
+  // 沒有表頭的月份（例如系統產生的二月、三月…只有資料列）：借有表頭那個月的表頭
+  const withHead = months.find(m => m.rows.length && isBlank(m.rows[0][0]) === false && months.some(o => o !== m && o.rows.length && m.rows.findIndex(r => String(r[0] ?? '') === String(o.rows[0][0] ?? '')) > 0));
+  if (withHead) for (const m of months) {
+    if (!m.rows.length) continue;
+    const k = withHead.rows.findIndex(r => String(r[0] ?? '') === String(m.rows[0][0] ?? ''));
+    if (k > 0 && m !== withHead && !m.rows.some(r => String(r[0] ?? '') === String(withHead.rows[0][0] ?? ''))) m.rows = [...withHead.rows.slice(0, k), ...m.rows];
+  }
+  return { plain, months };
+}
+function MonthBlocks({ aoa, hl }) {
+  const { plain, months } = monthSections(aoa);
+  if (!months.length) return html`<${SmartTables} aoa=${aoa} hl=${hl} />`;
+  return html`${plain.length > 0 && html`<div class="secs">${plain.map(sc => html`<div class="sec">${sc.title && html`<h3>${sc.title}</h3>`}<${SecTable} rows=${sc.rows} hl=${hl} /></div>`)}</div>`}
+    <h3>各月</h3>
+    <div class="mgrid">${months.map(sc => html`<div class="sec"><h3>${sc.title}</h3><${SecTable} rows=${sc.rows} /></div>`)}</div>`;
 }
 function SmartTables({ aoa, hl }) {
   const secs = aoaSections(aoa);
@@ -2590,7 +2629,7 @@ function StatReport({ db, month, user, refresh, rkey: key, picker }) {
   } else if (key === 'statCms') body = html`<${SmartTables} aoa=${hasSys(month) || !hist[month] ? cmsSheetAoa(month, db) : hist[month]} />`;
   else if (key === 'statMonthly') body = hasSys(month) ? html`<${MonthlyView} month=${month} db=${db} />` : html`<div class="card empty">${rocMonth(month)}系統裡沒有總表資料</div>`;
   else { const b = annualBook(y, db, hist, month > todayMonth() ? month : todayMonth());
-    body = html`<div class="trigbar">${Object.keys(b.sheets).map(n => html`<button class=${sheet === n ? 'on' : ''} onClick=${() => setSheet(n)}>${n}</button>`)}</div><${SmartTables} aoa=${b.sheets[sheet] || []} hl=${roc(month + '-01').slice(0, -3)} />`; }
+    body = html`<div class="trigbar">${Object.keys(b.sheets).map(n => html`<button class=${sheet === n ? 'on' : ''} onClick=${() => setSheet(n)}>${n}</button>`)}</div><${MonthBlocks} aoa=${b.sheets[sheet] || []} hl=${roc(month + '-01').slice(0, -3)} />`; }
   return html`<div class="page">
     <div class="bar">${picker}<span class="sub">${desc}</span><span class="grow"></span>
       ${kvKey && html`<label class="btn light" style="cursor:pointer">${busy ? '處理中…' : `匯入舊檔（${key === 'statDispatch' || key === 'statCase' ? 'Word' : 'Excel'}）`}<input type="file" accept=${key === 'statDispatch' || key === 'statCase' ? '.docx' : '.xlsx,.xls'} style="display:none" onChange=${e => { importOld(e.target.files[0]); e.target.value = ''; }} /></label>`}
