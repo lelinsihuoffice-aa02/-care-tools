@@ -763,6 +763,7 @@ function autoTriggers(month, db) {
   for (const [id, c] of db.cases) {
     const own = cur.get(id);
     if (own && normTrigger(own.trigger)) continue;
+    if (own && own.onList) continue;   // 這個月是從 Excel 匯入的：Excel 寫「-」就是沒有觸發，不自動帶入
     const x0 = info.get(id) || {}, x = epAt(x0, month);
     if (x.close && x.close < month) { if (!x.silent && inSummaryList(c, x0, month)) out.set(id, `${+x.close.slice(5)}月結案`); continue; }
     const pe = last.get(id), pt = pe ? normTrigger(pe.trigger) : '';
