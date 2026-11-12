@@ -696,9 +696,12 @@ function caseMonths(db) {
       if (e.onList) listed.add(e.month);   // 匯入時這個月的 Excel 總表上有這個人
       evMonths.add(e.month);
       // 新案觸發：第一次開案，或結案後又重開 → 新的一段
-      if (isNewTrigger(e.trigger) && (!cur.openEv || (cur.close && cur.close < e.month))) {
+      // 「6月新案-重開案-複評-1700」這種補報的：代表 6 月開案（6 月的總表沒匯入也一樣）
+      const nm = normTrigger(e.trigger).match(/^(\d{1,2})月新案/);
+      const newAt = isNewTrigger(e.trigger) ? e.month : nm ? (() => { const n = +nm[1], [y, em] = e.month.split('-').map(Number); return n >= 1 && n <= 12 ? `${n > em ? y - 1 : y}-${pad(n)}` : ''; })() : '';
+      if (newAt && (!cur.openEv || (cur.close && cur.close < newAt)) && !(nm && cur.openEv && cur.open === newAt)) {
         if (cur.openEv || cur.close) eps.push(cur);
-        cur = { open: e.month, openEv: true, close: '' };
+        cur = { open: newAt, openEv: true, close: '' };
       }
       const cm = closeMonthOf(e.trigger, e.month);
       if (cm && (!cur.close || cm < cur.close) && !(cur.openEv && cm < cur.open)) cur.close = cm;
@@ -719,6 +722,9 @@ function caseMonths(db) {
     }
     info.set(id, { open: last.open, close: last.close, openEv: last.openEv, silent: !!last.silent, evMonths, eps, listed: listed.size ? listed : null });
   }
+  // 哪些月份有匯入 Excel 總表（那些月份只列 Excel 上有、或系統裡那個月有紀錄的人）
+  const allListed = new Set(); for (const e of db.events) if (e.onList) allListed.add(e.month);
+  for (const x of info.values()) x.allListed = allListed;
   return info;
 }
 // 某個月所在的那一段開案～結案（沒有分段資料就原樣回傳）
@@ -736,6 +742,7 @@ function closedOffMonth(c) {
 // 某月是否還顯示在總表（含已結案但還沒補齊兩個結案日期的個案）
 function inSummaryList(c, x, month) {
   if (x.listed && x.listed.has(month)) return true;  // 原本 Excel 那個月的總表上有 → 一定列出
+  if (x.allListed && x.allListed.has(month) && !(x.evMonths && x.evMonths.has(month))) return false;  // 這個月有匯入 Excel，但 Excel 上沒有他、系統裡也沒有這個月的紀錄
   const isLast = !x.eps || x.eps.length < 2 || epAt(x, month).open === x.open;
   x = epAt(x, month);
   if (x.open && x.open > month) return false;
@@ -914,6 +921,7 @@ function parseSummarySheet(aoa, month) {
     c.latest = { referA: e.referA, assess: e.assess, visit: e.visit, submit: e.submit, supervisor: e.supervisor, approve: e.approve, referB: e.referB };
     // 不管有沒有觸發都記一筆「這個月在總表上」（onList），之後看這個月的總表才不會漏掉這個人
     e.onList = true;
+    if (!hasTrigger) e.trigger = '-';   // 「-」也寫進去：重新匯入時會蓋掉之前錯放在這個月的觸發
     rows.push({ caseNo, c, e, month, hasTrigger });
   }
   // 同一張表編號重複的列（後面那列會蓋掉前面）
@@ -2845,13 +2853,17 @@ function ImportView({ db, user, refresh, month }) {
     if (!list.length) return toast('沒有可以判斷月份的工作表，請先在下面填月份', true);
     setBusy(true); const st = { created: 0, updated: 0, unchanged: 0, events: 0 }, seen = new Map();
     try {
-      for (const x of list) { const r = parseOne(x.name, allMonths[x.name]); await importRows(r.rows, `${rocMonth(allMonths[x.name])}（${x.name}）`, st, seen); }
+      for (const x of list) {
+        const m = allMonths[x.name];
+        if (clearFirst) { setProg(`清除${rocMonth(m)}舊的觸發紀錄…`); let r; do { r = await call('m', 'data:clearMonthEvents', { month: m, by: user }); } while (r.left > 0); }
+        const r = parseOne(x.name, m); await importRows(r.rows, `${rocMonth(m)}（${x.name}）`, st, seen);
+      }
       await refresh(); setResult(st); toast(`已匯入 ${list.length} 個月份`);
     } catch (e) { console.error(e); toast('匯入失敗：' + e.message, true); }
     setProg(''); setBusy(false);
   };
   // 核對：Excel 每個月總表上的人，系統那個月有沒有列出來；沒有的列出原因
-  const [check, setCheck] = useState(null);
+  const [check, setCheck] = useState(null), [clearFirst, setClearFirst] = useState(true);
   const runCheck = () => {
     const out = [];
     for (const x of sheetList) {
@@ -2880,6 +2892,8 @@ function ImportView({ db, user, refresh, month }) {
         <tbody>${sheetList.map(x => html`<tr><td>${x.name}</td><td><input class="inp" type="month" value=${allMonths[x.name] || ''} onChange=${e => setAllMonths({ ...allMonths, [x.name]: e.target.value })} />
           ${!allMonths[x.name] && html` <span class="tag t-warn">判斷不出月份</span>`}${dupMonths.includes(allMonths[x.name]) && html` <span class="tag t-warn">月份重複</span>`}</td>
           <td class="num">${x.rows}</td><td class="num">${x.trig}</td><td class="num">${x.skipped ? html`<a href="#" style="color:#c0392b" onClick=${e => { e.preventDefault(); setSheet(x.name); setMk(allMonths[x.name] || ''); }}>${x.skipped} 列（看明細）</a>` : '0'}</td></tr>`)}</tbody></table></div>
+      <label class="sub" style="display:block;margin-top:8px"><input type="checkbox" checked=${clearFirst} onChange=${e => setClearFirst(e.target.checked)} />
+        匯入前先清除這些月份原本的觸發紀錄（建議勾選：之前匯錯月份的觸發會一起清掉；但這些月份在系統裡手動改過的觸發、核銷金額也會被 Excel 的內容取代）</label>
       <div class="bar" style="margin-top:10px"><button class="btn" disabled=${busy || dupMonths.length > 0} onClick=${runAll}>${busy ? prog : `匯入全部月份（${sheetList.filter(x => allMonths[x.name]).length} 個月）`}</button>
         ${dupMonths.length > 0 && html`<span class="tag t-warn">有兩張工作表填了同一個月份，請先改正</span>`}
         <button class="btn light" disabled=${busy} onClick=${runCheck} title="比對 Excel 每個月總表上的人，系統那個月有沒有列出來">核對 Excel 和系統</button></div>
