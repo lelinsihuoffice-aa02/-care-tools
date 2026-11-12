@@ -317,6 +317,10 @@ const isCloseTrigger = t => /^((\d{1,2}月)|上月)?結案/.test(normTrigger(t))
 
 // ---------- 地區 ----------
 const REGIONS = { '04': '四湖', '05': '台西', '06': '麥寮', '07': '東勢' };
+// 編號整理：去空白、全形數字與各種破折號（－ — – ‐ ─）都換成半形「-」
+function normCaseNo(v) {
+  return String(v ?? '').replace(/\s/g, '').replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0)).replace(/[－—–‐‑─ー_]/g, '-').replace(/-+/g, '-');
+}
 function parseCaseNo(no) {
   const m = String(no || '').replace(/\s/g, '').match(/^(.+?)-(\d{2})-(\d+)-(\d+)$/);
   if (!m) return null;
@@ -685,10 +689,18 @@ function caseMonths(db) {
   const evs = [...db.events].sort((a, b) => a.month.localeCompare(b.month));
   for (const e of evs) {
     const x = info.get(e.caseId); if (!x) continue;
+    if (e.onList) (x.listed = x.listed || new Set()).add(e.month);   // 匯入時這個月的 Excel 總表上有這個人
     // 新案觸發：第一次開案，或結案後又重開（沿用尾數 2 的同一筆）→ 從這個月重新起算
     if (isNewTrigger(e.trigger) && (!x.openEv || (x.close && x.close < e.month))) { x.open = e.month; x.openEv = true; x.close = ''; }
     const cm = closeMonthOf(e.trigger, e.month);
     if (cm && (!x.close || cm < x.close) && !(x.openEv && cm < x.open)) x.close = cm;
+  }
+  // 沒有開案日期／申請日期，或開案日期比 Excel 總表上第一次出現的月份還晚 → 依第一次出現在總表的月份（新案觸發的月份優先）
+  for (const x of info.values()) {
+    if (!x.listed || x.openEv) continue;
+    // 沒有新案觸發 → 是之前就在案的舊個案：開案月算在第一次出現的前一個月（才不會被當成那個月的新案）
+    const first = shiftMonth([...x.listed].sort()[0], -1);
+    if (!x.open || first < x.open) x.open = first;
   }
   // 沒打結案觸發，但 A結束服務日期、系統結案日期都填了 → 以較晚的日期月份當結案月
   for (const [id, c] of db.cases) {
@@ -704,6 +716,7 @@ function closedOffMonth(c) {
 }
 // 某月是否還顯示在總表（含已結案但還沒補齊兩個結案日期的個案）
 function inSummaryList(c, x, month) {
+  if (x.listed && x.listed.has(month)) return true;  // 原本 Excel 那個月的總表上有 → 一定列出
   if (x.open && x.open > month) return false;
   if (!x.close || x.close >= month) return true;
   const off = closedOffMonth(c);
@@ -842,14 +855,14 @@ function parseSummarySheet(aoa, month) {
   if (hr < 0) throw new Error('找不到標題列（需要有「編號」和「姓名」兩欄）');
   const heads = aoa[hr].map(normHeader);
   const unknown = heads.filter(h => h && !IMPORT_MAP[h] && h !== '年齡' && h !== '服務項目數');
-  const rows = [];
+  const rows = [], skipped = [];
   for (let i = hr + 1; i < aoa.length; i++) {
     const row = aoa[i]; if (!row) continue;
     const c = { services: {} }, e = { services: {} }; let caseNo = '';
     heads.forEach((h, j) => {
       const m = IMPORT_MAP[h]; if (!m) return;
       let val = row[j]; if (val === undefined || val === null) val = '';
-      if (m[0] === 'caseNo') { caseNo = String(val).replace(/\s/g, ''); return; }
+      if (m[0] === 'caseNo') { caseNo = normCaseNo(val); return; }
       if (m[2] === 'date') {
         const t = timeFromText(val);
         if (t && m[0] === 'e' && (m[1] === 'supervisor' || m[1] === 'approve')) e[m[1] + 'Time'] = toAmPm(t);
@@ -859,14 +872,22 @@ function parseSummarySheet(aoa, month) {
       else if (m[0] === 'e') e[m[1]] = val;
       else if (m[0] === 's' && val && val !== '-') { c.services[m[1]] = val; e.services[m[1]] = val; }
     });
-    if (!caseNo || !parseCaseNo(caseNo)) continue; // 跳過範例列、說明列、空白列
+    if (!caseNo || !parseCaseNo(caseNo)) { // 跳過範例列、說明列、空白列；有姓名卻沒有正確編號的記下來給使用者看
+      if (c.name && c.name !== '姓名') skipped.push({ row: i + 1, caseNo, name: c.name, why: caseNo ? '編號格式不對' : '沒有編號' });
+      continue;
+    }
     e.trigger = normTrigger(e.trigger);   // 「-」視為沒有觸發
     const hasTrigger = !!e.trigger;
     // 個案也存一份最新日期，總表畫面不用回頭找事件
     c.latest = { referA: e.referA, assess: e.assess, visit: e.visit, submit: e.submit, supervisor: e.supervisor, approve: e.approve, referB: e.referB };
-    rows.push({ caseNo, c, e: hasTrigger ? e : null, month });
+    // 不管有沒有觸發都記一筆「這個月在總表上」（onList），之後看這個月的總表才不會漏掉這個人
+    e.onList = true;
+    rows.push({ caseNo, c, e, month, hasTrigger });
   }
-  return { rows, unknownHeaders: unknown, headerRow: hr };
+  // 同一張表編號重複的列（後面那列會蓋掉前面）
+  const cnt = {}; for (const r of rows) cnt[r.caseNo] = (cnt[r.caseNo] || 0) + 1;
+  const dups = Object.keys(cnt).filter(k => cnt[k] > 1);
+  return { rows, unknownHeaders: unknown, headerRow: hr, skipped, dups };
 }
 
 // ---------- 結案 ----------
@@ -2093,7 +2114,7 @@ function ClosureEditor({ rec, user, refresh, onClose }) {
 }
 function ClosureImport({ db, user, refresh, onClose }) {
   const [wb, setWb] = useState(null), [sheet, setSheet] = useState(''), [busy, setBusy] = useState(false), [prog, setProg] = useState(''), [result, setResult] = useState(null);
-  const parsed = useMemo(() => { if (!wb || !sheet) return null; try { return parseClosureSheet(XLSX.utils.sheet_to_json(wb.Sheets[sheet], { header: 1, raw: true, defval: '' })); } catch (e) { return { error: e.message }; } }, [wb, sheet]);
+  const parsed = useMemo(() => { if (!wb || !sheet) return null; try { return parseClosureSheet(sheetAoa(wb.Sheets[sheet])); } catch (e) { return { error: e.message }; } }, [wb, sheet]);
   const pick = async f => { if (!f) return; try { const w = XLSX.read(await f.arrayBuffer(), { type: 'array' }); setWb(w); setResult(null);
     setSheet(w.SheetNames.find(n => n.includes('結案總表')) || w.SheetNames.find(n => /結案/.test(n)) || w.SheetNames[0]); } catch (e) { toast('無法讀取這個檔案：' + e.message, true); } };
   const run = async () => {
@@ -2168,7 +2189,7 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
     if (!f) return; setBusy(true);
     try {
       const w = XLSX.read(await f.arrayBuffer(), { type: 'array' });
-      const got = parseReportBook(Object.fromEntries(w.SheetNames.map(n => [n, XLSX.utils.sheet_to_json(w.Sheets[n], { header: 1, raw: true, defval: '' })])), month.slice(0, 4));
+      const got = parseReportBook(Object.fromEntries(w.SheetNames.map(n => [n, sheetAoa(w.Sheets[n])])), month.slice(0, 4));
       const ks = Object.keys(got).sort();
       if (!ks.length) throw new Error('找不到月份工作表（工作表名稱或標題要有「115年10月」這樣的月份，且有「姓名」欄）');
       await call('m', 'data:saveKv', { key: 'report:' + key, d: JSON.stringify({ months: { ...histAll, ...got } }), by: user });
@@ -2233,7 +2254,7 @@ function UnitStatReport({ db, month, user, refresh, kind, title, picker }) {
     if (!f) return; setBusy(true);
     try {
       const w = XLSX.read(await f.arrayBuffer(), { type: 'array' });
-      const h = parseUnitStatBook(Object.fromEntries(w.SheetNames.map(n => [n, XLSX.utils.sheet_to_json(w.Sheets[n], { header: 1, raw: true, defval: '' })])));
+      const h = parseUnitStatBook(Object.fromEntries(w.SheetNames.map(n => [n, sheetAoa(w.Sheets[n])])));
       if (!h.sheetOrder.length) throw new Error('找不到服務類別的工作表（例如 B單位、C碼、交通）');
       await call('m', 'data:saveKv', { key: 'unitstat:' + kind, d: JSON.stringify(h), by: user });
       await refresh(); toast(`已匯入 ${h.sheetOrder.length} 張工作表的舊數字`);
@@ -2561,7 +2582,7 @@ function StatReport({ db, month, user, refresh, rkey: key, picker }) {
       if (key === 'statDispatch' || key === 'statCase') got = wordTablesByMonth(await readWordTables(await f.arrayBuffer()));
       else {
         const w = XLSX.read(await f.arrayBuffer(), { type: 'array' });
-        const sheets = Object.fromEntries(w.SheetNames.map(n => [n, XLSX.utils.sheet_to_json(w.Sheets[n], { header: 1, raw: true, defval: '' })]));
+        const sheets = Object.fromEntries(w.SheetNames.map(n => [n, sheetAoa(w.Sheets[n])]));
         got = key === 'statAnnual' ? parseAnnualBook(sheets, y) : parseMonthSheets(sheets, y);
       }
       const ks = Object.keys(got).sort(); if (!ks.length) throw new Error('檔案裡找不到月份（標題或工作表名稱要有「115年1月」或「01月」）');
@@ -2716,6 +2737,19 @@ function StatsView({ db, month }) {
 }
 
 // ================= 匯入 =================
+// Excel 工作表 → 二維陣列。只讀到真的有資料的最後一列／欄：
+// 有些工作表格式拉到第 1,048,576 列，直接轉會把瀏覽器卡死
+function sheetAoa(ws) {
+  if (!ws || !ws['!ref']) return [];
+  let maxR = 0, maxC = 0;
+  for (const k of Object.keys(ws)) {
+    if (k[0] === '!') continue;
+    const cell = ws[k]; if (!cell || cell.v === undefined || cell.v === null || cell.v === '') continue;
+    const a = XLSX.utils.decode_cell(k); if (a.r > maxR) maxR = a.r; if (a.c > maxC) maxC = a.c;
+  }
+  const rg = XLSX.utils.decode_range(ws['!ref']);
+  return XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', range: { s: rg.s, e: { r: Math.min(rg.e.r, maxR), c: Math.min(rg.e.c, maxC) } } });
+}
 // 工作表名稱 → 月份：「115年10月」「115.10」「10月」「10月總表」「總表-10月」「1150」都認得；年份抓不到就看檔名，再不行用今年
 function guessMonth(name, fileName = '') {
   const s = String(name).replace(/\s/g, ''), fy = String(fileName).match(/(\d{3})年/);
@@ -2740,10 +2774,10 @@ function caseDForImport(row, existing, month) {
 function ImportView({ db, user, refresh, month }) {
   const [wb, setWb] = useState(null), [fname, setFname] = useState(''), [sheet, setSheet] = useState(''), [mk, setMk] = useState('');
   const [busy, setBusy] = useState(false), [prog, setProg] = useState(''), [result, setResult] = useState(null), [allMonths, setAllMonths] = useState({});
-  const parseOne = (name, m) => { try { return parseSummarySheet(XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '' }), m); } catch (e) { return { error: e.message }; } };
+  const parseOne = (name, m) => { try { return parseSummarySheet(sheetAoa(wb.Sheets[name]), m); } catch (e) { return { error: e.message }; } };
   const parsed = useMemo(() => (!wb || !sheet || !mk) ? null : parseOne(sheet, mk), [wb, sheet, mk]);
   // 檔案裡所有「總表」工作表（有編號、姓名欄的）
-  const sheetList = useMemo(() => !wb ? [] : wb.SheetNames.map(n => { const r = parseOne(n, ''); return r.error ? null : { name: n, rows: r.rows.length, trig: r.rows.filter(x => x.e).length }; }).filter(Boolean), [wb]);
+  const sheetList = useMemo(() => !wb ? [] : wb.SheetNames.map(n => { const r = parseOne(n, ''); return r.error ? null : { name: n, rows: r.rows.length, trig: r.rows.filter(x => x.hasTrigger).length, skipped: r.skipped.length }; }).filter(Boolean), [wb]);
   const pick = async f => {
     if (!f) return;
     setResult(null); setFname(f.name);
@@ -2784,6 +2818,24 @@ function ImportView({ db, user, refresh, month }) {
     } catch (e) { console.error(e); toast('匯入失敗：' + e.message, true); }
     setProg(''); setBusy(false);
   };
+  // 核對：Excel 每個月總表上的人，系統那個月有沒有列出來；沒有的列出原因
+  const [check, setCheck] = useState(null);
+  const runCheck = () => {
+    const out = [];
+    for (const x of sheetList) {
+      const m = allMonths[x.name]; if (!m) continue;
+      const r = parseOne(x.name, m), miss = [];
+      for (const row of r.rows) {
+        const c = caseByNo.get(row.caseNo);
+        if (!c) { miss.push({ caseNo: row.caseNo, name: row.c.name, why: '系統裡沒有這個編號（還沒匯入？）' }); continue; }
+        const info = db.info.get(c._id) || {};
+        if (!inSummaryList(c, info, m)) miss.push({ caseNo: row.caseNo, name: c.name, trig: row.hasTrigger ? row.e.trigger : '-',
+          why: `系統算的開案月 ${info.open ? rocMonth(info.open) : '無'}、結案月 ${info.close ? rocMonth(info.close) : '無'}；A結束 ${roc(c.aEnd) || '空'}、系統結案 ${roc(c.sysClose) || '空'}${info.listed && info.listed.has(m) ? '' : '；沒有這個月的匯入紀錄（請重新匯入這個月）'}` });
+      }
+      out.push({ sheet: x.name, month: m, excel: r.rows.length, miss });
+    }
+    setCheck(out);
+  };
   const dupMonths = (() => { const c = {}; for (const x of sheetList) { const m = allMonths[x.name]; if (m) c[m] = (c[m] || 0) + 1; } return Object.keys(c).filter(k => c[k] > 1); })();
   return html`<div class="page"><div class="card">
     <h2>匯入個案總表 Excel</h2>
@@ -2792,12 +2844,17 @@ function ImportView({ db, user, refresh, month }) {
     ${wb && sheetList.length > 1 && html`<div class="card" style="margin-top:12px;background:#fbf8f2">
       <h3 style="margin-top:0">一次匯入全部月份（${sheetList.length} 張總表工作表）</h3>
       <div class="sub" style="margin-bottom:8px">請確認每張工作表對應的月份；空白的不會匯入。</div>
-      <div class="tw" style="max-height:320px"><table class="grid"><thead><tr><th>工作表</th><th>月份</th><th class="num">個案列數</th><th class="num">有觸發</th></tr></thead>
+      <div class="tw" style="max-height:320px"><table class="grid"><thead><tr><th>工作表</th><th>月份</th><th class="num">個案列數</th><th class="num">有觸發</th><th class="num">會漏掉</th></tr></thead>
         <tbody>${sheetList.map(x => html`<tr><td>${x.name}</td><td><input class="inp" type="month" value=${allMonths[x.name] || ''} onChange=${e => setAllMonths({ ...allMonths, [x.name]: e.target.value })} />
           ${!allMonths[x.name] && html` <span class="tag t-warn">判斷不出月份</span>`}${dupMonths.includes(allMonths[x.name]) && html` <span class="tag t-warn">月份重複</span>`}</td>
-          <td class="num">${x.rows}</td><td class="num">${x.trig}</td></tr>`)}</tbody></table></div>
+          <td class="num">${x.rows}</td><td class="num">${x.trig}</td><td class="num">${x.skipped ? html`<a href="#" style="color:#c0392b" onClick=${e => { e.preventDefault(); setSheet(x.name); setMk(allMonths[x.name] || ''); }}>${x.skipped} 列（看明細）</a>` : '0'}</td></tr>`)}</tbody></table></div>
       <div class="bar" style="margin-top:10px"><button class="btn" disabled=${busy || dupMonths.length > 0} onClick=${runAll}>${busy ? prog : `匯入全部月份（${sheetList.filter(x => allMonths[x.name]).length} 個月）`}</button>
-        ${dupMonths.length > 0 && html`<span class="tag t-warn">有兩張工作表填了同一個月份，請先改正</span>`}</div>
+        ${dupMonths.length > 0 && html`<span class="tag t-warn">有兩張工作表填了同一個月份，請先改正</span>`}
+        <button class="btn light" disabled=${busy} onClick=${runCheck} title="比對 Excel 每個月總表上的人，系統那個月有沒有列出來">核對 Excel 和系統</button></div>
+      ${check && html`<div style="margin-top:10px">${check.map(k => html`<div style="margin:6px 0"><b>${k.sheet}（${rocMonth(k.month)}）</b>　Excel ${k.excel} 人，
+        ${k.miss.length ? html`<span style="color:#c0392b">系統少了 ${k.miss.length} 人</span>` : html`<span class="tag t-ok">全部都有</span>`}
+        ${k.miss.length > 0 && html`<div class="tw" style="max-height:220px;margin-top:4px"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>觸發</th><th>原因</th></tr></thead>
+          <tbody>${k.miss.map(x => html`<tr><td>${x.caseNo}</td><td>${x.name}</td><td>${x.trig || ''}</td><td>${x.why}</td></tr>`)}</tbody></table></div>`}</div>`)}</div>`}
     </div>`}
     ${wb && html`<h3>或只匯入一張工作表</h3><div class="bar"><select class="inp" value=${sheet} onChange=${e => { setSheet(e.target.value); setResult(null); setMk(guessMonth(e.target.value, fname)); }}>${wb.SheetNames.map(n => html`<option value=${n}>${n}</option>`)}</select>
         <label class="sub">這張工作表是 <input class="inp" type="month" value=${mk} onChange=${e => { setMk(e.target.value); setResult(null); }} /> 的總表</label>
@@ -2808,11 +2865,16 @@ function ImportView({ db, user, refresh, month }) {
         <div class="chip"><span class="sub">個案列數</span><b>${parsed.rows.length}</b></div>
         <div class="chip"><span class="sub">系統裡已有</span><b>${parsed.rows.filter(r => byNo.has(r.caseNo)).length}</b></div>
         <div class="chip"><span class="sub">新個案</span><b>${parsed.rows.filter(r => !byNo.has(r.caseNo)).length}</b></div>
-        <div class="chip"><span class="sub">${rocMonth(mk)}有觸發</span><b>${parsed.rows.filter(r => r.e).length}</b></div>
+        <div class="chip"><span class="sub">${rocMonth(mk)}有觸發</span><b>${parsed.rows.filter(r => r.hasTrigger).length}</b></div>
       </div>
       ${parsed.unknownHeaders.length > 0 && html`<div class="sub" style="margin-bottom:8px">以下欄位系統不認得，不會匯入：${parsed.unknownHeaders.join('、')}</div>`}
+      ${parsed.skipped.length === 0 && html`<div class="tag t-ok" style="margin:6px 0">這張表有姓名的列全部都會匯入，沒有漏掉</div>`}
+      ${parsed.skipped.length > 0 && html`<div class="card" style="background:#fff4f0;margin:8px 0"><b style="color:#c0392b">有 ${parsed.skipped.length} 列有姓名但不會匯入（編號空白或格式不對，正確格式像「台西-04-123-1」）</b>
+        <div class="tw" style="max-height:200px;margin-top:6px"><table class="grid"><thead><tr><th>Excel 列</th><th>編號</th><th>姓名</th><th>原因</th></tr></thead>
+        <tbody>${parsed.skipped.map(x => html`<tr><td>${x.row}</td><td>${x.caseNo}</td><td>${x.name}</td><td>${x.why}</td></tr>`)}</tbody></table></div></div>`}
+      ${parsed.dups.length > 0 && html`<div class="sub" style="color:#c0392b;margin-bottom:8px">這張表有重複的編號（只會留下面那列）：${parsed.dups.join('、')}</div>`}
       <div class="tw" style="max-height:300px"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>觸發</th><th>照專評估</th><th>訪視</th><th>照專簽審</th><th>居服單位</th></tr></thead>
-        <tbody>${parsed.rows.slice(0, 30).map(r => html`<tr><td>${r.caseNo}</td><td>${r.c.name}</td><td>${r.e ? r.e.trigger : ''}</td><td>${roc(r.c.latest.assess)}</td><td>${roc(r.c.latest.visit)}</td><td>${roc(r.c.latest.approve)}</td><td>${r.c.services.home || ''}</td></tr>`)}</tbody></table></div>
+        <tbody>${parsed.rows.slice(0, 30).map(r => html`<tr><td>${r.caseNo}</td><td>${r.c.name}</td><td>${r.hasTrigger ? r.e.trigger : '-'}</td><td>${roc(r.c.latest.assess)}</td><td>${roc(r.c.latest.visit)}</td><td>${roc(r.c.latest.approve)}</td><td>${r.c.services.home || ''}</td></tr>`)}</tbody></table></div>
       ${parsed.rows.length > 30 && html`<div class="sub">只顯示前 30 列</div>`}
       <div class="bar" style="margin-top:12px"><button class="btn" disabled=${busy || !parsed.rows.length} onClick=${run}>${busy ? prog : `匯入 ${parsed.rows.length} 列到 ${rocMonth(mk)}`}</button></div>
     </div>`}
