@@ -1749,6 +1749,7 @@ const EVENT_DATES = [['assess', '照專評估日期'], ['referA', '轉介(指派
 // 重開案時從舊個案帶入的基本資料
 const BASE_COPY = ['name', 'gender', 'idNo', 'birth', 'identity', 'living', 'dementia', 'disability', 'disLevel', 'area', 'address', 'contact', 'phone'];
 const NEW_TRIGGERS = TRIGGERS.filter(isNewTrigger);
+const TRANSFER_FROM = ['友單位', '外縣市']; // 轉入案的轉入來源，存在個案的「申請來源備註」（srcNote）
 const latestOf = (db, c, k, upTo) => {
   let best = { m: '', v: (c.latest || {})[k] || '' };
   for (const e of db.events) if (e.caseId === c._id && e[k] && e.month >= best.m && (!upTo || e.month <= upTo)) best = { m: e.month, v: e[k] };
@@ -1844,7 +1845,7 @@ function SummaryView({ db, month, user, refresh }) {
         const closed = x.close && x.close <= month, waiting = x.close && x.close < month;
         return html`<tr class="click" onClick=${() => setEdit({ id: c._id })}>
           <td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${c.cms}</td><td>${c.src}</td>
-          <td>${t ? html`<span class=${'tag ' + (isNewTrigger(t) ? 't-new' : /結案/.test(t) ? 't-close' : isAuto ? 't-org' : 't-ev')} title=${isAuto ? '系統自動帶入' : ''}>${t}${isAuto ? '（自動）' : ''}</span>` : '-'}</td>
+          <td>${t ? html`<span class=${'tag ' + (isNewTrigger(t) ? 't-new' : /結案/.test(t) ? 't-close' : isAuto ? 't-org' : 't-ev')} title=${isAuto ? '系統自動帶入' : ''}>${t}${isAuto ? '（自動）' : ''}</span>${/轉入/.test(t) ? html` <span class="tag t-close">${TRANSFER_FROM.includes(c.srcNote) ? c.srcNote : '轉入來源未選'}</span>` : ''}` : '-'}</td>
           <td>${feeCell(c)}</td>
           <td>${roc(latestOf(db, c, 'assess'))}</td><td>${roc(latestOf(db, c, 'visit'))}</td><td>${roc(latestOf(db, c, 'approve'))}</td><td>${roc(latestOf(db, c, 'referB'))}</td>
           <td>${db.resolveUnit((c.services || {}).home || '')}</td>
@@ -1892,7 +1893,8 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
   const chooseTrigger = t => {
     const nt = ev.trigger === t ? '' : t;
     setEv({ ...ev, trigger: nt });
-    if (nt && !c.src) setC({ ...c, src: nt.includes('出備') ? '出備' : nt.includes('轉入') ? '轉入' : '初評' });
+    if (nt && nt.includes('轉入')) setC({ ...c, src: '轉入' });
+    else if (nt && !c.src) setC({ ...c, src: nt.includes('出備') ? '出備' : '初評' });
   };
   const unitNames = useMemo(() => [...new Set(db.units.map(u => u.short || u.name).filter(Boolean))], [db]);
 
@@ -1928,7 +1930,8 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
   const field = (obj, set) => ([k, label, t]) => html`<label>${label}
     ${t === 'date' ? html`<${DateInput} style="width:100%" value=${obj[k] || ''} onChange=${v => set({ ...obj, [k]: v })} />`
       : Array.isArray(t) ? html`<input class="inp" list=${'dl-' + k} value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} /><datalist id=${'dl-' + k}>${t.map(o => html`<option value=${o} />`)}</datalist>`
-        : html`<input class="inp" value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} />`}</label>`;
+        : html`<input class="inp" value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} />`}
+    ${k === 'srcNote' && obj.src === '轉入' && html`<span class="trigbar" style="margin:4px 0 0">${TRANSFER_FROM.map(o => html`<button type="button" class=${obj.srcNote === o ? 'on' : ''} onClick=${e => { e.preventDefault(); set({ ...obj, srcNote: obj.srcNote === o ? '' : o }); }}>${o}</button>`)}</span>`}</label>`;
 
   return html`<div class="modal" onClick=${e => e.target === e.currentTarget && onClose()}><div class="drawer">
     <div class="bar"><h2 style="margin:0">${!isAdd ? `${orig.name}　${orig.caseNo}` : '新增個案'}</h2><span class="grow"></span>
@@ -1991,6 +1994,9 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
           <div class="trigbar" style="margin:4px 0 0">${NEW_TRIGGERS.map(t => html`<button class=${ev.trigger === t ? 'on' : ''} onClick=${() => chooseTrigger(t)}>${t}</button>`)}</div></div>`
         : html`<label>觸發<input class="inp" list="dl-trig" value=${ev.trigger || ''} onInput=${e => setEv({ ...ev, trigger: e.target.value })} onBlur=${e => setEv({ ...ev, trigger: normTrigger(e.target.value) })} />
           <datalist id="dl-trig">${TRIGGERS.map(t => html`<option value=${t} />`)}</datalist></label>`}
+        ${/轉入/.test(normTrigger(ev.trigger)) && html`<div style="grid-column:1/-1"><span class="sub">轉入來源</span>
+          <div class="trigbar" style="margin:4px 0 0">${TRANSFER_FROM.map(k => html`<button class=${c.srcNote === k ? 'on' : ''} onClick=${() => setC({ ...c, src: '轉入', srcNote: c.srcNote === k ? '' : k })}>${k}</button>`)}
+          ${TRANSFER_FROM.includes(c.srcNote) ? html`<span class="sub">已填入「申請來源備註」</span>` : html`<span class="sub" style="color:var(--warn,#c0392b)">請選擇是友單位轉入還是外縣市轉入（會自動填進申請來源備註）</span>`}</div></div>`}
         ${!normTrigger(ev.trigger) && autoTrig && html`<div style="grid-column:1/-1" class="sub">本月沒有自己打觸發，系統自動帶入：<span class="tag t-org">${autoTrig}</span>${/新案|沒吃到錢/.test(autoTrig) ? '（上月沒選金額或沒吃到錢，本月請補報並選金額）' : ''}</div>`}
         <div style="grid-column:1/-1"><span class="sub">核銷金額</span>
           <div class="trigbar" style="margin:4px 0 0">${FEES.map(f => html`<button class=${ev.fee === f.key ? 'on' : ''} onClick=${() => setEv({ ...ev, fee: ev.fee === f.key ? '' : f.key })}>${f.label}</button>`)}
