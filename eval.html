@@ -741,6 +741,12 @@ function histRowFor(R, hist, row) {
 const NOT_UNIT = /^(僅|只有|無$|-+$|\/$|暫停|待)/;
 const isUnitName = v => { const s = String(v || '').replace(/\s+/g, ''); return !!s && !NOT_UNIT.test(s); };
 // 「僅交通」「僅日照」→ 指向哪個服務類別
+// 「僅A、B、C」→ 每一項各是哪個服務類別
+function onlyCatsOf(v) {
+  const raw = String(v || '').replace(/\s+/g, ''); if (!/^(僅|只有)/.test(raw)) return [];
+  const parts = raw.replace(/^(僅|只有)/, '').split(/[、,，/／+＋]/).filter(Boolean);
+  return [...new Set(parts.map(p => onlyCatOf('僅' + p)).filter(Boolean))];
+}
 function onlyCatOf(v) {
   const s = String(v || '').replace(/\s+/g, '').replace(/^(僅|只有)/, '');
   if (!s || s === String(v || '').replace(/\s+/g, '')) return null;
@@ -758,7 +764,11 @@ function caseUnits(e, c, resolveUnit) {
   // 那個月有匯入總表（onList）→ 只看那個月總表寫的服務，不拿個案最新的服務去補（避免後來才加的居喘、短照算到以前的月份）
   const out = {}, src = k => (e && (e.services || {})[k]) || (e && e.onList ? '' : (c.services || {})[k]) || '';
   for (const cat of CATS) { const raw = src(cat.key); if (isUnitName(raw)) out[cat.key] = resolveUnit(raw, cat.key); }
-  for (const cat of CATS) { const t = onlyCatOf(src(cat.key)); if (t && !out[t]) out[t] = '（未填單位）'; }
+  // 「僅復能、交通、輔具」→ 復能、交通、輔具都算有；那個月沒寫單位時，先用個案資料上的單位，還是沒有才記「（未填單位）」
+  for (const cat of CATS) for (const t of onlyCatsOf(src(cat.key))) if (!out[t]) {
+    const cv = (c.services || {})[t];
+    out[t] = isUnitName(cv) ? resolveUnit(cv, t) : '（未填單位）';
+  }
   return out;
 }
 function unitStats(kind, month, db) {
@@ -813,12 +823,13 @@ function unitStatBook(kind, db, hist, toMonth) {
   hist = hist || { sheetOrder: [], order: {}, counts: {} };
   const f = unitStatFilter(kind), sysMonths = new Set();
   for (const e of db.events) if (db.cases.has(e.caseId) && f(e)) sysMonths.add(e.month);
-  const histMonths = new Set(Object.values(hist.counts).flatMap(o => Object.keys(o)));
+  // 舊檔裡有數字的月份才算「有匯入」（舊檔預留的空白月份不算，例如 115/11、115/12 還沒填）
+  const histMonths = new Set(Object.values(hist.counts).flatMap(o => Object.entries(o).filter(([m, v]) => m < SYSTEM_FROM && Object.values(v || {}).some(n => n)).map(([m]) => m)));
   const allMonths = [...sysMonths, ...histMonths].sort();
   const start = allMonths[0] || toMonth.slice(0, 4) + '-01';
   const months = []; for (let m = start; m <= `${toMonth.slice(0, 4)}-12`; m = shiftMonth(m, 1)) months.push(m);
   const sheets = [...new Set([...(hist.sheetOrder.length ? hist.sheetOrder : UNIT_SHEETS[kind]), ...UNIT_SHEETS[kind]])];
-  const sysByMonth = {}; for (const m of sysMonths) sysByMonth[m] = unitStats(kind, m, db);
+  const sysByMonth = {}; for (const m of sysMonths) if (!histMonths.has(m)) sysByMonth[m] = unitStats(kind, m, db);
   return sheets.map(cat => {
     // 欄位一律用全名：舊檔裡的簡稱欄（例如「樂臨」「紅十字」）併到全名那一欄，簡稱欄刪掉
     const extra = hist.order[cat] || [], canon = u => canonUnit(u, cat, db.units, extra);
@@ -826,18 +837,19 @@ function unitStatBook(kind, db, hist, toMonth) {
     const addCol = u => { if (!cols.includes(u)) cols.push(u); return u; };
     const rows = months.map(m => {
       const v = {};
-      if (sysMonths.has(m)) {
+      // 有匯入舊統計的月份一律用匯入的數字；沒有匯入的月份（例如 11 月起）才用系統計算
+      if (sysMonths.has(m) && !histMonths.has(m)) {
         for (const [u, n] of Object.entries((sysByMonth[m][STAT2CAT[cat]] || {}))) { const k = addCol(canon(u)); v[k] = (v[k] || 0) + n; }
         return { m, src: '系統', v };
       }
       const h = (hist.counts[cat] || {})[m];
       if (h) for (const [u, n] of Object.entries(h)) { const k = addCol(canon(u)); v[k] = (v[k] || 0) + n; }
-      return { m, src: h ? '匯入' : '', v };
+      return { m, src: histMonths.has(m) ? '匯入' : '', v };
     });
     // 系統不認識的名稱（不是舊檔的全名、也不在單位主檔）→ 畫面上請使用者填全名
     const knownSet = new Set([AIDS_CENTER, ...(KNOWN_UNITS[cat] || []), ...extra.map(canon).filter(u => /(機構|協會|公司|中心|所|醫院|之家|診所|基金會|紅十字會)$/.test(u)), ...(db.units || []).map(u => normName(u.name))]);
     const unknown = cols.filter(u => !knownSet.has(u) && !/^（未填/.test(u)).map(u => ({ name: u, n: rows.reduce((a, r) => a + (r.v[u] || 0), 0) }));
-    const unfilled = months.filter(m => sysMonths.has(m)).flatMap(m => (sysByMonth[m].unfilled || []).filter(x => x.k === STAT2CAT[cat]))
+    const unfilled = months.filter(m => sysMonths.has(m) && !histMonths.has(m)).flatMap(m => (sysByMonth[m].unfilled || []).filter(x => x.k === STAT2CAT[cat]))
       .map(x => ({ ...x, c: db.cases.get(x.caseId) }));
     return { cat, cols, rows, unknown, known: [...knownSet], unfilled };
   });
@@ -1454,9 +1466,21 @@ function parseAnnualBook(sheets, year) {
   return out;
 }
 // 組年度統計各工作表
+// 115 年 11 月起一律用系統計算；之前的月份有匯入舊檔就用匯入的（舊檔沒有那個月才用系統）
+const SYSTEM_FROM = '2026-11';
+const useHist = (mk, v) => mk < SYSTEM_FROM && histHasData(v);
+// 匯入的舊資料裡有沒有任何數字（舊檔預留、還沒填的空白月份不算）
+function histHasData(v) {
+  if (v == null) return false;
+  if (typeof v === 'number') return v !== 0;
+  if (typeof v === 'string') return /[1-9]/.test(v) && /^\s*[\d,.]+%?\s*$/.test(v);
+  if (Array.isArray(v)) return v.some(histHasData);
+  if (typeof v === 'object') return Object.entries(v).some(([k, x]) => k !== 'src' && histHasData(x));
+  return false;
+}
 function annualBook(year, db, hist, upTo) {
   const months = Array.from({ length: 12 }, (_, i) => `${year}-${pad(i + 1)}`);
-  const data = months.map(mk => mk > upTo ? null : (db.events.some(e => e.month === mk) ? { ...annualMonth(mk, db), src: '系統' } : hist && hist[mk] ? { ...hist[mk], src: '匯入' } : null));
+  const data = months.map(mk => mk > upTo ? null : (hist && useHist(mk, hist[mk]) ? { ...hist[mk], src: '匯入' } : db.events.some(e => e.month === mk) ? { ...annualMonth(mk, db), src: '系統' } : hist && hist[mk] ? { ...hist[mk], src: '匯入' } : null));
   const yy = +year - 1911, t = o => o ? (o.男 || 0) + (o.女 || 0) : 0, ratio = (n, d) => d ? Math.round(n / d * 10000) / 10000 : 0;
   const sheets = {};
   // 新案執行效益
@@ -2534,7 +2558,7 @@ function UnitStatReport({ db, month, user, refresh, kind, title, picker }) {
     <div class="bar">${picker}<span class="sub">${kind === 'new' ? '當月觸發是「新案-」開頭的全部個案' : '當月觸發是「複評」的個案（新案-複評排除）'}，依服務項目統計各單位件數</span><span class="grow"></span>
       <label class="btn light" style="cursor:pointer">${busy ? '匯入中…' : '匯入舊統計 Excel'}<input type="file" accept=".xlsx,.xls" style="display:none" onChange=${e => importHist(e.target.files[0])} /></label>
       <button class="btn" onClick=${() => exportUnitStatBook(book, title)}>匯出 Excel（全部月份）</button></div>
-    ${!hist && html`<div class="card sub" style="margin-bottom:10px">還沒有匯入舊的${title} Excel。匯入後，系統裡沒有資料的月份（例如 111 年 9 月起）會用舊檔的數字，之後的月份由系統自動計算，接在後面。</div>`}
+    ${!hist && html`<div class="card sub" style="margin-bottom:10px">還沒有匯入舊的${title} Excel。匯入後，舊檔有的月份一律用舊檔的數字；舊檔沒有的月份（例如 11 月起）才由系統自動計算，接在後面。</div>`}
     <${UnknownUnits} db=${db} book=${book} user=${user} refresh=${refresh} />
     <div class="trigbar"><span class="sub">年度：</span>${years.map(y => html`<button class=${yr === y ? 'on' : ''} onClick=${() => setYr(y)}>${+y - 1911}年</button>`)}</div>
     <div class="trigbar">${book.map(b => { const n = b.rows.filter(r => r.m.startsWith(yr)).reduce((a, r) => a + Object.values(r.v).reduce((x, y) => x + y, 0), 0);
@@ -2547,7 +2571,7 @@ function UnitStatReport({ db, month, user, refresh, kind, title, picker }) {
         <tr><td><b>總計</b></td><td></td>${showCols.map(c => html`<td class="num"><b>${tot(c) || ''}</b></td>`)}<td class="num"><b>${showCols.reduce((a, c) => a + tot(c), 0)}</b></td></tr>
       </tbody></table></div>
       ${sheet.unfilled.filter(x => x.month.startsWith(yr)).length > 0 && html`<div class="card" style="margin-top:10px;border-left:4px solid #e0a100">
-        <b>「（未填單位）」是這些個案</b><span class="sub">：服務欄寫了「僅${sheet.cat === 'B單位' ? '居家' : sheet.cat}」之類的文字，但沒寫單位名稱。到總表補上單位後，就會算到那個單位。</span>
+        <b>「（未填單位）」是這些個案</b><span class="sub">：服務欄寫了「僅${sheet.cat === 'B單位' ? '居家' : sheet.cat === 'C碼' ? '復能' : sheet.cat}」之類的文字，但「${(CAT[STAT2CAT[sheet.cat]] || {}).label || sheet.cat}」欄沒寫單位名稱。到「總表」點這位個案，在「${(CAT[STAT2CAT[sheet.cat]] || {}).label || sheet.cat}」欄填上單位（例如職心、樂臨）並儲存，就會算到那個單位。</span>
         <div class="tw" style="margin-top:8px"><table class="grid"><thead><tr><th>月份</th><th>編號</th><th>姓名</th><th>身分證</th><th>總表服務欄位寫的內容</th></tr></thead><tbody>
         ${sheet.unfilled.filter(x => x.month.startsWith(yr)).map(x => html`<tr><td>${roc(x.month + '-01').slice(0, -3)}</td><td>${(x.c || {}).caseNo || ''}</td><td><b>${(x.c || {}).name || ''}</b></td><td class="sub">${(x.c || {}).idNo || ''}</td>
           <td>${Object.entries(x.raw).map(([k, v]) => html`<span class="tag t-ev" style="margin-right:4px">${CAT[k].label}：${v}</span>`)}</td></tr>`)}
@@ -2885,7 +2909,8 @@ function StatReport({ db, month, user, refresh, rkey: key, picker }) {
   const y = month.slice(0, 4), yy = +y - 1911, kvKey = STAT_KV[key], hist = (db.kv[kvKey] || {}).months || {};
   const [busy, setBusy] = useState(false), [sheet, setSheet] = useState('在案+出備+新案');
   const months = Array.from({ length: 12 }, (_, i) => `${y}-${pad(i + 1)}`).filter(mk => mk <= todayMonth() || mk <= month);
-  const hasSys = mk => db.events.some(e => e.month === mk);
+  // 有匯入舊檔（而且有數字）的月份一律用匯入的；沒有匯入的月份（例如 11 月起）才用系統計算
+  const hasSys = mk => !useHist(mk, hist[mk]) && db.events.some(e => e.month === mk);
   const srcOf = mk => hasSys(mk) ? '系統' : hist[mk] ? '匯入' : '';
   const strip = key !== 'statMonthly' && html`<div class="trigbar"><span class="sub">${yy}年各月：</span>${months.map(mk => { const s = srcOf(mk);
     return html`<span class=${'tag ' + (mk === month ? 't-warn' : s === '系統' ? 't-new' : s === '匯入' ? 't-close' : '')} style="padding:4px 8px">${+mk.slice(5)}月 ${s || '—'}</span>`; })}</div>`;
@@ -2971,7 +2996,7 @@ function StatReport({ db, month, user, refresh, rkey: key, picker }) {
       ${key === 'statMonthly' && html`<button class="btn light" disabled=${busy} onClick=${publish} title="打開月報時會自動同步；這個按鈕是手動再同步一次（只有數字，沒有個資）">立即同步試算表</button>`}
       <button class="btn" disabled=${busy} onClick=${exportIt}>${key === 'statMonthly' ? `匯出 4.${yy}年${month.slice(5)}月圓餅圖-台西區` : `匯出${yy}年${key === 'statDispatch' || key === 'statCase' ? ' Word' : ' Excel'}`}</button></div>
     ${strip}
-    ${key !== 'statMonthly' && key !== 'statAnnual' && !hasSys(month) && hist[month] && html`<div class="sub" style="margin-bottom:8px"><span class="tag t-close">匯入的舊資料</span> ${rocMonth(month)}系統裡沒有資料，顯示匯入的舊檔內容。</div>`}
+    ${key !== 'statMonthly' && key !== 'statAnnual' && !hasSys(month) && hist[month] && html`<div class="sub" style="margin-bottom:8px"><span class="tag t-close">匯入的舊資料</span> ${rocMonth(month)}有匯入舊檔，照舊檔內容顯示（115年11月起才由系統計算）。</div>`}
     ${body}
     ${key === 'statMonthly' && html`<div class="sub" style="margin-top:8px">Google 試算表／Excel：打開這頁時會自動同步今年各月數字，試算表那邊重新整理就會跟上面的圓餅圖一樣。${(() => { const n = Object.keys(db.kv).filter(k => k.startsWith('pub:monthly:')).sort(); return n.length ? `目前已發布：${n.map(k => rocMonth(k.slice(12))).join('、')}` : '目前還沒有發布過。'; })()}</div>`}
   </div>`;
