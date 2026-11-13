@@ -173,6 +173,16 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
   .hb-track i{animation:fx-grow .6s cubic-bezier(.2,.8,.2,1) both;transform-origin:left}
   @keyframes fx-grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
   @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+  .dot-on,.dot-off{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
+  .dot-on{background:#3fae5a;box-shadow:0 0 0 0 rgba(63,174,90,.5);animation:fx-ping 2s ease-out infinite}.dot-off{background:#c9bfb1}
+  @keyframes fx-ping{0%{box-shadow:0 0 0 0 rgba(63,174,90,.45)}70%{box-shadow:0 0 0 7px rgba(63,174,90,0)}100%{box-shadow:0 0 0 0 rgba(63,174,90,0)}}
+  .avatars{display:inline-flex;align-items:center;margin:0 6px}
+  .av{position:relative;width:30px;height:30px;border-radius:50%;color:#fff;font-weight:700;font-size:14px;display:inline-flex;align-items:center;justify-content:center;border:2px solid var(--bg,#faf6f0);margin-left:-6px;box-shadow:0 1px 3px rgba(0,0,0,.15);cursor:default;animation:fx-pop .35s cubic-bezier(.2,.8,.2,1) both}
+  .av:first-child{margin-left:0}.av:hover{transform:translateY(-2px);z-index:2}
+  .av.editing{box-shadow:0 0 0 2px var(--org,#c47a1c)}
+  .av i{position:absolute;right:-5px;bottom:-4px;font-style:normal;font-size:10px;background:var(--org,#c47a1c);color:#fff;border-radius:50%;width:15px;height:15px;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff}
+  .online-pop{position:absolute;right:0;top:calc(100% + 8px);width:min(420px,90vw);z-index:200;box-shadow:0 10px 30px rgba(61,53,41,.18);animation:fx-fade-up .2s ease both}
+  .online-row{display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid #f0e8dc;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -2085,6 +2095,8 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
   const downOut = useRef(false);
   const noArea = o => { const { area, ...r } = o || {}; return JSON.stringify({ ...r, services: r.services || {} }); };   // 居住地是自動帶入的，不算有改
   const dirtyNow = () => loaded.current.dirty || noArea(c) !== noArea({ ...(orig || {}), services: { ...((orig || {}).services || {}) } }) || (orig && caseNo !== orig.caseNo);
+  useEffect(() => { setEditingCase(curId ? { id: curId, label: `${(orig && orig.name) || ''} ${caseNo || ''}`.trim() } : null); }, [curId]);
+  useEffect(() => () => setEditingCase(null), []);
   const tryClose = () => { if (!dirtyNow() || confirm('有資料還沒儲存，確定要關閉嗎？')) { writeDraft(null); onClose(); } };
   // 每次有改動就把草稿存起來（記得是哪個個案、哪個月份）
   useEffect(() => {
@@ -2092,6 +2104,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     writeDraft({ id: id || null, curId, kind, reopen, caseNo, c, em, ev, evDirty: loaded.current.dirty, month, name: c.name || caseNo || '新個案', savedAt: Date.now() });
   }, [c, ev, caseNo, em, kind, reopen, curId]);
   return html`<div class="modal" onMouseDown=${e => { downOut.current = e.target === e.currentTarget; }} onClick=${e => { if (e.target === e.currentTarget && downOut.current) tryClose(); downOut.current = false; }}><div class="drawer">
+    <${SameCaseWarn} caseId=${curId} />
     <div class="bar"><h2 style="margin:0">${!isAdd ? `${orig.name}　${orig.caseNo}` : '新增個案'}</h2><span class="grow"></span>
       ${id && html`<${ConfirmBtn} label="刪除個案" onYes=${del} />`}
       ${!isAdd && html`<button class="btn light" title="把本月觸發設為「結案-」，再填 A結束服務日期和系統結案日期" onClick=${() => { setEm(month); setEvDirty(v => ({ ...v, trigger: '結案-' })); setTimeout(() => { const el = document.getElementById('closeDates'); if (el) el.scrollIntoView({ block: 'center' }); }, 50); }}>辦理結案</button>`}
@@ -3130,6 +3143,40 @@ function FloatStats({ db, month }) {
   </div>`;
 }
 
+// ================= 誰在系統內 =================
+// 每台電腦的瀏覽器一個代號；每分鐘回報一次「誰、在哪一頁、正在編輯哪個個案」，同時抓回線上名單
+const CLIENT_ID = (() => { try { let x = localStorage.getItem('caClientId'); if (!x) { x = 'c' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36); localStorage.setItem('caClientId', x); } return x; } catch { return 'c' + Math.random().toString(36).slice(2, 12); } })();
+const presence = { list: [], editing: null, subs: new Set() };
+const setEditingCase = v => { presence.editing = v; window.dispatchEvent(new Event('ca-editing')); };
+function usePresence() {
+  const [, force] = useState(0);
+  useEffect(() => { const f = () => force(n => n + 1); presence.subs.add(f); return () => presence.subs.delete(f); }, []);
+  return presence.list;
+}
+const agoText = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? '剛剛' : m < 60 ? `${m} 分鐘前` : `${Math.floor(m / 60)} 小時前`; };
+const PAGE_NAME = { summary: '總表', report: '評鑑報表', stats: '統計', import: '匯入', settings: '設定' };
+// 上方顯示目前在線的人（頭貼＝名字第一個字）；正在編輯個案的人頭貼有橘色框和筆的小圖示，滑鼠移上去看是哪個個案
+const AV_COLORS = ['#7c9473', '#c47a1c', '#5b8bb5', '#b56b8a', '#8a7bb5', '#4f9a94', '#b5874f', '#7a8a4f'];
+const avColor = name => AV_COLORS[[...String(name)].reduce((a, ch) => a + ch.charCodeAt(0), 0) % AV_COLORS.length];
+function OnlineAvatars() {
+  const list = usePresence(), now = Date.now();
+  const on = list.filter(p => p.lastSeen > now - 5 * 60 * 1000);
+  // 同一個人開好幾個視窗只顯示一次（有在編輯的那個優先）
+  const byName = new Map();
+  for (const p of on) { const ex = byName.get(p.name); if (!ex || (!ex.caseLabel && p.caseLabel)) byName.set(p.name, { ...p, me: (ex && ex.me) || p.id === CLIENT_ID }); else if (p.id === CLIENT_ID) ex.me = true; }
+  const people = [...byName.values()].sort((a, b) => (b.me ? 1 : 0) - (a.me ? 1 : 0) || a.since - b.since);
+  if (!people.length) return null;
+  return html`<span class="avatars" title="目前在線">${people.map(p => html`<span class=${'av' + (p.caseLabel ? ' editing' : '')} style=${'background:' + avColor(p.name)}
+      title=${`${p.name}${p.me ? '（你）' : ''}・${PAGE_NAME[p.page] || p.page || ''}${p.caseLabel ? `・正在編輯 ${p.caseLabel}` : ''}`}>${[...p.name][0] || '?'}${p.caseLabel && html`<i>✎</i>`}</span>`)}</span>`;
+}
+// 個案視窗裡：別人也在編輯同一個個案時提醒
+function SameCaseWarn({ caseId }) {
+  const list = usePresence(), now = Date.now();
+  const others = list.filter(p => p.id !== CLIENT_ID && p.caseId && p.caseId === caseId && p.lastSeen > now - 5 * 60 * 1000);
+  if (!caseId || !others.length) return null;
+  return html`<div class="tag t-warn" style="display:block;margin-bottom:10px;padding:8px 12px">⚠ ${[...new Set(others.map(p => p.name))].join('、')} 也正在編輯這個個案，同一個欄位後儲存的會蓋掉先儲存的，請先協調。</div>`;
+}
+
 function App() {
   const [authed, setAuthed] = useState(false), [checking, setChecking] = useState(true);
   const [user, setUser] = useState(() => { try { return localStorage.getItem('caUserName') || ''; } catch (e) { return ''; } });
@@ -3156,7 +3203,28 @@ function App() {
     const t = setInterval(f, 5 * 60 * 1000);
     return () => { document.removeEventListener('visibilitychange', f); clearInterval(t); };
   }, [authed]);
-  const logout = async () => { try { localStorage.removeItem(REFRESH_KEY); } catch (e) { } writeDraft(null); await IDB.clear(); location.reload(); };
+  // 線上名單：即時訂閱（有人上線、換頁、開個案、離開，別人的畫面馬上更新）。
+  //   回報時機：換頁、開／關個案時馬上回報；沒動作時每 2 分鐘回報一次「還在」；關掉網頁時回報「離開」
+  useEffect(() => {
+    if (!authed || !user) return;
+    let alive = true, unsub = null;
+    const push = list => { if (alive) { presence.list = list || []; presence.subs.forEach(f => f()); } };
+    const subscribe = () => { if (unsub) unsub(); unsub = conn.client.onUpdate('data:presence', { now: Date.now() }, push, e => console.warn('presence', e)); };
+    const beat = async (leaving) => {
+      try { const ed = presence.editing || {}; await call('m', 'data:heartbeat', { clientId: CLIENT_ID, name: user, page: tabRef.current, caseId: ed.id || undefined, caseLabel: ed.label || undefined, leaving: leaving || undefined }); }
+      catch (e) { console.warn('presence', e); }
+    };
+    beat(); subscribe();
+    const keep = setInterval(() => { if (document.visibilityState === 'visible') beat(); }, 2 * 60 * 1000);
+    const resub = setInterval(subscribe, 60 * 60 * 1000);                       // 每小時換一次「今天來過」的時間範圍
+    const tick = setInterval(() => presence.subs.forEach(f => f()), 30 * 1000);  // 「幾分鐘前離開」的文字跟著更新
+    const onEdit = () => beat(), onVis = () => { if (document.visibilityState === 'visible') beat(); };
+    const bye = () => beat(true);
+    window.addEventListener('ca-editing', onEdit); document.addEventListener('visibilitychange', onVis); window.addEventListener('pagehide', bye);
+    return () => { alive = false; if (unsub) unsub(); clearInterval(keep); clearInterval(resub); clearInterval(tick); window.removeEventListener('ca-editing', onEdit); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', bye); };
+  }, [authed, user]);
+  const tabRef = useRef(tab); useEffect(() => { tabRef.current = tab; window.dispatchEvent(new Event('ca-editing')); }, [tab]);
+  const logout = async () => { try { localStorage.removeItem(REFRESH_KEY); } catch (e) { } try { await call('m', 'data:heartbeat', { clientId: CLIENT_ID, name: user, leaving: true }); } catch (e) { } writeDraft(null); await IDB.clear(); location.reload(); };
 
   if (checking) return html`<div class="empty">載入中…</div>`;
   if (!authed) return html`<${Login} onDone=${() => setAuthed(true)} />`;
@@ -3169,6 +3237,7 @@ function App() {
   return html`<div>
     <div class="top">
       <span class="brand"><img src=${LOGO} alt="" />雲端資料庫<a href=${PORTAL_URL}>← 回入口網頁</a></span>
+      <${OnlineAvatars} />
       ${TABS.map(([k, l]) => html`<button class=${'tabbtn' + (tab === k ? ' on' : '')} onClick=${() => setTab(k)}>${l}</button>`)}
       <span class="grow"></span>
       <label class="sub">月份 <input class="inp" type="month" value=${month} onChange=${e => e.target.value && setMonth(e.target.value)} /></label>
