@@ -759,7 +759,7 @@ function caseUnits(e, c, resolveUnit) {
 function unitStats(kind, month, db) {
   // 新案：觸發是「新案-」開頭的全部項目；複評：只算「複評」（新案-複評等排除）
   const f = unitStatFilter(kind);
-  const out = {}, hist = (db.kv || {})['unitstat:' + kind], canon = (raw, k) => canonUnit(raw, CAT[k].stat, db.units, hist && hist.order && hist.order[CAT[k].stat]);
+  const out = {}, unfilled = [], hist = (db.kv || {})['unitstat:' + kind], canon = (raw, k) => canonUnit(raw, CAT[k].stat, db.units, hist && hist.order && hist.order[CAT[k].stat]);
   for (const e of db.events) {
     if (e.month !== month || !f(e) || !db.cases.has(e.caseId)) continue;
     const c = db.cases.get(e.caseId);
@@ -768,8 +768,12 @@ function unitStats(kind, month, db) {
     if (us.traffic && /復健青年/.test(us.traffic)) { us.ctraffic = canonUnit(us.traffic, '社區交通', db.units, []); delete us.traffic; }
     // 社區交通沒填單位（例如「僅社區交通」）→ 先算到復健青年協進會，之後總表補上單位就照總表
     if (us.ctraffic === '（未填單位）') us.ctraffic = '社團法人雲林縣復健青年協進會(北港區)';
-    for (const [k, u] of Object.entries(us)) (out[k] = out[k] || {})[u] = (out[k][u] || 0) + 1;
+    for (const [k, u] of Object.entries(us)) {
+      (out[k] = out[k] || {})[u] = (out[k][u] || 0) + 1;
+      if (u === '（未填單位）') unfilled.push({ k, caseId: e.caseId, month, raw: Object.fromEntries(CATS.map(x => [x.key, (e.services || {})[x.key] || (c.services || {})[x.key] || '']).filter(([, v]) => v)) });
+    }
   }
+  Object.defineProperty(out, 'unfilled', { value: unfilled, enumerable: false });   // 未填單位的個案（畫面列出來方便補）
   return out;
 }
 
@@ -828,7 +832,9 @@ function unitStatBook(kind, db, hist, toMonth) {
     // 系統不認識的名稱（不是舊檔的全名、也不在單位主檔）→ 畫面上請使用者填全名
     const knownSet = new Set([AIDS_CENTER, ...(KNOWN_UNITS[cat] || []), ...extra.map(canon).filter(u => /(機構|協會|公司|中心|所|醫院|之家|診所|基金會|紅十字會)$/.test(u)), ...(db.units || []).map(u => normName(u.name))]);
     const unknown = cols.filter(u => !knownSet.has(u) && !/^（未填/.test(u)).map(u => ({ name: u, n: rows.reduce((a, r) => a + (r.v[u] || 0), 0) }));
-    return { cat, cols, rows, unknown, known: [...knownSet] };
+    const unfilled = months.filter(m => sysMonths.has(m)).flatMap(m => (sysByMonth[m].unfilled || []).filter(x => x.k === STAT2CAT[cat]))
+      .map(x => ({ ...x, c: db.cases.get(x.caseId) }));
+    return { cat, cols, rows, unknown, known: [...knownSet], unfilled };
   });
 }
 
@@ -2535,6 +2541,12 @@ function UnitStatReport({ db, month, user, refresh, kind, title, picker }) {
         ${showCols.map(c => html`<td class="num">${r.v[c] || ''}</td>`)}<td class="num"><b>${Object.values(r.v).reduce((a, b) => a + b, 0) || ''}</b></td></tr>`)}
         <tr><td><b>總計</b></td><td></td>${showCols.map(c => html`<td class="num"><b>${tot(c) || ''}</b></td>`)}<td class="num"><b>${showCols.reduce((a, c) => a + tot(c), 0)}</b></td></tr>
       </tbody></table></div>
+      ${sheet.unfilled.filter(x => x.month.startsWith(yr)).length > 0 && html`<div class="card" style="margin-top:10px;border-left:4px solid #e0a100">
+        <b>「（未填單位）」是這些個案</b><span class="sub">：服務欄寫了「僅${sheet.cat === 'B單位' ? '居家' : sheet.cat}」之類的文字，但沒寫單位名稱。到總表補上單位後，就會算到那個單位。</span>
+        <div class="tw" style="margin-top:8px"><table class="grid"><thead><tr><th>月份</th><th>編號</th><th>姓名</th><th>身分證</th><th>總表服務欄位寫的內容</th></tr></thead><tbody>
+        ${sheet.unfilled.filter(x => x.month.startsWith(yr)).map(x => html`<tr><td>${roc(x.month + '-01').slice(0, -3)}</td><td>${(x.c || {}).caseNo || ''}</td><td><b>${(x.c || {}).name || ''}</b></td><td class="sub">${(x.c || {}).idNo || ''}</td>
+          <td>${Object.entries(x.raw).map(([k, v]) => html`<span class="tag t-ev" style="margin-right:4px">${CAT[k].label}：${v}</span>`)}</td></tr>`)}
+        </tbody></table></div></div>`}
       <div class="sub" style="margin-top:8px">欄位一律用單位全名：總表打的簡稱（例如「樂臨」「紅十字」「台西紅會」「康安」）會自動對到全名那一欄。畫面只列有數字的單位，匯出時會保留舊檔的全部單位欄位。</div>`}
   </div>`;
 }
