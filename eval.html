@@ -134,6 +134,45 @@ table.rpt2{width:auto;min-width:0}.rpt2 th{position:static;padding:8px 14px}.rpt
 .hb-k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}.hb-track{height:12px;background:#f3ede4;border-radius:0 4px 4px 0}.hb-track i{display:block;height:100%;background:#2a78d6;border-radius:0 4px 4px 0;min-width:1px}.hb-v{text-align:right;font-variant-numeric:tabular-nums}
 .mgrid .rpt2 th,.mgrid .rpt2 td{padding:5px 9px}.mgrid .tw{overflow-x:auto}.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px 18px;align-items:start;margin-bottom:12px}.mgrid .sec h3{margin:0 0 6px}
 textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38px;line-height:1.5;font:inherit;padding:8px 10px}
+
+  /* ===== 特效（動作輕、不擋操作；系統設定「減少動態效果」時全部關掉） ===== */
+  @keyframes fx-fade-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @keyframes fx-fade{from{opacity:0}to{opacity:1}}
+  @keyframes fx-slide-in{from{transform:translateX(40px);opacity:.4}to{transform:none;opacity:1}}
+  @keyframes fx-pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}
+  @keyframes fx-toast{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}
+  @keyframes fx-row{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+  @keyframes fx-shine{from{background-position:-200% 0}to{background-position:200% 0}}
+  @keyframes fx-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+  .page>*{animation:fx-fade-up .35s ease both}
+  .page>*:nth-child(2){animation-delay:.04s}.page>*:nth-child(3){animation-delay:.08s}.page>*:nth-child(4){animation-delay:.12s}.page>*:nth-child(5){animation-delay:.16s}
+  .modal{animation:fx-fade .2s ease both}
+  .drawer{animation:fx-slide-in .28s cubic-bezier(.2,.8,.2,1) both}
+  .toast{animation:fx-toast .28s cubic-bezier(.2,.8,.2,1) both}
+  .card{transition:box-shadow .2s ease,transform .2s ease}
+  .card:hover{box-shadow:0 6px 18px rgba(61,53,41,.08)}
+  .btn,.tabbtn,.trigbar button,.ampm button,.choice button,.fstats button{transition:background-color .18s ease,color .18s ease,box-shadow .18s ease,transform .12s ease}
+  .btn:hover{box-shadow:0 4px 12px rgba(124,148,115,.35);transform:translateY(-1px)}
+  .btn:active,.trigbar button:active,.ampm button:active,.choice button:active,.tabbtn:active{transform:scale(.96)}
+  .trigbar button:hover,.choice button:hover{transform:translateY(-1px)}
+  .tabbtn.on{position:relative}
+  .tabbtn.on::after{content:"";position:absolute;left:12px;right:12px;bottom:3px;height:2px;border-radius:2px;background:var(--green);animation:fx-fade-up .25s ease both}
+  .grid tbody tr{animation:fx-row .3s ease both}
+  .grid tbody tr:nth-child(n+25){animation:none}
+  .grid tr.click td{transition:background-color .15s ease}
+  .fstats button{animation:fx-pop .45s cubic-bezier(.2,.8,.2,1) both}
+  .fstats button:nth-child(2){animation-delay:.07s}.fstats button:nth-child(3){animation-delay:.14s}
+  .fstats button:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(0,0,0,.18)}
+  .fstats button b{display:inline-block}
+  .fstats button.on b{animation:fx-float 2.4s ease-in-out infinite}
+  .inp{transition:border-color .15s ease,box-shadow .15s ease}
+  .inp:focus{box-shadow:0 0 0 3px rgba(124,148,115,.22)}
+  .empty{background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.7) 50%,transparent 100%) var(--bg);background-size:200% 100%;animation:fx-shine 1.6s linear infinite}
+  .pie svg path,.pie svg circle{transition:transform .2s ease,opacity .2s ease;transform-origin:80px 80px}
+  .pie svg:hover path{opacity:.75}.pie svg path:hover{opacity:1;transform:scale(1.04)}
+  .hb-track i{animation:fx-grow .6s cubic-bezier(.2,.8,.2,1) both;transform-origin:left}
+  @keyframes fx-grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -1358,8 +1397,12 @@ function dispatchStatMonth(month, db) {
   evs.forEach((e, i) => {
     const c = db.cases.get(e.caseId), units = caseUnits(e, c, db.resolveUnit), home = (e.services || {}).home || (c.services || {}).home || '';
     // 派案單位：先看居家；沒有居家單位（例如「僅交通」）就依序找其他服務的單位（交通是樂臨就填樂臨）；只有輔具才填「僅輔具」
-    const other = isUnitName(home) ? '' : (CATS.map(cat => cat.key).filter(k => k !== 'home' && k !== 'aids')
-      .map(k => (e.services || {})[k] || (c.services || {})[k] || '').find(v => isUnitName(v)) || '');
+    //   居家寫「僅日照」→ 先找日照單位；「僅交通、居喘」→ 先交通再居喘（照寫的順序），都沒有才找其他有填的服務
+    const words = { 復能: 'prof', 專業: 'prof', 社區交通: 'ctraffic', 交通: 'traffic', 居喘: 'resp', 日喘: 'dayresp', 日照: 'day', 短照: 'short', 機喘: 'inst', 送餐: 'meal', 營養: 'meal', OT01: 'meal', 家托: 'family', 沐浴: 'bath', 小規機: 'small' };
+    const homeTxt = String(home || ''), named = Object.entries(words).map(([w, k]) => [homeTxt.indexOf(w), k]).filter(([i]) => i >= 0)
+      .sort((a, b) => a[0] - b[0]).map(([, k]) => k).filter((k, i, a) => a.indexOf(k) === i && !(k === 'traffic' && a.includes('ctraffic') && /社區交通/.test(homeTxt) && !/(^|[^區])交通/.test(homeTxt)));
+    const order = [...named, ...CATS.map(cat => cat.key).filter(k => k !== 'home' && k !== 'aids' && !named.includes(k))];
+    const other = isUnitName(home) ? '' : (order.map(k => (e.services || {})[k] || (c.services || {})[k] || '').find(v => isUnitName(v)) || '');
     const unit = isUnitName(home) ? shortUnit(home, db) : other ? shortUnit(other, db)
       : (/輔具/.test(home) || isUnitName((e.services || {}).aids || (c.services || {}).aids) || (cc0 => (cc0.輔具 || 0) > 0)(codeCounts(e.codes || latestCodes(db, c, month)))) ? '僅輔具'
       : home ? String(home).trim() : '';
@@ -1877,7 +1920,9 @@ function exportSummary(db, month, wholeYear) {
 function SummaryView({ db, month, user, refresh }) {
   const [view, setView] = useState('list'); // list 總表 / closed 結案表
   const [q, setQ] = useState(''), [reg, setReg] = useState('全部'), [trig, setTrig] = useState('');
-  const [edit, setEdit] = useState(null);
+  // 有沒儲存的草稿 → 打開總表時自動回到那個個案、填到一半的內容都還在
+  const [edit, setEdit] = useState(() => { const d = readDraft(); return d && (!d.curId || db.cases.has(d.curId)) ? { id: d.id || undefined, draft: d, k: 'draft' } : null; });
+  const openEdit = e => { const d = readDraft(); if (d && !(e.isNew ? !d.id : d.id === e.id) && !confirm(`「${d.name}」還有資料沒儲存，要放棄那些資料、改開這一筆嗎？`)) return; if (d && !(e.isNew ? !d.id : d.id === e.id)) writeDraft(null); setEdit(d && (e.isNew ? !d.id : d.id === e.id) ? { id: d.id || undefined, draft: d, k: 'draft' } : e); };
   const evOf = useMemo(() => { const m = new Map(); for (const e of db.events) if (e.month === month) m.set(e.caseId, e); return m; }, [db, month]);
   const auto = useMemo(() => autoTriggers(month, db), [db, month]);
   // 本月觸發：自己打的優先，沒有就用系統自動帶入的（11月結案、11月新案-初評…）
@@ -1915,46 +1960,59 @@ function SummaryView({ db, month, user, refresh }) {
       <span class="grow"></span>
       ${view === 'list' && html`<span class="sub">共 ${list.length} 案，本月新案 ${nNew}</span>`}
       ${view === 'list' && html`<button class="btn light" onClick=${() => exportSummary(db, month, true)} title="和原本 Excel 總表一樣的欄位，一個月一張工作表">匯出${+month.slice(0, 4) - 1911}年總表</button>
-        <button class="btn" onClick=${() => setEdit({ isNew: true })}>＋ 新增個案</button>`}
+        <button class="btn" onClick=${() => openEdit({ isNew: true })}>＋ 新增個案</button>`}
     </div>
-    ${view === 'closed' ? html`<${ClosedView} db=${db} user=${user} refresh=${refresh} openCase=${id => setEdit({ id })} />`
+    ${view === 'closed' ? html`<${ClosedView} db=${db} user=${user} refresh=${refresh} openCase=${id => openEdit({ id })} />`
     : html`
     ${db.cases.size > 0 && html`<div class="trigbar"><span class="sub">${rocMonth(month)}觸發：</span>
       ${[['', '全部', base.length], ['__any', '有觸發', nAny], ['__new', '全部新案', nNewTrig], ...trigCounts.map(([t, n]) => [t, t, n]), ['__none', '無觸發', base.length - nAny]].map(([k, label, n]) =>
         html`<button class=${trig === k ? 'on' : ''} onClick=${() => setTrig(trig === k && k !== '' ? '' : k)}>${label}<b>${n}</b></button>`)}</div>`}
     ${db.cases.size === 0 ? html`<div class="card empty">還沒有資料。可以到「匯入」把個案總表 Excel 匯入，或按「新增個案」。</div>` : html`
     <div class="tw"><table class="grid">
-      <thead><tr><th>編號</th><th>姓名</th><th>CMS</th><th>來源</th><th>${rocMonth(month)}觸發</th><th>核銷</th><th>照專評估</th><th>訪視</th><th>照專簽審</th><th>照會B</th><th>居服單位</th><th>狀態</th></tr></thead>
+      <thead><tr><th>編號</th><th>姓名</th><th>身分證</th><th>CMS</th><th>來源</th><th>${rocMonth(month)}觸發</th><th>核銷</th><th>照專評估</th><th>訪視</th><th>照專簽審</th><th>照會B</th><th>居服單位</th><th>狀態</th></tr></thead>
       <tbody>${list.map(c => {
         const e = evOf.get(c._id), x = epAt(db.info.get(c._id) || {}, month), t = trigOf(c), isAuto = !(e && normTrigger(e.trigger)) && !!t;
         const closed = x.close && x.close <= month, waiting = x.close && x.close < month;
-        return html`<tr class="click" onClick=${() => setEdit({ id: c._id })}>
-          <td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${c.cms}</td><td>${c.src}</td>
+        return html`<tr class="click" onClick=${() => openEdit({ id: c._id })}>
+          <td>${c.caseNo}</td><td><b>${c.name}</b></td><td class="sub" style="white-space:nowrap">${c.idNo || ''}</td><td>${c.cms}</td><td>${c.src}</td>
           <td>${t ? html`<span class=${'tag ' + (isNewTrigger(t) ? 't-new' : /結案/.test(t) ? 't-close' : isAuto ? 't-org' : 't-ev')} title=${isAuto ? '系統自動帶入' : ''}>${t}${isAuto ? '（自動）' : ''}</span>${/轉入/.test(t) ? html` <span class="tag t-close">${TRANSFER_FROM.includes(c.srcNote) ? c.srcNote : '轉入來源未選'}</span>` : ''}` : '-'}</td>
           <td>${feeCell(c)}</td>
           <td>${roc(latestOf(db, c, 'assess', month))}</td><td>${roc(latestOf(db, c, 'visit', month))}</td><td>${roc(latestOf(db, c, 'approve', month))}</td><td>${roc(latestOf(db, c, 'referB', month))}</td>
           <td>${db.resolveUnit((c.services || {}).home || '')}</td>
           <td>${closed ? html`<span class="tag t-close">${rocMonth(x.close)}結案${waiting && !closedOffMonth(c) ? '（待補結案日期）' : ''}</span>` : ''}</td></tr>`;
       })}</tbody></table></div>`}`}
-    ${edit && html`<${CaseEditor} db=${db} month=${month} user=${user} id=${edit.id} onClose=${() => setEdit(null)} refresh=${refresh} />`}
+    ${edit && html`<${CaseEditor} key=${edit.k || edit.id || 'new'} db=${db} month=${month} user=${user} id=${edit.id} draft=${edit.draft} onClose=${() => setEdit(null)} refresh=${refresh} />`}
   </div>`;
 }
 
-function CaseEditor({ db, month, user, id, onClose, refresh }) {
+// ---- 編輯中的個案草稿：記在這台電腦（localStorage），網頁重新整理、切換分頁、登入過期、不小心關掉都還找得回來 ----
+const DRAFT_KEY = 'caseDraft';
+const readDraft = () => { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch { return null; } };
+const writeDraft = d => { try { d ? localStorage.setItem(DRAFT_KEY, JSON.stringify(d)) : localStorage.removeItem(DRAFT_KEY); } catch { } };
+function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
   // 新增時可能改成「沿用既有的重開案編號」，所以實際編輯的 id 用 state 記
-  const [curId, setCurId] = useState(id || null);
+  const [curId, setCurId] = useState(draft ? draft.curId : id || null);
   const orig = curId ? db.cases.get(curId) : null;
   const isAdd = !id;
-  const [kind, setKind] = useState(''), [reopen, setReopen] = useState(''), [rq, setRq] = useState(''), [reuseNote, setReuseNote] = useState('');
+  const [kind, setKind] = useState(draft ? draft.kind || '' : ''), [reopen, setReopen] = useState(draft ? draft.reopen || '' : ''), [rq, setRq] = useState(''), [reuseNote, setReuseNote] = useState('');
   const nextNo = rg => { let mx = 0; for (const c of db.cases.values()) { const p = parseCaseNo(c.caseNo); if (p && p.region === rg && p.seq > mx) mx = p.seq; } return `台-${rg}-${String(mx + 1).padStart(3, '0')}-1`; };
-  const [caseNo, setCaseNo] = useState(orig ? orig.caseNo : '');
-  const [c, setC] = useState(() => ({ ...(orig || {}), services: { ...((orig || {}).services || {}) } }));
+  const [caseNo, setCaseNo] = useState(draft ? draft.caseNo : orig ? orig.caseNo : '');
+  const [c, setC] = useState(() => draft ? draft.c : ({ ...(orig || {}), services: { ...((orig || {}).services || {}) } }));
   // 居住地：依編號的地區自動帶入（台-05-… → 台西）
   useEffect(() => { const rg = regionOf(caseNo); if (rg && Object.values(REGIONS).includes(rg) && c.area !== rg && (!c.area || Object.values(REGIONS).includes(c.area))) setC(v => ({ ...v, area: rg })); }, [caseNo]);
-  const [em, setEm] = useState(month);
+  const [em, setEm] = useState(draft ? draft.em : month);
   const evOrig = useMemo(() => db.events.find(e => e.caseId === curId && e.month === em) || null, [db, curId, em]);
-  const [ev, setEv] = useState(() => ({ ...(evOrig || {}), services: { ...((evOrig || {}).services || {}) } }));
-  useEffect(() => setEv({ ...(evOrig || {}), services: { ...((evOrig || {}).services || {}) } }), [evOrig]);
+  const [ev, setEv] = useState(() => draft && draft.ev ? draft.ev : ({ ...(evOrig || {}), services: { ...((evOrig || {}).services || {}) } }));
+  // 換月份才重新載入觸發紀錄。系統每 5 分鐘、或切回這個視窗時會自動更新資料：
+  // 這時如果正在填（有改過），不要把填到一半的內容洗掉
+  const evKey = `${curId}|${em}`, loaded = useRef({ key: evKey, ver: evOrig ? evOrig.updatedAt : 0, dirty: !!(draft && draft.evDirty) });
+  useEffect(() => {
+    const ver = evOrig ? evOrig.updatedAt : 0, L = loaded.current;
+    if (L.key === evKey && (L.ver === ver || L.dirty)) return;
+    loaded.current = { key: evKey, ver, dirty: false };
+    setEv({ ...(evOrig || {}), services: { ...((evOrig || {}).services || {}) } });
+  }, [evKey, evOrig]);
+  const setEvDirty = v => { loaded.current.dirty = true; setEv(v); };
   const [busy, setBusy] = useState(false);
   const hist = useMemo(() => db.events.filter(e => e.caseId === curId).sort((a, b) => b.month.localeCompare(a.month)), [db, curId]);
   // 重開案：從系統裡找前幾個月的個案
@@ -1979,7 +2037,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
   const autoTrig = useMemo(() => curId ? autoTriggers(em, db).get(curId) || '' : '', [db, em, curId]);
   const chooseTrigger = t => {
     const nt = ev.trigger === t ? '' : t;
-    setEv({ ...ev, trigger: nt });
+    setEvDirty({ ...ev, trigger: nt });
     if (nt && nt.includes('轉入')) setC({ ...c, src: '轉入' });
     else if (nt && !c.src) setC({ ...c, src: nt.includes('出備') ? '出備' : '初評' });
   };
@@ -2000,13 +2058,13 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
       if (!curId || Object.keys(cp).length || caseNo !== orig.caseNo) cid = await call('m', 'data:saveCase', { id: curId || undefined, caseNo: caseNo.trim(), d: JSON.stringify(curId ? cp : c), by: user });
       const ep = diff(evOrig || {}, ev);
       if (Object.keys(ep).length) await call('m', 'data:patchEvent', { caseId: cid, month: em, patch: JSON.stringify(ep), by: user });
-      await refresh(); toast('已儲存'); onClose();
+      writeDraft(null); await refresh(); toast('已儲存'); onClose();
     } catch (e) { console.error(e); toast('儲存失敗：' + (e.message || e), true); }
     setBusy(false);
   };
   const del = async () => {
     setBusy(true);
-    try { await call('m', 'data:remove', { table: 'cases', id: curId, by: user }); await refresh(); toast('已刪除個案'); onClose(); }
+    try { await call('m', 'data:remove', { table: 'cases', id: curId, by: user }); writeDraft(null); await refresh(); toast('已刪除個案'); onClose(); }
     catch (e) { toast('刪除失敗：' + e.message, true); }
     setBusy(false);
   };
@@ -2022,15 +2080,26 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
         : html`<input class="inp" value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} />`}
     ${k === 'srcNote' && obj.src === '轉入' && html`<span class="trigbar" style="margin:4px 0 0">${TRANSFER_FROM.map(o => html`<button type="button" class=${obj.srcNote === o ? 'on' : ''} onClick=${e => { e.preventDefault(); set({ ...obj, srcNote: obj.srcNote === o ? '' : o }); }}>${o}</button>`)}</span>`}</label>`;
 
-  return html`<div class="modal" onClick=${e => e.target === e.currentTarget && onClose()}><div class="drawer">
+  // 點視窗外面關閉：滑鼠要「按下」和「放開」都在外面才算（避免在欄位裡拖曳選字、放開在外面就把視窗關掉）；
+  // 有填到一半沒儲存，先問一下
+  const downOut = useRef(false);
+  const noArea = o => { const { area, ...r } = o || {}; return JSON.stringify({ ...r, services: r.services || {} }); };   // 居住地是自動帶入的，不算有改
+  const dirtyNow = () => loaded.current.dirty || noArea(c) !== noArea({ ...(orig || {}), services: { ...((orig || {}).services || {}) } }) || (orig && caseNo !== orig.caseNo);
+  const tryClose = () => { if (!dirtyNow() || confirm('有資料還沒儲存，確定要關閉嗎？')) { writeDraft(null); onClose(); } };
+  // 每次有改動就把草稿存起來（記得是哪個個案、哪個月份）
+  useEffect(() => {
+    if (!dirtyNow()) return;
+    writeDraft({ id: id || null, curId, kind, reopen, caseNo, c, em, ev, evDirty: loaded.current.dirty, month, name: c.name || caseNo || '新個案', savedAt: Date.now() });
+  }, [c, ev, caseNo, em, kind, reopen, curId]);
+  return html`<div class="modal" onMouseDown=${e => { downOut.current = e.target === e.currentTarget; }} onClick=${e => { if (e.target === e.currentTarget && downOut.current) tryClose(); downOut.current = false; }}><div class="drawer">
     <div class="bar"><h2 style="margin:0">${!isAdd ? `${orig.name}　${orig.caseNo}` : '新增個案'}</h2><span class="grow"></span>
       ${id && html`<${ConfirmBtn} label="刪除個案" onYes=${del} />`}
-      ${!isAdd && html`<button class="btn light" title="把本月觸發設為「結案-」，再填 A結束服務日期和系統結案日期" onClick=${() => { setEm(month); setEv(v => ({ ...v, trigger: '結案-' })); setTimeout(() => { const el = document.getElementById('closeDates'); if (el) el.scrollIntoView({ block: 'center' }); }, 50); }}>辦理結案</button>`}
-      <button class="btn light" onClick=${onClose}>關閉</button><button class="btn" disabled=${busy || (isAdd && (!kind || (kind === 'new' && !reopen)))} onClick=${save}>${busy ? '儲存中…' : '儲存'}</button></div>
+      ${!isAdd && html`<button class="btn light" title="把本月觸發設為「結案-」，再填 A結束服務日期和系統結案日期" onClick=${() => { setEm(month); setEvDirty(v => ({ ...v, trigger: '結案-' })); setTimeout(() => { const el = document.getElementById('closeDates'); if (el) el.scrollIntoView({ block: 'center' }); }, 50); }}>辦理結案</button>`}
+      <button class="btn light" onClick=${tryClose}>關閉</button><button class="btn" disabled=${busy || (isAdd && (!kind || (kind === 'new' && !reopen)))} onClick=${save}>${busy ? '儲存中…' : '儲存'}</button></div>
     ${isAdd && html`<div class="card">
       <div class="sect" style="margin-top:0">新增方式</div>
       <div class="choice">
-        <button class=${kind === 'new' ? 'on' : ''} onClick=${() => { setKind('new'); setEv({ ...ev, trigger: '' }); }}>新案<span>觸發只能選新案項目</span></button>
+        <button class=${kind === 'new' ? 'on' : ''} onClick=${() => { setKind('new'); setEvDirty({ ...ev, trigger: '' }); }}>新案<span>觸發只能選新案項目</span></button>
         <button class=${kind === 'other' ? 'on' : ''} onClick=${() => { setKind('other'); setReopen(''); if (!caseNo) setCaseNo(nextNo('05')); }}>既有個案補登<span>系統裡還沒有的舊個案</span></button>
       </div>
       ${kind === 'new' && html`<div style="margin-top:14px"><div class="sub" style="margin-bottom:6px">是否為重開案？</div>
@@ -2072,22 +2141,22 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
       <div class="form">
         ${isAdd && kind === 'new' ? html`<div style="grid-column:1/-1"><span class="sub">新案觸發</span>
           <div class="trigbar" style="margin:4px 0 0">${NEW_TRIGGERS.filter(t => reopen === 'yes' ? t.includes('重開案') : !t.includes('重開案')).map(t => html`<button class=${ev.trigger === t ? 'on' : ''} onClick=${() => chooseTrigger(t)}>${t}</button>`)}</div></div>`
-        : html`<label>觸發<input class="inp" list="dl-trig" value=${ev.trigger || ''} onInput=${e => setEv({ ...ev, trigger: e.target.value })} onBlur=${e => setEv({ ...ev, trigger: normTrigger(e.target.value) })} />
+        : html`<label>觸發<input class="inp" list="dl-trig" value=${ev.trigger || ''} onInput=${e => setEvDirty({ ...ev, trigger: e.target.value })} onBlur=${e => setEvDirty({ ...ev, trigger: normTrigger(e.target.value) })} />
           <datalist id="dl-trig">${TRIGGERS.map(t => html`<option value=${t} />`)}</datalist></label>`}
         ${/轉入/.test(normTrigger(ev.trigger)) && html`<div style="grid-column:1/-1"><span class="sub">轉入來源</span>
           <div class="trigbar" style="margin:4px 0 0">${TRANSFER_FROM.map(k => html`<button class=${c.srcNote === k ? 'on' : ''} onClick=${() => setC({ ...c, src: '轉入', srcNote: c.srcNote === k ? '' : k })}>${k}</button>`)}
           ${TRANSFER_FROM.includes(c.srcNote) ? html`<span class="sub">已填入「申請來源備註」</span>` : html`<span class="sub" style="color:var(--warn,#c0392b)">請選擇是友單位轉入還是外縣市轉入（會自動填進申請來源備註）</span>`}</div></div>`}
         ${!normTrigger(ev.trigger) && autoTrig && html`<div style="grid-column:1/-1" class="sub">本月沒有自己打觸發，系統自動帶入：<span class="tag t-org">${autoTrig}</span>${/新案|沒吃到錢/.test(autoTrig) ? '（上月沒選金額或沒吃到錢，本月請補報並選金額）' : ''}</div>`}
         <div style="grid-column:1/-1"><span class="sub">核銷金額</span>
-          <div class="trigbar" style="margin:4px 0 0">${FEES.map(f => html`<button class=${ev.fee === f.key ? 'on' : ''} onClick=${() => setEv({ ...ev, fee: ev.fee === f.key ? '' : f.key })}>${f.label}</button>`)}
+          <div class="trigbar" style="margin:4px 0 0">${FEES.map(f => html`<button class=${ev.fee === f.key ? 'on' : ''} onClick=${() => setEvDirty({ ...ev, fee: ev.fee === f.key ? '' : f.key })}>${f.label}</button>`)}
           ${!FEE[ev.fee] && defaultFee(ev.trigger) !== 'unset' && html`<span class="sub">沒選就預設為「${FEE[defaultFee(ev.trigger)].label}」</span>`}</div></div>
         <div class="sect" style="grid-column:1/-1;margin:6px 0 0">日期</div>
         ${CASE_DATES.map(([k, label]) => html`<label>${label}<${DateInput} style="width:100%" value=${c[k] || ''} onChange=${v => setC({ ...c, [k]: v })} /></label>`)}
         ${EVENT_DATES.map(([k, label]) => html`<label>${k === 'bFirst' ? 'B單位第一次提供服務日期（居服進場）' : label}${k === 'supervisor' || k === 'approve'
-          ? html`<span style="display:flex;gap:4px"><${DateInput} style="flex:1;min-width:0" value=${ev[k] || ''} onChange=${v => setEv({ ...ev, [k]: v })} /><${AmPm} value=${ev[k + 'Time']} onChange=${v => setEv({ ...ev, [k + 'Time']: v })} /></span>`
-          : k === 'bFirst' ? html`<${DateInput} style="width:100%" value=${ev.bFirst || (!evOrig || !evOrig.bFirst ? c.homeStart || '' : '')} onChange=${v => { setEv({ ...ev, bFirst: v }); setC({ ...c, homeStart: v }); }} />`
-          : html`<${DateInput} style="width:100%" value=${ev[k] || ''} onChange=${v => setEv({ ...ev, [k]: v })} />`}</label>`)}
-        <label style="grid-column:1/-1">服務代碼<textarea class="inp codes" rows=${Math.max(1, Math.ceil(String(ev.codes || '').length / 90))} value=${ev.codes || ''} onInput=${e => setEv({ ...ev, codes: e.target.value })}></textarea></label>
+          ? html`<span style="display:flex;gap:4px"><${DateInput} style="flex:1;min-width:0" value=${ev[k] || ''} onChange=${v => setEvDirty({ ...ev, [k]: v })} /><${AmPm} value=${ev[k + 'Time']} onChange=${v => setEvDirty({ ...ev, [k + 'Time']: v })} /></span>`
+          : k === 'bFirst' ? html`<${DateInput} style="width:100%" value=${ev.bFirst || (!evOrig || !evOrig.bFirst ? c.homeStart || '' : '')} onChange=${v => { setEvDirty({ ...ev, bFirst: v }); setC({ ...c, homeStart: v }); }} />`
+          : html`<${DateInput} style="width:100%" value=${ev[k] || ''} onChange=${v => setEvDirty({ ...ev, [k]: v })} />`}</label>`)}
+        <label style="grid-column:1/-1">服務代碼<textarea class="inp codes" rows=${Math.max(1, Math.ceil(String(ev.codes || '').length / 90))} value=${ev.codes || ''} onInput=${e => setEvDirty({ ...ev, codes: e.target.value })}></textarea></label>
       </div>
       ${ev.discharge && ev.visit && ev.visit <= ev.discharge && html`<div class="tag t-warn" style="margin-top:8px">個管訪視日期必須晚於出院日期</div>`}
       <div class="sub" style="margin-top:8px">逾期原因、派案機制、追蹤結果等欄位，可以直接在「評鑑報表」裡填寫。</div>
@@ -3051,8 +3120,8 @@ function FloatStats({ db, month }) {
         <button class="btn light sm" onClick=${() => setOpen(null)}>關閉</button></div>
       <div class="trigbar" style="margin-bottom:6px">${[['', '全部', all.length], ...regs.map(r => [r, r, all.filter(c => regionOf(c.caseNo) === r).length])].map(([k, l, n]) =>
         html`<button class=${rg === k ? 'on' : ''} onClick=${() => setRg(k)}>${l}<b>${n}</b></button>`)}</div>
-      <div class="tw" style="max-height:min(56vh, 460px)"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>地區</th><th>來源</th><th>本月觸發</th><th>開案月</th><th>結案月</th></tr></thead>
-        <tbody>${list.map(c => { const x = epAt(db.info.get(c._id) || {}, month), e = evM.get(c._id); return html`<tr><td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${regionOf(c.caseNo)}</td><td>${c.src}</td>
+      <div class="tw" style="max-height:min(56vh, 460px)"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>身分證</th><th>地區</th><th>來源</th><th>本月觸發</th><th>開案月</th><th>結案月</th></tr></thead>
+        <tbody>${list.map(c => { const x = epAt(db.info.get(c._id) || {}, month), e = evM.get(c._id); return html`<tr><td>${c.caseNo}</td><td><b>${c.name}</b></td><td class="sub" style="white-space:nowrap">${c.idNo || ''}</td><td>${regionOf(c.caseNo)}</td><td>${c.src}</td>
           <td>${e && normTrigger(e.trigger) || ''}</td><td>${x.open ? rocMonth(x.open) : ''}</td><td>${x.close ? rocMonth(x.close) : ''}</td></tr>`; })}</tbody></table></div>
     </div>`}
     <div class="fstats" title="點數字看是哪些個案">
@@ -3087,7 +3156,7 @@ function App() {
     const t = setInterval(f, 5 * 60 * 1000);
     return () => { document.removeEventListener('visibilitychange', f); clearInterval(t); };
   }, [authed]);
-  const logout = async () => { try { localStorage.removeItem(REFRESH_KEY); } catch (e) { } await IDB.clear(); location.reload(); };
+  const logout = async () => { try { localStorage.removeItem(REFRESH_KEY); } catch (e) { } writeDraft(null); await IDB.clear(); location.reload(); };
 
   if (checking) return html`<div class="empty">載入中…</div>`;
   if (!authed) return html`<${Login} onDone=${() => setAuthed(true)} />`;
@@ -3112,10 +3181,57 @@ function App() {
       : tab === 'stats' ? html`<${StatsView} db=${db} month=${month} />`
       : tab === 'import' ? html`<${ImportView} db=${db} month=${month} user=${user} refresh=${refresh} />`
       : html`<div class="page"><${HolidaysCard} db=${db} user=${user} refresh=${refresh} /><${UnitsCard} db=${db} user=${user} refresh=${refresh} /></div>`}
+    ${db && tab !== 'summary' && readDraft() && html`<div class="toast" style="background:var(--org,#c47a1c);cursor:pointer;bottom:90px" onClick=${() => setTab('summary')}>「${readDraft().name}」還有資料沒儲存，點這裡回去繼續填</div>`}
     ${db && html`<${FloatStats} db=${db} month=${month} />`}
     ${toastMsg && html`<div class="toast" style=${'background:' + (toastMsg.err ? 'var(--red)' : 'var(--green)')}>${toastMsg.msg}</div>`}
   </div>`;
 }
+// 方向鍵換格：在個案視窗（或其他表單）裡，↑↓ 跳到上／下一格，←→ 在游標已經在最前／最後時跳到左／右一格
+// （文字還在中間時 ←→ 照常移動游標；下拉選單用 ↑↓ 換格，要換選項請用滑鼠或 Alt+↓ 打開）
+function arrowNav(e) {
+  if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.isComposing) return;
+  const el = e.target; if (!el || !el.matches || !el.matches('input, select, textarea')) return;
+  const scope = el.closest('.drawer') || el.closest('.form'); if (!scope) return;
+  if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file') return;
+  const hasCaret = el.tagName !== 'SELECT' && typeof el.selectionStart === 'number';
+  const nav = arrowNav.cur === el;   // 剛用方向鍵跳進來、還沒打字：整格是「選取」狀態，方向鍵直接換格（像 Excel）
+  if (!nav) {
+    if (hasCaret && el.selectionStart !== el.selectionEnd) return;             // 自己選取了文字時不跳
+    const v = el.value || '';
+    if (e.key === 'ArrowLeft' && hasCaret && el.selectionStart > 0) return;
+    if (e.key === 'ArrowRight' && hasCaret && el.selectionEnd < v.length) return;
+    if (el.tagName === 'TEXTAREA') {                                            // 多行：在第一行才往上、最後一行才往下
+      if (e.key === 'ArrowUp' && v.slice(0, el.selectionStart).includes('\n')) return;
+      if (e.key === 'ArrowDown' && v.slice(el.selectionEnd).includes('\n')) return;
+    }
+    if (el.list && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && v) return; // 有建議清單、正在挑選時不搶
+  }
+  const all = [...scope.querySelectorAll('input, select, textarea')].filter(x => !x.disabled && x.type !== 'hidden' && x.type !== 'file' && x.offsetParent !== null);
+  const r0 = el.getBoundingClientRect(), cx = r0.left + r0.width / 2, cy = r0.top + r0.height / 2;
+  let best = null, bestScore = Infinity;
+  for (const x of all) {
+    if (x === el) continue;
+    const r = x.getBoundingClientRect(), dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy, same = Math.abs(dy) < Math.max(r0.height, r.height) / 2;
+    let score;
+    if (e.key === 'ArrowRight') score = same && dx > 0 ? dx : Infinity;
+    else if (e.key === 'ArrowLeft') score = same && dx < 0 ? -dx : Infinity;
+    else if (e.key === 'ArrowDown') score = !same && dy > 0 ? dy * 4 + Math.abs(dx) : Infinity;
+    else score = !same && dy < 0 ? -dy * 4 + Math.abs(dx) : Infinity;
+    if (score < bestScore) { bestScore = score; best = x; }
+  }
+  if (!best && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {                // 這一列最後一格 → 下一列第一格（反之亦然）
+    const i = all.indexOf(el); best = all[e.key === 'ArrowRight' ? i + 1 : i - 1] || null;
+  }
+  if (!best) return;
+  e.preventDefault();
+  best.focus(); arrowNav.cur = best;
+  if (typeof best.select === 'function' && best.tagName !== 'SELECT') { try { best.select(); } catch { } }
+  best.scrollIntoView({ block: 'nearest' });
+}
+document.addEventListener('keydown', arrowNav, true);
+// 開始打字、用滑鼠點，就離開「換格」狀態
+['input', 'mousedown'].forEach(t => document.addEventListener(t, () => { arrowNav.cur = null; }, true));
+document.addEventListener('keydown', e => { if (arrowNav.cur && e.target === arrowNav.cur && !e.key.startsWith('Arrow') && !['Tab', 'Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) arrowNav.cur = null; }, true);
 // 快捷鍵：Ctrl+F（Mac：⌘F）→ 直接跳到這一頁的搜尋框；這一頁沒有搜尋框就照瀏覽器原本的「尋找」
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F')) {
