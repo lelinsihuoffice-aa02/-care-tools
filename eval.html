@@ -1812,7 +1812,7 @@ function exportUnitStats(kind, year, db) {
 const CMS_OPTS = ['2級', '3級', '4級', '5級', '6級', '7級', '8級'];
 const CASE_FIELDS = [
   ['name', '姓名'], ['gender', '性別', ['男', '女']], ['idNo', '身分證號'], ['birth', '出生日期', 'date'], ['cms', 'CMS', { select: CMS_OPTS }],
-  ['identity', '身分別'], ['living', '居住狀況', { select: ['獨居', '與他人同住'] }], ['dementia', '失智', { select: ['-', '有'] }],
+  ['identity', '身分別', { select: ['一般', '中低收', '低收'] }], ['living', '居住狀況', { select: ['獨居', '與他人同住'] }], ['dementia', '失智', { select: ['-', '有'] }],
   ['disability', '身障（重鑑日/類別）'], ['disLevel', '身障等級', ['輕度', '中度', '重度', '極重度']],
   ['src', '申請來源', ['初評', '出備', '轉入']], ['srcNote', '申請來源備註'],
   ['aEnd', 'A結束服務日期', 'date'], ['sysClose', '系統結案日期', 'date'],
