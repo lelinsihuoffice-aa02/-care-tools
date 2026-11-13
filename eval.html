@@ -437,8 +437,8 @@ function canonUnit(raw, sheet, units, extra) {
   return r;
 }
 function canonUnit0(raw, sheet, units, extra) {
-  if (/^（未填/.test(String(raw))) return String(raw);
   if (sheet === '輔具') return AIDS_CENTER;   // 輔具一律算在輔具資源中心（就是輔具使用人數）
+  if (/^（未填/.test(String(raw))) return String(raw);
   const n = normName(raw).replace(/樂鄰/g, '樂臨'); if (!n) return '';
   const cands = [...new Set([...(KNOWN_UNITS[sheet] || []), ...(extra || []).map(normName)])];
   // 0. 本來就是全名
@@ -455,7 +455,7 @@ function canonUnit0(raw, sheet, units, extra) {
     return RC_HOME;
   }
   if (/樂臨/.test(n)) {
-    if (/護理所/.test(n)) return '樂臨居家護理所';
+    if (/護理所/.test(n) || sheet === 'C碼') return '樂臨居家護理所';   // 專業碼的樂臨就是樂臨居家護理所
     if (sheet === '交通' || sheet === '社區交通') return LELING_CO;
     if (sheet === '日照' || sheet === '日喘') return '樂臨企業有限公司附設雲林縣私立樂臨社區式長照機構';
     return LELING_FULL;
@@ -745,13 +745,18 @@ function onlyCatOf(v) {
   const s = String(v || '').replace(/\s+/g, '').replace(/^(僅|只有)/, '');
   if (!s || s === String(v || '').replace(/\s+/g, '')) return null;
   const alias = { 送餐: 'meal', 餐飲: 'meal', 營養餐飲: 'meal', 專業: 'prof', 復能: 'prof', 日照喘息: 'dayresp', 機構喘息: 'inst', 居家喘息: 'resp', 居家: 'home', 居服: 'home' };
-  if (alias[s]) return alias[s];
-  const hit = CATS.find(c => s === c.label || s === c.stat || s === c.col || s.startsWith(c.label));
+  // 只看第一項（「僅居家護理、居喘、輔具」看「居家護理」）；居家護理／居家復能是專業碼、居家環改是輔具，不是居家服務
+  const first = s.split(/[、,，/／+＋]/)[0];
+  const special = { 居家護理: 'prof', 居家復能: 'prof', 居家職能: 'prof', 居家營養: 'prof', 居家環改: 'aids', 環改: 'aids', 居家無障礙: 'aids' };
+  for (const [w, k] of Object.entries(special)) if (first.startsWith(w)) return k;
+  if (alias[first]) return alias[first];
+  const hit = CATS.find(c => first === c.label || first === c.stat || first === c.col || first.startsWith(c.label));
   return hit ? hit.key : null;
 }
 // 一個個案在某個月各服務類別的單位（不是單位名稱的不算；「僅交通」但交通欄沒填 → 交通記「（未填單位）」）
 function caseUnits(e, c, resolveUnit) {
-  const out = {}, src = k => (e && (e.services || {})[k]) || (c.services || {})[k] || '';
+  // 那個月有匯入總表（onList）→ 只看那個月總表寫的服務，不拿個案最新的服務去補（避免後來才加的居喘、短照算到以前的月份）
+  const out = {}, src = k => (e && (e.services || {})[k]) || (e && e.onList ? '' : (c.services || {})[k]) || '';
   for (const cat of CATS) { const raw = src(cat.key); if (isUnitName(raw)) out[cat.key] = resolveUnit(raw, cat.key); }
   for (const cat of CATS) { const t = onlyCatOf(src(cat.key)); if (t && !out[t]) out[t] = '（未填單位）'; }
   return out;
@@ -770,7 +775,7 @@ function unitStats(kind, month, db) {
     if (us.ctraffic === '（未填單位）') us.ctraffic = '社團法人雲林縣復健青年協進會(北港區)';
     for (const [k, u] of Object.entries(us)) {
       (out[k] = out[k] || {})[u] = (out[k][u] || 0) + 1;
-      if (u === '（未填單位）') unfilled.push({ k, caseId: e.caseId, month, raw: Object.fromEntries(CATS.map(x => [x.key, (e.services || {})[x.key] || (c.services || {})[x.key] || '']).filter(([, v]) => v)) });
+      if (u === '（未填單位）') unfilled.push({ k, caseId: e.caseId, month, raw: Object.fromEntries(CATS.map(x => [x.key, (e.services || {})[x.key] || (e.onList ? '' : (c.services || {})[x.key]) || '']).filter(([, v]) => v)) });
     }
   }
   Object.defineProperty(out, 'unfilled', { value: unfilled, enumerable: false });   // 未填單位的個案（畫面列出來方便補）
@@ -1511,18 +1516,18 @@ function dispatchStatMonth(month, db) {
     .sort((a, b) => String(db.cases.get(a.caseId).caseNo).localeCompare(String(db.cases.get(b.caseId).caseNo), 'zh-Hant', { numeric: true }));
   const rows = [], groups = { 指定: new Map(), 輪派: new Map() };
   evs.forEach((e, i) => {
-    const c = db.cases.get(e.caseId), units = caseUnits(e, c, db.resolveUnit), home = (e.services || {}).home || (c.services || {}).home || '';
+    const c = db.cases.get(e.caseId), units = caseUnits(e, c, db.resolveUnit), sv = k => (e.services || {})[k] || (e.onList ? '' : (c.services || {})[k]) || '', home = sv('home');
     // 派案單位：先看居家；沒有居家單位（例如「僅交通」）就依序找其他服務的單位（交通是樂臨就填樂臨）；只有輔具才填「僅輔具」
     //   居家寫「僅日照」→ 先找日照單位；「僅交通、居喘」→ 先交通再居喘（照寫的順序），都沒有才找其他有填的服務
     const words = { 復能: 'prof', 專業: 'prof', 社區交通: 'ctraffic', 交通: 'traffic', 居喘: 'resp', 日喘: 'dayresp', 日照: 'day', 短照: 'short', 機喘: 'inst', 送餐: 'meal', 營養: 'meal', OT01: 'meal', 家托: 'family', 沐浴: 'bath', 小規機: 'small' };
     const homeTxt = String(home || ''), named = Object.entries(words).map(([w, k]) => [homeTxt.indexOf(w), k]).filter(([i]) => i >= 0)
       .sort((a, b) => a[0] - b[0]).map(([, k]) => k).filter((k, i, a) => a.indexOf(k) === i && !(k === 'traffic' && a.includes('ctraffic') && /社區交通/.test(homeTxt) && !/(^|[^區])交通/.test(homeTxt)));
     const order = [...named, ...CATS.map(cat => cat.key).filter(k => k !== 'home' && k !== 'aids' && !named.includes(k))];
-    const otherK = isUnitName(home) ? '' : (order.find(k => isUnitName((e.services || {})[k] || (c.services || {})[k] || '')) || '');
-    const other = otherK ? ((e.services || {})[otherK] || (c.services || {})[otherK]) : '';
+    const otherK = isUnitName(home) ? '' : (order.find(k => isUnitName(sv(k))) || '');
+    const other = otherK ? sv(otherK) : '';
     // 派案單位用全名（總表打簡稱 → 換成該服務類別的全名）
     const unit = isUnitName(home) ? fullUnit(home, 'home', db) : other ? fullUnit(other, otherK, db)
-      : (/輔具/.test(home) || isUnitName((e.services || {}).aids || (c.services || {}).aids) || (cc0 => (cc0.輔具 || 0) > 0)(codeCounts(e.codes || latestCodes(db, c, month)))) ? '僅輔具'
+      : (/輔具/.test(home) || isUnitName(sv('aids')) || (cc0 => (cc0.輔具 || 0) > 0)(codeCounts(e.codes || latestCodes(db, c, month)))) ? '僅輔具'
       : home ? String(home).trim() : '';
     const cc = codeCounts(e.codes || latestCodes(db, c, month));
     rows.push([i + 1, c.name || '', unit, ...CODE_COLS.map(k => cc[k] || '')]);
