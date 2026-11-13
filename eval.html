@@ -419,6 +419,56 @@ function makeUnitResolver(units) {
   };
 }
 
+// ---------- 服務單位統計用：一律換成「全名」 ----------
+// 舊統計 Excel 的欄位全名（依服務類別）；總表打簡稱時，依這份名單找回全名
+const KNOWN_UNITS = {"B單位": ["樂臨企業有限公司附設雲林縣私立樂臨居家長照機構", "雲林縣私立康安居家長照機構", "社團法人雲林縣紅十字會私立不老坣東勢居家長照機構", "康泰健康事業有限公司附設雲林縣私立康泰居家長照機構", "雲林縣四湖鄉立居家式服務類長期照顧服務機構", "安得寶股份有限公司附設雲林縣私立安得寶居家長照機構", "雲林縣私立承鑫居家式長照機構", "正唯健康產業有限公司附設雲林縣私立正唯居家長照機構", "雲林縣私立庭安居家式長期照顧服務機構", "永安健康事業有限公司附設雲林縣私立永安居家長照機構", "雲林縣私立伯欣居家式長照機構", "星奇股份有限公司附設雲林縣私立星奇居家式服務類長期照顧服務機構", "守護寧健康有限公司附設雲林縣私立溪頂居家式長照機構", "慈暉股份有限公司附設雲林縣私立慈暉長期健康管理居家式照顧機構", "祥賀健康有限公司附設雲林縣私立平安居家長照機構", "雲林縣私立臺西居家長照機構", "太舜健康產業股份有限公司附設雲林縣私立太舜居家長照機構", "雲林縣私立安喬居家長照機構", "臻樂福有限公司附設雲林縣私立臻賀居家長照機構"], "C碼": ["職心居家職能治療所", "北媽", "樂臨居家護理所", "欣齡居家護理所", "弘健居家職能治療所", "雅禎營養諮詢機構", "中國醫藥大學北港附設醫院附設居家護理所", "佳康居家護理所", "安芯居家護理所", "好厝邊居家護理所", "彰化基督教醫療財團法人附設雲林基督教居家護理所", "好所宅診所附設居家護理所", "天主教若瑟醫療財團法人附設若瑟居家護理所", "國立臺灣大學醫學院附設醫院雲林分院附設居家護理所", "佛教慈濟醫療財團法人附設斗六慈濟居家護理所", "長春居家護理所", "佶松居家護理所", "雲林縣私立品齊居家護理所", "彰化基督教醫療財團法人雲林基督教醫院", "天主教若瑟醫療財團法人若瑟醫院", "國立成功大學醫學院附設醫院斗六分院", "國立臺灣大學醫學院附設醫院雲林分院", "樂林職能治療所", "佛教慈濟醫療財團法人斗六慈濟醫院", "竑元骨科診所"], "交通": ["樂臨企業有限公司", "社團法人雲林縣親得福喜悅協進會", "社團法人兆祥社會福利慈善協會", "台灣復康巴士有限公司", "雲林縣明彰長照協會", "雲林縣後安福利協會"], "居喘": ["樂臨企業有限公司附設雲林縣私立樂臨居家長照機構", "雲林縣私立康安居家長照機構", "康泰健康事業有限公司附設雲林縣私立康泰居家長照機構", "社團法人雲林縣紅十字會私立不老坣東勢居家長照機構", "安得寶股份有限公司附設雲林縣私立安得寶居家長照機構", "守護寧健康有限公司附設雲林縣私立溪頂居家式長照機構", "雲林縣私立伯欣居家式長照機構", "慈暉股份有限公司附設雲林縣私立慈暉長期健康管理居家式照顧機構", "星奇股份有限公司附設雲林縣私立星奇居家式服務類長期照顧服務機構", "雲林縣私立臺西居家長照機構", "永安健康事業有限公司附設雲林縣私立永安居家長照機構", "雲林縣私立承鑫居家式長照機構", "太舜健康產業股份有限公司附設雲林縣私立太舜居家長照機構", "正唯健康產業有限公司附設雲林縣私立正唯居家長照機構", "雲林縣私立庭安居家式長期照顧服務機構", "祥賀健康事業有限公司附設雲林縣私立平安居家長照機構", "祥賀健康有限公司附設雲林縣私立平安居家長照機構", "雲林縣私立安喬居家長照機構", "雲林縣四湖鄉立居家式服務類長期照顧服務機構", "臻樂福有限公司附設雲林縣私立臻賀居家長照機構"], "日照": ["雲林縣私立孝親園社區長照機構", "雲林縣家園關懷協會附設雲林縣私立紅蘋果社區式服務類長期照顧服務機構", "財團法人天主教若瑟社會福利基金會附設雲林縣私立德蘭社區式服務類長期照顧服務機構", "康泰長照學苑附設雲林縣私立台西康泰老學堂社區長照機構", "社團法人雲林縣紅十字會私立不老坣東勢社區長照機構", "雲林縣口湖鄉老人福利協進會附設雲林縣私立下崙社區式長照機構", "鄉親長照社團法人私立天禧綜合長照機構", "雲林縣家園關懷協會附設雲林縣私立銀髮樂園社區長照機構", "社團法人雲林縣紅十字會私立不老坣台西社區長照機構", "社團法人雲林縣脊髓損傷者協會附設雲林縣私立髓緣社區式服務類長期照顧服務機構", "雲林縣口湖鄉老人福利協進會附設雲林縣私立向陽居社區式服務類長期照顧服務機構", "孝親園長照學苑附設雲林縣私立麥豐社區長照機構", "雲林縣口湖鄉老人福利協進會附設雲林縣私立下崙社區長照機構", "社團法人雲林縣老人福利保護協會附設雲林縣私立褒忠長泰老學堂小規模多機能社區式服務類長期照顧服務機構", "瑋霆企業有限公司附設雲林縣私立崙豐社區式長照機構", "社團法人雲林縣復健青年協進會附設雲林縣私立心圓寶社區式服務類長期照顧服務機構", "康泰長照學苑附設雲林縣私立北港康泰老學堂社區長照機構", "中國醫藥大學北港附設醫院附設雲林縣私立元長社區長照機構", "樂臨企業有限公司附設雲林縣私立樂臨社區式長照機構"], "日喘": ["雲林縣私立孝親園社區長照機構", "雲林縣家園關懷協會附設雲林縣私立紅蘋果社區式服務類長期照顧服務機構", "財團法人天主教若瑟社會福利基金會附設雲林縣私立德蘭社區式服務類長期照顧服務機構", "康泰長照學苑附設雲林縣私立台西康泰老學堂社區長照機構", "社團法人雲林縣紅十字會私立不老坣東勢社區長照機構", "社團法人雲林縣紅十字會私立不老坣台西社區長照機構", "雲林縣口湖鄉老人福利協進會附設雲林縣私立向陽居社區式服務類長期照顧服務機構", "社團法人雲林縣脊髓損傷者協會附設雲林縣私立髓緣社區式服務類長期照顧服務機構", "孝親園長照學苑附設雲林縣私立麥豐社區長照機構", "雲林縣口湖鄉老人福利協進會附設雲林縣私立下崙社區長照機構", "瑋霆企業有限公司附設雲林縣私立崙豐社區式長照機構", "社團法人雲林縣復健青年協進會附設雲林縣私立心圓寶社區式服務類長期照顧服務機構", "康泰長照學苑附設雲林縣私立北港康泰老學堂社區長照機構", "雲林縣家園關懷協會附設雲林縣私立銀髮樂園社區長照機構", "中國醫藥大學北港附設醫院附設雲林縣私立元長社區長照機構", "鄉親長照社團法人私立天禧綜合長照機構", "樂臨企業有限公司附設雲林縣私立樂臨社區式長照機構"], "短照": ["雲林縣私立康安居家長照機構", "樂臨企業有限公司附設雲林縣私立樂臨居家長照機構", "康泰健康事業有限公司附設雲林縣私立康泰居家長照機構", "社團法人雲林縣紅十字會私立不老坣東勢居家長照機構", "安得寶股份有限公司附設雲林縣私立安得寶居家長照機構", "守護寧健康有限公司附設雲林縣私立溪頂居家式長照機構", "雲林縣私立伯欣居家式長照機構", "慈暉股份有限公司附設雲林縣私立慈暉長期健康管理居家式照顧機構", "雲林縣私立承鑫居家式長照機構", "正唯健康產業有限公司附設雲林縣私立正唯居家長照機構", "雲林縣四湖鄉立居家式服務類長期照顧服務機構", "雲林縣私立庭安居家式長期照顧服務機構", "太舜健康產業股份有限公司附設雲林縣私立太舜居家長照機構", "永安健康事業有限公司附設雲林縣私立永安居家長照機構", "祥賀健康有限公司附設雲林縣私立平安居家長照機構", "星奇股份有限公司附設雲林縣私立星奇居家式服務類長期照顧服務機構", "雲林縣私立臺西居家長照機構", "臻樂福有限公司附設雲林縣私立臻賀居家長照機構"], "機喘": ["雲林縣私立三和老人長期照顧中心", "雲林縣私立安家園老人長期照顧中心", "雲林縣私立吉祥老人長期照顧中心", "雲林縣私立幸福之家老人長期照顧中心", "私立安泰老人長期照護中心", "私立玉妹紀念護理之家", "雲林縣私立長榮老人長期照顧中心", "襃忠三仁診所附設護理之家", "長青護理之家", "佳佳護理之家", "嘉義縣私立大林老人養護中心", "安生醫院附設護理之家", "中國醫藥大學北港附設醫院附設護理之家", "雲林縣私立慈恩護理之家", "雲林縣私立石龜老人養護中心", "雲林縣私立恩惠老人長期照顧中心(養護型)", "雲林縣私立聖誕老人長期照顧中心(養護型)", "雲林縣私立雙福寶佛門老人養護中心", "雲林縣私立永祥老人長期照顧中心(養護型)", "天主教若瑟醫療財團法人附設若瑟護理之家", "雲林縣私立博愛養護中心", "彰化基督教醫療財團法人附設雲林基督教護理之家", "雲林縣私立長青老人長期照顧中心(養護型)", "雲林縣私立新樂園老人長期照顧中心(養護型)"], "餐飲(OT)": ["社團法人雲林縣紅十字會", "雲林縣四湖鄉立居家式服務類長期照顧服務機構", "社團法人雲林縣秉鑫長照協會"], "家托": ["雲林縣私立玩蓉社區長照機構", "雲林縣私立小可社區長照機構", "雲林縣私立淑滿社區長照機構", "雲林縣私立素勤社區長照機構", "雲林縣私立大有社區長照機構", "雲林縣私立後安社區長照機構", "雲林縣私立真兆固社區長照機構", "雲林縣私立吳義雄社區長照機構", "雲林縣私立喜樂社區長照機構", "雲林縣私立詠淳社區長照機構", "雲林縣私立理想部落社區長照機構", "雲林縣私立麥豐社區長照機構", "雲林縣私立麥照社區長照機構"], "沐浴車": ["社團法人臺灣樂福國際慈善福利協會", "樂臨企業有限公司附設雲林縣私立樂臨居家長照機構", "社團法人雲林縣志願服務協會", "社團法人雲林縣紅十字會私立不老坣東勢居家長照機構", "天主教若瑟醫療財團法人若瑟醫院"], "輔具": ["雲林縣輔助器具資源中心"], "社區交通": ["樂臨企業有限公司", "社團法人雲林縣復健青年協進會(北港區)"], "小規機": ["社團法人雲林縣老人福利保護協會附設雲林縣私立褒忠長泰老學堂小規模多機能社區式服務類長期照顧服務機構"]};
+const LELING_FULL = '樂臨企業有限公司附設雲林縣私立樂臨居家長照機構', LELING_CO = '樂臨企業有限公司';
+const RC_HOME = '社團法人雲林縣紅十字會私立不老坣東勢居家長照機構', RC_DONGSHI = '社團法人雲林縣紅十字會私立不老坣東勢社區長照機構',
+  RC_TAIXI = '社團法人雲林縣紅十字會私立不老坣台西社區長照機構', RC_ASSOC = '社團法人雲林縣紅十字會';
+// 簡稱裡常見、但不是單位名字的字（「康安居家」→ 用「康安」去找全名）
+const UNIT_NOISE = /(轉介|指定|輪派|居家|交通車|社區交通|交通|沐浴車|沐浴|居喘|日喘|喘息|日照|短照|機喘|家托|營養餐飲|餐飲|送餐|復能|專業|輔具|小規機|長照機構|機構|單位|[-－–_、,，。.()（）:：])/g;
+// raw：總表寫的單位；sheet：統計表的服務類別（B單位、交通、日照…）；extra：其他已知全名（匯入的舊檔欄位）
+function canonUnit(raw, sheet, units, extra) {
+  if (/^（未填/.test(String(raw))) return String(raw);
+  const n = normName(raw).replace(/樂鄰/g, '樂臨'); if (!n) return '';
+  const cands = [...new Set([...(KNOWN_UNITS[sheet] || []), ...(extra || []).map(normName)])];
+  // 0. 本來就是全名
+  if ((KNOWN_UNITS[sheet] || []).includes(n)) return n;
+  // 1. 使用者在畫面上填過全名的簡稱（只套用在當時那個服務類別）
+  const catKey = STAT2CAT[sheet];
+  for (const u of units || []) if ((u.cats || []).includes(catKey) && (u.aliases || []).some(x => normName(x) === n)) return normName(u.name);
+  // 2. 指定的簡稱規則
+  if (/紅會|紅十字/.test(n)) {
+    if (/台西|臺西/.test(n)) return RC_TAIXI;
+    if (/東勢/.test(n) && (sheet === '日照' || sheet === '日喘')) return RC_DONGSHI;
+    if (n === RC_ASSOC || /餐飲|送餐|營養|OT/.test(n) || sheet === '餐飲(OT)') return RC_ASSOC;
+    if (sheet === '日照' || sheet === '日喘') return n;   // 紅十字有台西、東勢兩間日照 → 沒寫清楚就請使用者填全名
+    return RC_HOME;
+  }
+  if (/樂臨/.test(n)) {
+    if (/護理所/.test(n)) return '樂臨居家護理所';
+    if (sheet === '交通' || sheet === '社區交通') return LELING_CO;
+    if (sheet === '日照' || sheet === '日喘') return '樂臨企業有限公司附設雲林縣私立樂臨社區式長照機構';
+    return LELING_FULL;
+  }
+  // 2.5 舊統計檔裡的欄位名稱
+  if (cands.includes(n)) return n;
+  // 3. 設定裡的單位名單（全名／簡稱／其他寫法）
+  for (const u of units || []) if ([u.name, u.short, ...(u.aliases || [])].some(x => x && normName(x) === n)) return normName(u.name);
+  // 4. 簡稱：去掉「居家」「交通」等字後，只對到一個全名就用它
+  const tw = x => x.replace(/臺/g, '台'), core = tw(n.replace(UNIT_NOISE, ''));
+  // 對到好幾個時，優先「私立」後面那段（真正的機構名）有這幾個字的
+  const pick = list => { const h = list.filter(c => tw(c).includes(core)); if (h.length < 2) return h;
+    const own = h.filter(c => tw(c.split('私立').pop()).includes(core)); return own.length ? own : h; };
+  if (core.length >= 2) {
+    const hit = pick(cands);
+    if (hit.length === 1) return hit[0];
+    const all = pick([...new Set(Object.values(KNOWN_UNITS).flat())]);
+    if (!hit.length && all.length === 1) return all[0];
+  }
+  return n;
+}
+
 // ---------- 原因選項 ----------
 const OPTS = {
   referBLate: ['1.個管人力不足', '2.聯絡不到家屬/個案', '3.B單位拒絕服務', '4.照專逾3天簽審', '5.其他'],
@@ -463,7 +513,7 @@ const REPORTS = {
       { h: '個管照會B單位(工作天)', num: 1, v: r => r.k.toB, bad: r => r.k.toB > 3 ? '逾3天' : r.k.toB < 0 ? '日期順序錯誤' : '' },
       { h: '逾3天未完成照會B單位原因', edit: 'referBLate', opts: OPTS.referBLate, need: r => r.k.toB > 3 },
       { h: '派案B單位機制', edit: 'dispatchMech', opts: OPTS.dispatchMech, fallback: r => mechToOpt(bMechOf(r.c)), hint: '沒填時帶入個案服務單位的指定／輪派' },
-      { h: 'B單位第一次提供服務日期', edit: 'bFirst', type: 'date' },
+      { h: 'B單位第一次提供服務日期', edit: 'bFirst', type: 'date', fallback: r => r.bFirstAuto, hint: '沒填時帶入總表的「B單位第一次提供服務日期（居服進場）」' },
       { h: '服務連結時效(工作天)', num: 1, v: r => r.k.link, hint: '照會B單位→B單位首次服務', bad: r => r.k.link > 6 ? '逾期（超過3+3天）' : r.k.link < 0 ? '日期順序錯誤' : '' },
       { h: 'B單位逾3+3天未提供服務原因', edit: 'bLate', opts: OPTS.bLate, need: r => r.k.link > 6 },
       { h: '服務逾期追蹤日期', edit: 'followDate', type: 'date' },
@@ -476,7 +526,7 @@ const REPORTS = {
       plan: isDc(r) ? workDays(r.e.visit, r.e.approve, H) : noonDays(r.e.supervisor, r.e.supervisorTime, r.e.approve, r.e.approveTime, H),
       sa: calDays(r.e.submit, r.e.approve),
       toB: workDays(r.e.approve, r.e.referB, H),
-      link: workDays(r.e.referB, r.e.bFirst, H),
+      link: workDays(r.e.referB, r.e.bFirst || r.bFirstAuto, H),
     }),
     summary: rows => [
       ['訪案及計畫擬定3天內完成率', rate(rows, r => r.k.plan, x => x <= 3)],
@@ -567,6 +617,12 @@ function buildReport(key, month, db) {
     const svc = {};
     Object.assign(svc, caseUnits(e, c, db.resolveUnit));
     const r = { i: idx + 1, e, c, caseId: e.caseId, month, svc };
+    // B單位第一次提供服務日期：個案視窗填的「B單位第一次提供服務日期（居服進場）」。
+    // 可能填在新案那個月、也可能填在之後的月份 → 取新案月份（含）以後最早有填的；都沒有再看個案的居服進場日期
+    let bf = '';
+    for (const x of db.events) if (x.caseId === e.caseId && x.month >= month && x.bFirst && (!bf || x.bFirst < bf)) bf = x.bFirst;
+    if (!bf && c.homeStart && c.homeStart >= (e.assess || e.referA || month + '-01').slice(0, 7) + '-01') bf = c.homeStart;
+    r.bFirstAuto = bf;
     r.k = R.calc(r, db.holidays, ctx);
     return r;
   });
@@ -659,18 +715,18 @@ function onlyCatOf(v) {
 // 一個個案在某個月各服務類別的單位（不是單位名稱的不算；「僅交通」但交通欄沒填 → 交通記「（未填單位）」）
 function caseUnits(e, c, resolveUnit) {
   const out = {}, src = k => (e && (e.services || {})[k]) || (c.services || {})[k] || '';
-  for (const cat of CATS) { const raw = src(cat.key); if (isUnitName(raw)) out[cat.key] = resolveUnit(raw); }
+  for (const cat of CATS) { const raw = src(cat.key); if (isUnitName(raw)) out[cat.key] = resolveUnit(raw, cat.key); }
   for (const cat of CATS) { const t = onlyCatOf(src(cat.key)); if (t && !out[t]) out[t] = '（未填單位）'; }
   return out;
 }
 function unitStats(kind, month, db) {
   // 新案：觸發是「新案-」開頭的全部項目；複評：只算「複評」（新案-複評等排除）
   const f = unitStatFilter(kind);
-  const out = {};
+  const out = {}, hist = (db.kv || {})['unitstat:' + kind], canon = (raw, k) => canonUnit(raw, CAT[k].stat, db.units, hist && hist.order && hist.order[CAT[k].stat]);
   for (const e of db.events) {
     if (e.month !== month || !f(e) || !db.cases.has(e.caseId)) continue;
     const c = db.cases.get(e.caseId);
-    for (const [k, u] of Object.entries(caseUnits(e, c, db.resolveUnit))) (out[k] = out[k] || {})[u] = (out[k][u] || 0) + 1;
+    for (const [k, u] of Object.entries(caseUnits(e, c, canon))) (out[k] = out[k] || {})[u] = (out[k][u] || 0) + 1;
   }
   return out;
 }
@@ -710,25 +766,27 @@ function unitStatBook(kind, db, hist, toMonth) {
   const allMonths = [...sysMonths, ...histMonths].sort();
   const start = allMonths[0] || toMonth.slice(0, 4) + '-01';
   const months = []; for (let m = start; m <= `${toMonth.slice(0, 4)}-12`; m = shiftMonth(m, 1)) months.push(m);
-  const fullOf = u => { const hit = (db.units || []).find(x => (x.short || x.name) === u); return hit ? hit.name : u; };
   const sheets = [...new Set([...(hist.sheetOrder.length ? hist.sheetOrder : UNIT_SHEETS[kind]), ...UNIT_SHEETS[kind]])];
   const sysByMonth = {}; for (const m of sysMonths) sysByMonth[m] = unitStats(kind, m, db);
   return sheets.map(cat => {
-    const cols = [...(hist.order[cat] || [])], colKey = cols.map(c => db.resolveUnit(c));
+    // 欄位一律用全名：舊檔裡的簡稱欄（例如「樂臨」「紅十字」）併到全名那一欄，簡稱欄刪掉
+    const extra = hist.order[cat] || [], canon = u => canonUnit(u, cat, db.units, extra);
+    const cols = [...new Set(extra.map(canon).filter(Boolean))];
+    const addCol = u => { if (!cols.includes(u)) cols.push(u); return u; };
     const rows = months.map(m => {
       const v = {};
       if (sysMonths.has(m)) {
-        for (const [u, n] of Object.entries((sysByMonth[m][STAT2CAT[cat]] || {}))) {
-          let j = colKey.indexOf(u);
-          if (j < 0) { cols.push(fullOf(u)); colKey.push(u); j = cols.length - 1; }
-          v[cols[j]] = (v[cols[j]] || 0) + n;
-        }
+        for (const [u, n] of Object.entries((sysByMonth[m][STAT2CAT[cat]] || {}))) { const k = addCol(canon(u)); v[k] = (v[k] || 0) + n; }
         return { m, src: '系統', v };
       }
       const h = (hist.counts[cat] || {})[m];
-      return { m, src: h ? '匯入' : '', v: h ? { ...h } : {} };
+      if (h) for (const [u, n] of Object.entries(h)) { const k = addCol(canon(u)); v[k] = (v[k] || 0) + n; }
+      return { m, src: h ? '匯入' : '', v };
     });
-    return { cat, cols, rows };
+    // 系統不認識的名稱（不是舊檔的全名、也不在單位主檔）→ 畫面上請使用者填全名
+    const knownSet = new Set([...(KNOWN_UNITS[cat] || []), ...extra.map(canon).filter(u => /(機構|協會|公司|中心|所|醫院|之家|診所|基金會|紅十字會)$/.test(u)), ...(db.units || []).map(u => normName(u.name))]);
+    const unknown = cols.filter(u => !knownSet.has(u) && !/^（未填/.test(u)).map(u => ({ name: u, n: rows.reduce((a, r) => a + (r.v[u] || 0), 0) }));
+    return { cat, cols, rows, unknown, known: [...knownSet] };
   });
 }
 
@@ -2381,7 +2439,7 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
         if (col.edit) {
           const need = col.need && col.need(r) && !r.e[col.edit];
           return html`<td class=${need ? 'need' : ''} title=${need ? '逾期，請填寫原因' : ''}>${col.type === 'date'
-            ? html`<${DateInput} value=${r.e[col.edit] || ''} onChange=${v => save(r, col.edit, v)} />`
+            ? html`<${DateInput} value=${editVal(col, r)} onChange=${v => save(r, col.edit, v)} />${!r.e[col.edit] && col.fallback && col.fallback(r) ? html`<span class="tag t-close" style="margin-left:4px" title="從總表帶入">帶入</span>` : ''}`
             : col.opts === AMPM ? html`<${AmPm} value=${r.e[col.edit]} onChange=${v => save(r, col.edit, v)} />`
             : html`<${TextCell} value=${editVal(col, r)} opts=${col.opts} width=${col.width} onChange=${v => save(r, col.edit, v)} />${!r.e[col.edit] && col.fallback && col.fallback(r) ? html`<span class="tag t-close" style="margin-left:4px" title="從個案資料帶入">帶入</span>` : ''}`}</td>`;
         }
@@ -2420,18 +2478,55 @@ function UnitStatReport({ db, month, user, refresh, kind, title, picker }) {
       <label class="btn light" style="cursor:pointer">${busy ? '匯入中…' : '匯入舊統計 Excel'}<input type="file" accept=".xlsx,.xls" style="display:none" onChange=${e => importHist(e.target.files[0])} /></label>
       <button class="btn" onClick=${() => exportUnitStatBook(book, title)}>匯出 Excel（全部月份）</button></div>
     ${!hist && html`<div class="card sub" style="margin-bottom:10px">還沒有匯入舊的${title} Excel。匯入後，系統裡沒有資料的月份（例如 111 年 9 月起）會用舊檔的數字，之後的月份由系統自動計算，接在後面。</div>`}
+    <${UnknownUnits} db=${db} book=${book} user=${user} refresh=${refresh} />
     <div class="trigbar"><span class="sub">年度：</span>${years.map(y => html`<button class=${yr === y ? 'on' : ''} onClick=${() => setYr(y)}>${+y - 1911}年</button>`)}</div>
     <div class="trigbar">${book.map(b => { const n = b.rows.filter(r => r.m.startsWith(yr)).reduce((a, r) => a + Object.values(r.v).reduce((x, y) => x + y, 0), 0);
       return html`<button class=${cat === b.cat ? 'on' : ''} onClick=${() => setCat(b.cat)}>${b.cat}<b>${n}</b></button>`; })}</div>
     ${sheet && html`<div class="tw"><table class="grid">
-      <thead><tr><th>月份</th><th>來源</th>${showCols.map(c => html`<th class="num" style="white-space:normal;min-width:90px;max-width:160px" title=${c}>${db.resolveUnit(c)}</th>`)}<th class="num">合計</th></tr></thead>
+      <thead><tr><th>月份</th><th>來源</th>${showCols.map(c => html`<th class="num" style="white-space:normal;min-width:90px;max-width:160px" title=${c}>${c}</th>`)}<th class="num">合計</th></tr></thead>
       <tbody>${rows.map(r => html`<tr class=${r.m === month ? 'curmonth' : ''}><td>${roc(r.m + '-01').slice(0, -3)}${r.m === month ? html` <span class="tag t-warn">本月</span>` : ''}</td>
         <td>${r.src && html`<span class=${'tag ' + (r.src === '系統' ? 't-new' : 't-close')}>${r.src}</span>`}</td>
         ${showCols.map(c => html`<td class="num">${r.v[c] || ''}</td>`)}<td class="num"><b>${Object.values(r.v).reduce((a, b) => a + b, 0) || ''}</b></td></tr>`)}
         <tr><td><b>總計</b></td><td></td>${showCols.map(c => html`<td class="num"><b>${tot(c) || ''}</b></td>`)}<td class="num"><b>${showCols.reduce((a, c) => a + tot(c), 0)}</b></td></tr>
       </tbody></table></div>
-      <div class="sub" style="margin-top:8px">欄位標題顯示簡稱（滑鼠移上去看全名），匯出時用全名。畫面只列有數字的單位，匯出時會保留舊檔的全部單位欄位。</div>`}
+      <div class="sub" style="margin-top:8px">欄位一律用單位全名：總表打的簡稱（例如「樂臨」「紅十字」「台西紅會」「康安」）會自動對到全名那一欄。畫面只列有數字的單位，匯出時會保留舊檔的全部單位欄位。</div>`}
   </div>`;
+}
+// 總表裡出現、但系統不認識的單位簡稱：請使用者填全名（存進「設定 → 服務單位」，簡稱記成其他寫法，以後自動對應）
+function UnknownUnits({ db, book, user, refresh }) {
+  const list = book.flatMap(b => b.unknown.map(u => ({ ...u, cat: b.cat, known: b.known })));
+  const [full, setFull] = useState({}), [busy, setBusy] = useState('');
+  if (!list.length) return null;
+  const save = async it => {
+    const key = it.cat + '|' + it.name, name = String(full[key] || '').trim().replace(/\s+/g, '');
+    if (!name) return toast('請填寫全名', true);
+    if (name === it.name) return toast('全名跟簡稱一樣：如果這就是全名，請在「設定 → 服務單位」新增', true);
+    setBusy(key);
+    try {
+      const catKey = STAT2CAT[it.cat], hit = db.units.find(u => normName(u.name) === normName(name));
+      const d = hit ? { name: hit.name, short: hit.short || '', aliases: [...new Set([...(hit.aliases || []), it.name])], cats: [...new Set([...(hit.cats || []), catKey].filter(Boolean))] }
+        : { name, short: '', aliases: [it.name], cats: catKey ? [catKey] : [] };
+      await call('m', 'data:saveUnit', { ...(hit ? { id: hit._id } : {}), d: JSON.stringify(d), by: user });
+      await refresh(); toast(`已記住：${it.name} → ${name}`);
+    } catch (e) { toast('儲存失敗：' + e.message, true); }
+    setBusy('');
+  };
+  const keep = async it => {   // 這個名稱本身就是全名
+    const key = it.cat + '|' + it.name; setBusy(key);
+    try { await call('m', 'data:saveUnit', { d: JSON.stringify({ name: it.name, short: '', aliases: [], cats: [STAT2CAT[it.cat]].filter(Boolean) }), by: user }); await refresh(); toast('已記住為全名'); }
+    catch (e) { toast('儲存失敗：' + e.message, true); }
+    setBusy('');
+  };
+  return html`<div class="card" style="margin-bottom:10px;border-left:4px solid #e0a100">
+    <b>有 ${list.length} 個單位名稱系統不認識，請填全名</b>
+    <div class="sub" style="margin:4px 0 8px">可以直接打全名，或從下拉清單挑舊統計表裡已有的單位。存好後，這個簡稱之後都會自動換成全名（在「設定 → 服務單位」可以修改）。</div>
+    <div class="tw"><table class="grid"><thead><tr><th>服務類別</th><th>總表寫法</th><th class="num">件數</th><th>全名</th><th></th></tr></thead><tbody>
+    ${list.map(it => { const key = it.cat + '|' + it.name, dl = 'dl-' + it.cat.replace(/\W/g, '');
+      return html`<tr><td>${it.cat}</td><td><b>${it.name}</b></td><td class="num">${it.n}</td>
+        <td><input class="inp" style="min-width:320px" list=${dl} placeholder="輸入或選擇全名" value=${full[key] || ''} onInput=${e => setFull({ ...full, [key]: e.target.value })} onKeyDown=${e => e.key === 'Enter' && save(it)} />
+          <datalist id=${dl}>${it.known.map(k => html`<option value=${k} />`)}</datalist></td>
+        <td style="white-space:nowrap"><button class="btn" disabled=${busy === key} onClick=${() => save(it)}>儲存</button> <button class="btn light" disabled=${busy === key} title="這個名稱本身就是正式全名" onClick=${() => keep(it)}>這就是全名</button></td></tr>`; })}
+    </tbody></table></div></div>`;
 }
 // 匯出：每個服務類別一張工作表，月份一路往下，每年一列「總計」；B單位最後加「友單位總計」（最近一年、樂臨以外的單位）
 function exportUnitStatBook(book, title) {
