@@ -429,7 +429,14 @@ const RC_HOME = '社團法人雲林縣紅十字會私立不老坣東勢居家長
 // 簡稱裡常見、但不是單位名字的字（「康安居家」→ 用「康安」去找全名）
 const UNIT_NOISE = /(轉介|指定|輪派|居家|交通車|社區交通|交通|沐浴車|沐浴|居喘|日喘|喘息|日照|短照|機喘|家托|營養餐飲|餐飲|送餐|復能|專業|輔具|小規機|長照機構|機構|單位|[-－–_、,，。.()（）:：])/g;
 // raw：總表寫的單位；sheet：統計表的服務類別（B單位、交通、日照…）；extra：其他已知全名（匯入的舊檔欄位）
+// 紅十字東勢有居家、社區兩間：日照／日喘一定是社區那間，居家／居喘／短照一定是居家那間（寫錯也自動更正）
 function canonUnit(raw, sheet, units, extra) {
+  const r = canonUnit0(raw, sheet, units, extra);
+  if ((sheet === '日照' || sheet === '日喘') && r === RC_HOME) return RC_DONGSHI;
+  if (['B單位', '居喘', '短照', '沐浴車'].includes(sheet) && r === RC_DONGSHI) return RC_HOME;
+  return r;
+}
+function canonUnit0(raw, sheet, units, extra) {
   if (/^（未填/.test(String(raw))) return String(raw);
   if (sheet === '輔具') return AIDS_CENTER;   // 輔具一律算在輔具資源中心（就是輔具使用人數）
   const n = normName(raw).replace(/樂鄰/g, '樂臨'); if (!n) return '';
@@ -438,7 +445,7 @@ function canonUnit(raw, sheet, units, extra) {
   if ((KNOWN_UNITS[sheet] || []).includes(n)) return n;
   // 1. 使用者在統計表上填過全名的簡稱（只套用在當時那個服務類別，也只用在服務單位統計，總表照樣顯示簡稱）
   const catKey = STAT2CAT[sheet];
-  for (const u of units || []) if ((u.statAliases || []).some(x => x === catKey + '|' + n)) return normName(u.name);
+  for (const u of units || []) if ((u.statAliases || []).some(x => x === catKey + '|' + n) || (!u.short && (u.cats || []).includes(catKey) && (u.aliases || []).some(x => normName(x) === n))) return normName(u.name);
   // 2. 指定的簡稱規則
   if (/紅會|紅十字/.test(n)) {
     if (/台西|臺西/.test(n)) return RC_TAIXI;
@@ -469,6 +476,34 @@ function canonUnit(raw, sheet, units, extra) {
     if (!hit.length && all.length === 1) return all[0];
   }
   return n;
+}
+
+// 總表顯示用簡稱：打簡稱就照打的；打全名就換成簡稱（例如紅十字「東勢社區」寫在居服單位 → 紅十字）
+const SHORT_FIXED = { [LELING_FULL]: '樂臨', [LELING_CO]: '樂臨', '樂臨企業有限公司附設雲林縣私立樂臨社區式長照機構': '樂臨', '樂臨居家護理所': '樂臨居家護理所',
+  [RC_HOME]: '紅十字', [RC_ASSOC]: '紅十字', [RC_DONGSHI]: '東勢紅十字', [RC_TAIXI]: '台西紅會', [AIDS_CENTER]: '輔具中心' };
+function unitShort(raw, catKey, units) {
+  const t = String(raw || '').trim(); if (!t || !isUnitName(t) || normName(t).length <= 8) return t;
+  const full = canonUnit(t, (CAT[catKey] || {}).stat || 'B單位', units, []);
+  if (SHORT_FIXED[full]) return SHORT_FIXED[full];
+  const u = (units || []).find(x => x.short && normName(x.name) === full); if (u) return u.short;
+  const m = full.split('私立').pop().replace(/^雲林縣/, '').replace(/(居家式服務類長期照顧服務機構|社區式服務類長期照顧服務機構|居家式服務類長照機構|居家式長期照顧服務機構|長期健康管理居家式照顧機構|小規模多機能.*|居家式長照機構|社區式長照機構|綜合長照機構|居家長照機構|社區長照機構|老人長期照顧中心.*|老人養護中心|居家護理所|居家職能治療所|護理之家|老學堂)$/, '');
+  return m && m.length <= 8 ? m : t;
+}
+
+// 總表裡寫成全名的服務單位 → 改存成簡稱（只改認得的全名；簡稱、「僅日照」這類文字不動）
+function fullToShortChanges(db) {
+  const allKnown = new Set([...Object.values(KNOWN_UNITS).flat(), ...(db.units || []).map(u => normName(u.name))]);
+  const conv = (raw, k) => {
+    const t = String(raw || '').trim(); if (!t || !isUnitName(t) || normName(t).length <= 8) return null;
+    const full = canonUnit(t, (CAT[k] || CAT.home).stat, db.units, []);
+    if (!allKnown.has(full)) return null;
+    const sh = unitShort(t, k, db.units);
+    return sh && sh !== t && sh.length < t.length ? sh : null;
+  };
+  const cases = [], events = [];
+  for (const c of db.cases.values()) { const p = {}; for (const [k, v] of Object.entries(c.services || {})) { const sh = conv(v, k); if (sh) p[k] = [v, sh]; } if (Object.keys(p).length) cases.push({ c, p }); }
+  for (const e of db.events) { if (!db.cases.has(e.caseId)) continue; const p = {}; for (const [k, v] of Object.entries(e.services || {})) { const sh = conv(v, k); if (sh) p[k] = [v, sh]; } if (Object.keys(p).length) events.push({ e, p }); }
+  return { cases, events };
 }
 
 // ---------- 原因選項 ----------
@@ -1463,7 +1498,7 @@ function annualBook(year, db, hist, upTo) {
 // ---------- 派案統計（Word） ----------
 const CAT_WORD = { home: '居家', prof: '專業', meal: '送餐' };
 const catWord = k => CAT_WORD[k] || CAT[k].label;
-const shortUnit = (raw, db) => db.resolveUnit(raw);
+const fullUnit = (raw, k, db) => canonUnit(raw, (CAT[k] || CAT.home).stat, db.units, []);
 function dispatchStatMonth(month, db) {
   const S = monthSets(month, db), yy = +month.slice(0, 4) - 1911, m = +month.slice(5);
   const evs = [...new Map(S.newEvents.map(e => [e.caseId, e])).values()]
@@ -1477,8 +1512,10 @@ function dispatchStatMonth(month, db) {
     const homeTxt = String(home || ''), named = Object.entries(words).map(([w, k]) => [homeTxt.indexOf(w), k]).filter(([i]) => i >= 0)
       .sort((a, b) => a[0] - b[0]).map(([, k]) => k).filter((k, i, a) => a.indexOf(k) === i && !(k === 'traffic' && a.includes('ctraffic') && /社區交通/.test(homeTxt) && !/(^|[^區])交通/.test(homeTxt)));
     const order = [...named, ...CATS.map(cat => cat.key).filter(k => k !== 'home' && k !== 'aids' && !named.includes(k))];
-    const other = isUnitName(home) ? '' : (order.map(k => (e.services || {})[k] || (c.services || {})[k] || '').find(v => isUnitName(v)) || '');
-    const unit = isUnitName(home) ? shortUnit(home, db) : other ? shortUnit(other, db)
+    const otherK = isUnitName(home) ? '' : (order.find(k => isUnitName((e.services || {})[k] || (c.services || {})[k] || '')) || '');
+    const other = otherK ? ((e.services || {})[otherK] || (c.services || {})[otherK]) : '';
+    // 派案單位用全名（總表打簡稱 → 換成該服務類別的全名）
+    const unit = isUnitName(home) ? fullUnit(home, 'home', db) : other ? fullUnit(other, otherK, db)
       : (/輔具/.test(home) || isUnitName((e.services || {}).aids || (c.services || {}).aids) || (cc0 => (cc0.輔具 || 0) > 0)(codeCounts(e.codes || latestCodes(db, c, month)))) ? '僅輔具'
       : home ? String(home).trim() : '';
     const cc = codeCounts(e.codes || latestCodes(db, c, month));
@@ -1834,7 +1871,9 @@ function buildDb() {
   const cases = new Map();
   for (const x of store.rows.cases.values()) cases.set(x._id, { ...J(x.d), _id: x._id, caseNo: x.caseNo });
   const events = [...store.rows.events.values()].map(x => ({ ...J(x.d), _id: x._id, caseId: x.caseId, month: x.month }));
-  const units = [...store.rows.units.values()].map(x => ({ ...J(x.d), _id: x._id }));
+  // 舊版「請填全名」存成 aliases（沒有簡稱、只有一個服務類別）→ 當成統計表專用的對應，不影響總表與派案統計的顯示
+  const units = [...store.rows.units.values()].map(x => ({ ...J(x.d), _id: x._id })).map(u => !u.short && (u.aliases || []).length && (u.cats || []).length === 1 && !u.statAliases
+    ? { ...u, aliases: [], statOnly: true, statAliases: u.aliases.map(a => u.cats[0] + '|' + normName(a)) } : u);
   const holidays = {}, holidayList = [];
   for (const x of store.rows.holidays.values()) { const d = J(x.d); holidays[x.date] = d.kind || '假日'; holidayList.push({ ...d, _id: x._id, date: x.date }); }
   holidayList.sort((a, b) => a.date.localeCompare(b.date));
@@ -2053,7 +2092,7 @@ function SummaryView({ db, month, user, refresh }) {
           <td>${t ? html`<span class=${'tag ' + (isNewTrigger(t) ? 't-new' : /結案/.test(t) ? 't-close' : isAuto ? 't-org' : 't-ev')} title=${isAuto ? '系統自動帶入' : ''}>${t}${isAuto ? '（自動）' : ''}</span>${/轉入/.test(t) ? html` <span class="tag t-close">${TRANSFER_FROM.includes(c.srcNote) ? c.srcNote : '轉入來源未選'}</span>` : ''}` : '-'}</td>
           <td>${feeCell(c)}</td>
           <td>${roc(latestOf(db, c, 'assess', month))}</td><td>${roc(latestOf(db, c, 'visit', month))}</td><td>${roc(latestOf(db, c, 'approve', month))}</td><td>${roc(latestOf(db, c, 'referB', month))}</td>
-          <td>${db.resolveUnit((c.services || {}).home || '')}</td>
+          <td title=${(c.services || {}).home || ''}>${unitShort((c.services || {}).home, 'home', db.units)}</td>
           <td>${closed ? html`<span class="tag t-close">${rocMonth(x.close)}結案${waiting && !closedOffMonth(c) ? '（待補結案日期）' : ''}</span>` : ''}</td></tr>`;
       })}</tbody></table></div>`}`}
     ${edit && html`<${CaseEditor} key=${edit.k || edit.id || 'new'} db=${db} month=${month} user=${user} id=${edit.id} draft=${edit.draft} onClose=${() => setEdit(null)} refresh=${refresh} />`}
@@ -3147,6 +3186,32 @@ function ImportView({ db, user, refresh, month }) {
   </div></div>`;
 }
 
+// 總表裡寫成全名的服務單位，一次改存成簡稱
+function FullToShort({ db, user, refresh }) {
+  const ch = useMemo(() => fullToShortChanges(db), [db]), [busy, setBusy] = useState(''), [show, setShow] = useState(false);
+  const n = ch.cases.length + ch.events.length;
+  if (!n && !busy) return null;
+  const pairs = new Map(); for (const x of [...ch.cases, ...ch.events]) for (const [a, b] of Object.values(x.p)) pairs.set(a + '→' + b, (pairs.get(a + '→' + b) || 0) + 1);
+  const run = async () => {
+    if (!confirm(`要把 ${ch.cases.length} 位個案（另有 ${ch.events.length} 筆月份資料）的服務單位全名改存成簡稱嗎？`)) return;
+    let done = 0;
+    try {
+      for (const { c, p } of ch.cases) { await call('m', 'data:saveCase', { id: c._id, caseNo: c.caseNo, d: JSON.stringify({ services: Object.fromEntries(Object.entries(p).map(([k, [, b]]) => [k, b])) }), by: user }); setBusy(`${++done}/${n}`); }
+      for (const { e, p } of ch.events) { await call('m', 'data:patchEvent', { caseId: e.caseId, month: e.month, patch: JSON.stringify({ services: Object.fromEntries(Object.entries(p).map(([k, [, b]]) => [k, b])) }), by: user }); setBusy(`${++done}/${n}`); }
+      await refresh(); toast(`已改成簡稱：${done} 筆`);
+    } catch (err) { toast('改到一半失敗（已改 ' + done + ' 筆，可再按一次繼續）：' + err.message, true); }
+    setBusy('');
+  };
+  return html`<div class="card f2s" style="margin-bottom:10px;border-left:4px solid #e0a100">
+    <div class="bar" style="margin:0"><b>總表裡有 ${ch.cases.length} 位個案的服務單位寫成全名</b><span class="grow"></span>
+      <button class="btn light" onClick=${() => setShow(!show)}>${show ? '收起' : '看是哪些'}</button>
+      <button class="btn" disabled=${!!busy} onClick=${run}>${busy ? '改寫中… ' + busy : '全部改成簡稱'}</button></div>
+    <div class="sub" style="margin-top:4px">總表一律存簡稱；評鑑報表（服務單位統計、New新案統計的派案單位）會自動換回全名，不受影響。</div>
+    ${show && html`<div class="tw" style="margin-top:8px"><table class="grid"><thead><tr><th>原本</th><th>改成</th><th class="num">筆數</th></tr></thead>
+      <tbody>${[...pairs.entries()].map(([k, c]) => { const [a, b] = k.split('→'); return html`<tr><td>${a}</td><td><b>${b}</b></td><td class="num">${c}</td></tr>`; })}</tbody></table></div>`}
+  </div>`;
+}
+
 // ================= 設定：服務單位、假日 =================
 function UnitsCard({ db, user, refresh }) {
   const [edit, setEdit] = useState(null), [q, setQ] = useState('');
@@ -3168,6 +3233,7 @@ function UnitsCard({ db, user, refresh }) {
   }, [db]);
   const list = db.units.filter(u => !q || (u.name + u.short + (u.aliases || []).join()).includes(q)).sort((a, b) => (a.short || a.name).localeCompare(b.short || b.name, 'zh-Hant'));
   return html`<div class="card">
+    <${FullToShort} db=${db} user=${user} refresh=${refresh} />
     <div class="bar"><h3 style="margin:0">服務單位主檔</h3><span class="sub">統一同一單位的不同寫法，統計時才不會被拆成兩個</span><span class="grow"></span>
       <input class="inp" placeholder="搜尋" value=${q} onInput=${e => setQ(e.target.value)} /><button class="btn" onClick=${() => setEdit({ cats: [] })}>＋ 新增單位</button></div>
     ${edit && html`<div class="card" style="background:#FDFBF6"><div class="form">
