@@ -133,6 +133,7 @@ table.rpt2{width:auto;min-width:0}.rpt2 th{position:static;padding:8px 14px}.rpt
 .hbars{display:flex;flex-direction:column;gap:5px}.hb-row{display:grid;grid-template-columns:minmax(80px,max-content) 1fr 34px;gap:8px;align-items:center;font-size:13px}
 .hb-k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}.hb-track{height:12px;background:#f3ede4;border-radius:0 4px 4px 0}.hb-track i{display:block;height:100%;background:#2a78d6;border-radius:0 4px 4px 0;min-width:1px}.hb-v{text-align:right;font-variant-numeric:tabular-nums}
 .mgrid .rpt2 th,.mgrid .rpt2 td{padding:5px 9px}.mgrid .tw{overflow-x:auto}.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px 18px;align-items:start;margin-bottom:12px}.mgrid .sec h3{margin:0 0 6px}
+textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38px;line-height:1.5;font:inherit;padding:8px 10px}
 </style>
 </head>
 <body>
@@ -289,6 +290,7 @@ function noonDays(d1, t1, d2, t2, H) {
 
 // ---------- 觸發 ----------
 const TRIGGERS = ['新案-初評', '新案-出備', '新案-轉入-初評', '新案-轉入-複評', '新案-轉入-AA01', '新案-轉入-AA02', '出轉初',
+  '新案-重開案-初評', '新案-重開案-出備', '新案-重開案-AA01', '新案-重開案-複評', '新案-重開案-AA02',
   '複評', 'AA01', '上月新案-初評', '上月新案-出備', '上月沒吃到錢', '結案-', '結案400-', '上月結案'];
 // 統一寫法：去空白、全形符號轉半形、「轉入AA01」補上 -
 function normTrigger(t) {
@@ -1806,21 +1808,28 @@ function exportUnitStats(kind, year, db) {
 }
 
 // ================= 總表 =================
+// 基本資料（[欄位, 標題, 型態]；型態 {select: [...]} 是下拉選單）
+const CMS_OPTS = ['2級', '3級', '4級', '5級', '6級', '7級', '8級'];
 const CASE_FIELDS = [
-  ['name', '姓名'], ['gender', '性別', ['男', '女']], ['idNo', '身分證號'], ['birth', '出生日期', 'date'], ['cms', 'CMS'],
-  ['identity', '身分別'], ['living', '居住'], ['dementia', '失智'], ['disability', '身障（重鑑日/類別）'], ['disLevel', '身障等級', ['輕度', '中度', '重度', '極重度']],
-  ['src', '申請來源', ['初評', '出備', '轉入']], ['srcNote', '申請來源備註'], ['applyDate', '申請日期', 'date'], ['openDate', '開案日期', 'date'],
-  ['aEnd', 'A結束服務日期', 'date'], ['sysClose', '系統結案日期', 'date'], ['homeStart', '居服進場時間', 'date'],
-  ['area', '居住地'], ['address', '地址'], ['contact', '聯絡人'], ['phone', '聯絡電話'],
+  ['name', '姓名'], ['gender', '性別', ['男', '女']], ['idNo', '身分證號'], ['birth', '出生日期', 'date'], ['cms', 'CMS', { select: CMS_OPTS }],
+  ['identity', '身分別'], ['living', '居住狀況', { select: ['獨居', '與他人同住'] }], ['dementia', '失智', { select: ['-', '有'] }],
+  ['disability', '身障（重鑑日/類別）'], ['disLevel', '身障等級', ['輕度', '中度', '重度', '極重度']],
+  ['src', '申請來源', ['初評', '出備', '轉入']], ['srcNote', '申請來源備註'],
+  ['aEnd', 'A結束服務日期', 'date'], ['sysClose', '系統結案日期', 'date'],
+  ['area', '居住地（依編號地區自動帶入）', { select: Object.values(REGIONS) }], ['address', '地址'], ['contact', '聯絡人'], ['phone', '聯絡電話'],
 ];
-const EVENT_DATES = [['assess', '照專評估日期'], ['referA', '轉介(指派)A單位日期'], ['discharge', '出院日期'], ['visit', '個管訪視日期'],
+// 日期區塊最前面兩個是個案的（申請、開案），其餘是當月觸發紀錄的
+const CASE_DATES = [['applyDate', '申請日期'], ['openDate', '開案日期']];
+const EVENT_DATES = [['referA', '轉介(指派)A單位日期'], ['assess', '照專評估日期'], ['discharge', '出院日期'], ['visit', '個管訪視日期'],
   ['supervisor', '督導審核日期／上下午'], ['submit', '照顧計畫送審日期'], ['approve', '照專簽審日期／上下午'], ['referB', '照會B單位日期'], ['bFirst', 'B單位第一次提供服務日期']];
 // 重開案時從舊個案帶入的基本資料
 const BASE_COPY = ['name', 'gender', 'idNo', 'birth', 'identity', 'living', 'dementia', 'disability', 'disLevel', 'area', 'address', 'contact', 'phone'];
 const NEW_TRIGGERS = TRIGGERS.filter(isNewTrigger);
 const TRANSFER_FROM = ['友單位', '外縣市']; // 轉入案的轉入來源，存在個案的「申請來源備註」（srcNote）
+// 最新的日期：只看「這一次開案」以後的紀錄（重開案不會沿用上一次開案的訪視、簽審日期）
 const latestOf = (db, c, k, upTo) => {
-  let best = { m: '', v: (c.latest || {})[k] || '' };
+  const x = epAt((db.info && db.info.get(c._id)) || {}, upTo || '9999-12'), from = x.openEv ? x.open : '';
+  let best = { m: from, v: from ? '' : (c.latest || {})[k] || '' };
   for (const e of db.events) if (e.caseId === c._id && e[k] && e.month >= best.m && (!upTo || e.month <= upTo)) best = { m: e.month, v: e[k] };
   return best.v;
 };
@@ -1879,7 +1888,9 @@ function SummaryView({ db, month, user, refresh }) {
     return [...m.entries()].filter(([t]) => t).sort((a, b) => order(a[0]) - order(b[0]) || a[0].localeCompare(b[0], 'zh-Hant'));
   }, [base, evOf, auto]);
   const nAny = base.filter(c => trigOf(c)).length;
-  const list = trig === '' ? base : trig === '__any' ? base.filter(c => trigOf(c)) : trig === '__none' ? base.filter(c => !trigOf(c)) : base.filter(c => trigOf(c) === trig);
+  const list = trig === '' ? base : trig === '__any' ? base.filter(c => trigOf(c)) : trig === '__none' ? base.filter(c => !trigOf(c))
+    : trig === '__new' ? base.filter(c => isNewTrigger(trigOf(c))) : base.filter(c => trigOf(c) === trig);
+  const nNewTrig = base.filter(c => isNewTrigger(trigOf(c))).length;
   const nNew = list.filter(c => isNewTrigger((evOf.get(c._id) || {}).trigger)).length;
   const feeCell = c => {
     const e = evOf.get(c._id), t = trigOf(c), x = epAt(db.info.get(c._id) || {}, month);
@@ -1904,7 +1915,7 @@ function SummaryView({ db, month, user, refresh }) {
     ${view === 'closed' ? html`<${ClosedView} db=${db} user=${user} refresh=${refresh} openCase=${id => setEdit({ id })} />`
     : html`
     ${db.cases.size > 0 && html`<div class="trigbar"><span class="sub">${rocMonth(month)}觸發：</span>
-      ${[['', '全部', base.length], ['__any', '有觸發', nAny], ...trigCounts.map(([t, n]) => [t, t, n]), ['__none', '無觸發', base.length - nAny]].map(([k, label, n]) =>
+      ${[['', '全部', base.length], ['__any', '有觸發', nAny], ['__new', '全部新案', nNewTrig], ...trigCounts.map(([t, n]) => [t, t, n]), ['__none', '無觸發', base.length - nAny]].map(([k, label, n]) =>
         html`<button class=${trig === k ? 'on' : ''} onClick=${() => setTrig(trig === k && k !== '' ? '' : k)}>${label}<b>${n}</b></button>`)}</div>`}
     ${db.cases.size === 0 ? html`<div class="card empty">還沒有資料。可以到「匯入」把個案總表 Excel 匯入，或按「新增個案」。</div>` : html`
     <div class="tw"><table class="grid">
@@ -1916,7 +1927,7 @@ function SummaryView({ db, month, user, refresh }) {
           <td>${c.caseNo}</td><td><b>${c.name}</b></td><td>${c.cms}</td><td>${c.src}</td>
           <td>${t ? html`<span class=${'tag ' + (isNewTrigger(t) ? 't-new' : /結案/.test(t) ? 't-close' : isAuto ? 't-org' : 't-ev')} title=${isAuto ? '系統自動帶入' : ''}>${t}${isAuto ? '（自動）' : ''}</span>${/轉入/.test(t) ? html` <span class="tag t-close">${TRANSFER_FROM.includes(c.srcNote) ? c.srcNote : '轉入來源未選'}</span>` : ''}` : '-'}</td>
           <td>${feeCell(c)}</td>
-          <td>${roc(latestOf(db, c, 'assess'))}</td><td>${roc(latestOf(db, c, 'visit'))}</td><td>${roc(latestOf(db, c, 'approve'))}</td><td>${roc(latestOf(db, c, 'referB'))}</td>
+          <td>${roc(latestOf(db, c, 'assess', month))}</td><td>${roc(latestOf(db, c, 'visit', month))}</td><td>${roc(latestOf(db, c, 'approve', month))}</td><td>${roc(latestOf(db, c, 'referB', month))}</td>
           <td>${db.resolveUnit((c.services || {}).home || '')}</td>
           <td>${closed ? html`<span class="tag t-close">${rocMonth(x.close)}結案${waiting && !closedOffMonth(c) ? '（待補結案日期）' : ''}</span>` : ''}</td></tr>`;
       })}</tbody></table></div>`}`}
@@ -1933,6 +1944,8 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
   const nextNo = rg => { let mx = 0; for (const c of db.cases.values()) { const p = parseCaseNo(c.caseNo); if (p && p.region === rg && p.seq > mx) mx = p.seq; } return `台-${rg}-${String(mx + 1).padStart(3, '0')}-1`; };
   const [caseNo, setCaseNo] = useState(orig ? orig.caseNo : '');
   const [c, setC] = useState(() => ({ ...(orig || {}), services: { ...((orig || {}).services || {}) } }));
+  // 居住地：依編號的地區自動帶入（台-05-… → 台西）
+  useEffect(() => { const rg = regionOf(caseNo); if (rg && Object.values(REGIONS).includes(rg) && c.area !== rg && (!c.area || Object.values(REGIONS).includes(c.area))) setC(v => ({ ...v, area: rg })); }, [caseNo]);
   const [em, setEm] = useState(month);
   const evOrig = useMemo(() => db.events.find(e => e.caseId === curId && e.month === em) || null, [db, curId, em]);
   const [ev, setEv] = useState(() => ({ ...(evOrig || {}), services: { ...((evOrig || {}).services || {}) } }));
@@ -1997,7 +2010,9 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
     catch (e) { toast('刪除失敗：' + e.message, true); }
   };
   const field = (obj, set) => ([k, label, t]) => html`<label>${label}
-    ${t === 'date' ? html`<${DateInput} style="width:100%" value=${obj[k] || ''} onChange=${v => set({ ...obj, [k]: v })} />`
+    ${t && t.select ? html`<select class="inp" value=${obj[k] || ''} onChange=${e => set({ ...obj, [k]: e.target.value })}>
+        <option value="">（未填）</option>${[...t.select, ...(obj[k] && !t.select.includes(obj[k]) ? [obj[k]] : [])].map(o => html`<option value=${o}>${o}</option>`)}</select>`
+    : t === 'date' ? html`<${DateInput} style="width:100%" value=${obj[k] || ''} onChange=${v => set({ ...obj, [k]: v })} />`
       : Array.isArray(t) ? html`<input class="inp" list=${'dl-' + k} value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} /><datalist id=${'dl-' + k}>${t.map(o => html`<option value=${o} />`)}</datalist>`
         : html`<input class="inp" value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} />`}
     ${k === 'srcNote' && obj.src === '轉入' && html`<span class="trigbar" style="margin:4px 0 0">${TRANSFER_FROM.map(o => html`<button type="button" class=${obj.srcNote === o ? 'on' : ''} onClick=${e => { e.preventDefault(); set({ ...obj, srcNote: obj.srcNote === o ? '' : o }); }}>${o}</button>`)}</span>`}</label>`;
@@ -2043,24 +2058,15 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
           <span class="sub">地區：${regionOf(caseNo)}；尾數 1 新案、2 重開案</span></label>
         ${CASE_FIELDS.map(field(c, setC))}
       </div>
-      <div class="sect">派案方式</div>
-      <div class="bar" style="margin-bottom:4px"><span class="sub" style="min-width:64px">A單位</span><${Toggle} opts=${MECH} value=${c.aMech || ''} onChange=${v => setC({ ...c, aMech: v })} />
-        <span class="sub">照專派給本單位的方式（派案時效名冊「照專派貴單位的機制」）</span></div>
-      <div class="sect">目前服務單位</div>
-      <div class="form">${CATS.map(cat => html`<label>${cat.label}<input class="inp" list="dl-units" value=${c.services[cat.key] || ''}
-        onInput=${e => setC({ ...c, services: { ...c.services, [cat.key]: e.target.value } })} />
-        ${isUnitName(c.services[cat.key]) && html`<${Toggle} opts=${MECH} value=${(c.svcMech || {})[cat.key] || ''} onChange=${v => setC({ ...c, svcMech: { ...(c.svcMech || {}), [cat.key]: v } })} />`}</label>`)}</div>
-      <div class="sub" style="margin-top:6px">每個服務單位可選「指定」或「輪派」；派案時效名冊的「派案B單位機制」會自動帶入（先看居家，沒有居家就看第一個有選的項目）。</div>
-      <datalist id="dl-units">${unitNames.map(u => html`<option value=${u} />`)}</datalist>
     </div>
     <div class="card">
-      <div class="bar" style="margin-bottom:4px"><div class="sect" style="margin:0">觸發紀錄</div>
+      <div class="bar" style="margin-bottom:4px"><div class="sect" style="margin:0">觸發紀錄與日期</div>
         <label class="sub">月份 <input class="inp" type="month" value=${em} onChange=${e => e.target.value && setEm(e.target.value)} /></label>
         <span class="grow"></span>${evOrig && html`<${ConfirmBtn} label=${'刪除' + rocMonth(em) + '觸發'} onYes=${delEv} />`}</div>
       ${hist.length > 0 && html`<div class="hist" style="margin-bottom:10px">${hist.map(e => html`<button class=${e.month === em ? 'on' : ''} onClick=${() => setEm(e.month)}>${rocMonth(e.month)} ${e.trigger || ''}</button>`)}</div>`}
       <div class="form">
         ${isAdd && kind === 'new' ? html`<div style="grid-column:1/-1"><span class="sub">新案觸發</span>
-          <div class="trigbar" style="margin:4px 0 0">${NEW_TRIGGERS.map(t => html`<button class=${ev.trigger === t ? 'on' : ''} onClick=${() => chooseTrigger(t)}>${t}</button>`)}</div></div>`
+          <div class="trigbar" style="margin:4px 0 0">${NEW_TRIGGERS.filter(t => reopen === 'yes' ? t.includes('重開案') : !t.includes('重開案')).map(t => html`<button class=${ev.trigger === t ? 'on' : ''} onClick=${() => chooseTrigger(t)}>${t}</button>`)}</div></div>`
         : html`<label>觸發<input class="inp" list="dl-trig" value=${ev.trigger || ''} onInput=${e => setEv({ ...ev, trigger: e.target.value })} onBlur=${e => setEv({ ...ev, trigger: normTrigger(e.target.value) })} />
           <datalist id="dl-trig">${TRIGGERS.map(t => html`<option value=${t} />`)}</datalist></label>`}
         ${/轉入/.test(normTrigger(ev.trigger)) && html`<div style="grid-column:1/-1"><span class="sub">轉入來源</span>
@@ -2070,13 +2076,27 @@ function CaseEditor({ db, month, user, id, onClose, refresh }) {
         <div style="grid-column:1/-1"><span class="sub">核銷金額</span>
           <div class="trigbar" style="margin:4px 0 0">${FEES.map(f => html`<button class=${ev.fee === f.key ? 'on' : ''} onClick=${() => setEv({ ...ev, fee: ev.fee === f.key ? '' : f.key })}>${f.label}</button>`)}
           ${!FEE[ev.fee] && defaultFee(ev.trigger) !== 'unset' && html`<span class="sub">沒選就預設為「${FEE[defaultFee(ev.trigger)].label}」</span>`}</div></div>
-        ${EVENT_DATES.map(([k, label]) => html`<label>${label}${k === 'supervisor' || k === 'approve'
+        <div class="sect" style="grid-column:1/-1;margin:6px 0 0">日期</div>
+        ${CASE_DATES.map(([k, label]) => html`<label>${label}<${DateInput} style="width:100%" value=${c[k] || ''} onChange=${v => setC({ ...c, [k]: v })} /></label>`)}
+        ${EVENT_DATES.map(([k, label]) => html`<label>${k === 'bFirst' ? 'B單位第一次提供服務日期（居服進場）' : label}${k === 'supervisor' || k === 'approve'
           ? html`<span style="display:flex;gap:4px"><${DateInput} style="flex:1;min-width:0" value=${ev[k] || ''} onChange=${v => setEv({ ...ev, [k]: v })} /><${AmPm} value=${ev[k + 'Time']} onChange=${v => setEv({ ...ev, [k + 'Time']: v })} /></span>`
+          : k === 'bFirst' ? html`<${DateInput} style="width:100%" value=${ev.bFirst || (!evOrig || !evOrig.bFirst ? c.homeStart || '' : '')} onChange=${v => { setEv({ ...ev, bFirst: v }); setC({ ...c, homeStart: v }); }} />`
           : html`<${DateInput} style="width:100%" value=${ev[k] || ''} onChange=${v => setEv({ ...ev, [k]: v })} />`}</label>`)}
-        <label>服務代碼<input class="inp" value=${ev.codes || ''} onInput=${e => setEv({ ...ev, codes: e.target.value })} /></label>
+        <label style="grid-column:1/-1">服務代碼<textarea class="inp codes" rows=${Math.max(1, Math.ceil(String(ev.codes || '').length / 90))} value=${ev.codes || ''} onInput=${e => setEv({ ...ev, codes: e.target.value })}></textarea></label>
       </div>
       ${ev.discharge && ev.visit && ev.visit <= ev.discharge && html`<div class="tag t-warn" style="margin-top:8px">個管訪視日期必須晚於出院日期</div>`}
       <div class="sub" style="margin-top:8px">逾期原因、派案機制、追蹤結果等欄位，可以直接在「評鑑報表」裡填寫。</div>
+    </div>
+    <div class="card">
+      <div class="sect" style="margin-top:0">派案方式</div>
+      <div class="bar" style="margin-bottom:4px"><span class="sub" style="min-width:64px">A單位</span><${Toggle} opts=${MECH} value=${c.aMech || ''} onChange=${v => setC({ ...c, aMech: v })} />
+        <span class="sub">照專派給本單位的方式（派案時效名冊「照專派貴單位的機制」）</span></div>
+      <div class="sect">目前服務單位</div>
+      <div class="form">${CATS.map(cat => html`<label>${cat.label}<input class="inp" list="dl-units" value=${c.services[cat.key] || ''}
+        onInput=${e => setC({ ...c, services: { ...c.services, [cat.key]: e.target.value } })} />
+        ${isUnitName(c.services[cat.key]) && html`<${Toggle} opts=${MECH} value=${(c.svcMech || {})[cat.key] || ''} onChange=${v => setC({ ...c, svcMech: { ...(c.svcMech || {}), [cat.key]: v } })} />`}</label>`)}</div>
+      <div class="sub" style="margin-top:6px">每個服務單位可選「指定」或「輪派」；派案時效名冊的「派案B單位機制」會自動帶入（先看居家，沒有居家就看第一個有選的項目）。</div>
+      <datalist id="dl-units">${unitNames.map(u => html`<option value=${u} />`)}</datalist>
     </div>
     </div>`}
   </div></div>`;
@@ -3091,6 +3111,14 @@ function App() {
     ${toastMsg && html`<div class="toast" style=${'background:' + (toastMsg.err ? 'var(--red)' : 'var(--green)')}>${toastMsg.msg}</div>`}
   </div>`;
 }
+// 快捷鍵：Ctrl+F（Mac：⌘F）→ 直接跳到這一頁的搜尋框；這一頁沒有搜尋框就照瀏覽器原本的「尋找」
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+    const boxes = [...document.querySelectorAll('input[placeholder^="搜尋"]')].filter(el => el.offsetParent !== null);
+    const box = boxes.find(el => el.closest('.drawer')) || boxes[0];   // 有開著的視窗就先找視窗裡的
+    if (box) { e.preventDefault(); box.focus(); box.select(); }
+  }
+});
 render(html`<${App} />`, document.getElementById('app'));
 </script>
 </body>
