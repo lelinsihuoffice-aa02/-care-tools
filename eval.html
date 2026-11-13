@@ -422,6 +422,7 @@ function makeUnitResolver(units) {
 // ---------- 服務單位統計用：一律換成「全名」 ----------
 // 舊統計 Excel 的欄位全名（依服務類別）；總表打簡稱時，依這份名單找回全名
 const KNOWN_UNITS = {"B單位": ["樂臨企業有限公司附設雲林縣私立樂臨居家長照機構", "雲林縣私立康安居家長照機構", "社團法人雲林縣紅十字會私立不老坣東勢居家長照機構", "康泰健康事業有限公司附設雲林縣私立康泰居家長照機構", "雲林縣四湖鄉立居家式服務類長期照顧服務機構", "安得寶股份有限公司附設雲林縣私立安得寶居家長照機構", "雲林縣私立承鑫居家式長照機構", "正唯健康產業有限公司附設雲林縣私立正唯居家長照機構", "雲林縣私立庭安居家式長期照顧服務機構", "永安健康事業有限公司附設雲林縣私立永安居家長照機構", "雲林縣私立伯欣居家式長照機構", "星奇股份有限公司附設雲林縣私立星奇居家式服務類長期照顧服務機構", "守護寧健康有限公司附設雲林縣私立溪頂居家式長照機構", "慈暉股份有限公司附設雲林縣私立慈暉長期健康管理居家式照顧機構", "祥賀健康有限公司附設雲林縣私立平安居家長照機構", "雲林縣私立臺西居家長照機構", "太舜健康產業股份有限公司附設雲林縣私立太舜居家長照機構", "雲林縣私立安喬居家長照機構", "臻樂福有限公司附設雲林縣私立臻賀居家長照機構"], "C碼": ["職心居家職能治療所", "北媽", "樂臨居家護理所", "欣齡居家護理所", "弘健居家職能治療所", "雅禎營養諮詢機構", "中國醫藥大學北港附設醫院附設居家護理所", "佳康居家護理所", "安芯居家護理所", "好厝邊居家護理所", "彰化基督教醫療財團法人附設雲林基督教居家護理所", "好所宅診所附設居家護理所", "天主教若瑟醫療財團法人附設若瑟居家護理所", "國立臺灣大學醫學院附設醫院雲林分院附設居家護理所", "佛教慈濟醫療財團法人附設斗六慈濟居家護理所", "長春居家護理所", "佶松居家護理所", "雲林縣私立品齊居家護理所", "彰化基督教醫療財團法人雲林基督教醫院", "天主教若瑟醫療財團法人若瑟醫院", "國立成功大學醫學院附設醫院斗六分院", "國立臺灣大學醫學院附設醫院雲林分院", "樂林職能治療所", "佛教慈濟醫療財團法人斗六慈濟醫院", "竑元骨科診所"], "交通": ["樂臨企業有限公司", "社團法人雲林縣親得福喜悅協進會", "社團法人兆祥社會福利慈善協會", "台灣復康巴士有限公司", "雲林縣明彰長照協會", "雲林縣後安福利協會"], "居喘": ["樂臨企業有限公司附設雲林縣私立樂臨居家長照機構", "雲林縣私立康安居家長照機構", "康泰健康事業有限公司附設雲林縣私立康泰居家長照機構", "社團法人雲林縣紅十字會私立不老坣東勢居家長照機構", "安得寶股份有限公司附設雲林縣私立安得寶居家長照機構", "守護寧健康有限公司附設雲林縣私立溪頂居家式長照機構", "雲林縣私立伯欣居家式長照機構", "慈暉股份有限公司附設雲林縣私立慈暉長期健康管理居家式照顧機構", "星奇股份有限公司附設雲林縣私立星奇居家式服務類長期照顧服務機構", "雲林縣私立臺西居家長照機構", "永安健康事業有限公司附設雲林縣私立永安居家長照機構", "雲林縣私立承鑫居家式長照機構", "太舜健康產業股份有限公司附設雲林縣私立太舜居家長照機構", "正唯健康產業有限公司附設雲林縣私立正唯居家長照機構", "雲林縣私立庭安居家式長期照顧服務機構", "祥賀健康事業有限公司附設雲林縣私立平安居家長照機構", "祥賀健康有限公司附設雲林縣私立平安居家長照機構", "雲林縣私立安喬居家長照機構", "雲林縣四湖鄉立居家式服務類長期照顧服務機構", "臻樂福有限公司附設雲林縣私立臻賀居家長照機構"], "日照": ["雲林縣私立孝親園社區長照機構", "雲林縣家園關懷協會附設雲林縣私立紅蘋果社區式服務類長期照顧服務機構", "財團法人天主教若瑟社會福利基金會附設雲林縣私立德蘭社區式服務類長期照顧服務機構", "康泰長照學苑附設雲林縣私立台西康泰老學堂社區長照機構", "社團法人雲林縣紅十字會私立不老坣東勢社區長照機構", "雲林縣口湖鄉老人福利協進會附設雲林縣私立下崙社區式長照機構", "鄉親長照社團法人私立天禧綜合長照機構", "雲林縣家園關懷協會附設雲林縣私立銀髮樂園社區長照機構", "社團法人雲林縣紅十字會私立不老坣台西社區長照機構", "社團法人雲林縣脊髓損傷者協會附設雲林縣私立髓緣社區式服務類長期照顧服務機構", "雲林縣口湖鄉老人福利協進會附設雲林縣私立向陽居社區式服務類長期照顧服務機構", "孝親園長照學苑附設雲林縣私立麥豐社區長照機構", "雲林縣口湖鄉老人福利協進會附設雲林縣私立下崙社區長照機構", "社團法人雲林縣老人福利保護協會附設雲林縣私立褒忠長泰老學堂小規模多機能社區式服務類長期照顧服務機構", "瑋霆企業有限公司附設雲林縣私立崙豐社區式長照機構", "社團法人雲林縣復健青年協進會附設雲林縣私立心圓寶社區式服務類長期照顧服務機構", "康泰長照學苑附設雲林縣私立北港康泰老學堂社區長照機構", "中國醫藥大學北港附設醫院附設雲林縣私立元長社區長照機構", "樂臨企業有限公司附設雲林縣私立樂臨社區式長照機構"], "日喘": ["雲林縣私立孝親園社區長照機構", "雲林縣家園關懷協會附設雲林縣私立紅蘋果社區式服務類長期照顧服務機構", "財團法人天主教若瑟社會福利基金會附設雲林縣私立德蘭社區式服務類長期照顧服務機構", "康泰長照學苑附設雲林縣私立台西康泰老學堂社區長照機構", "社團法人雲林縣紅十字會私立不老坣東勢社區長照機構", "社團法人雲林縣紅十字會私立不老坣台西社區長照機構", "雲林縣口湖鄉老人福利協進會附設雲林縣私立向陽居社區式服務類長期照顧服務機構", "社團法人雲林縣脊髓損傷者協會附設雲林縣私立髓緣社區式服務類長期照顧服務機構", "孝親園長照學苑附設雲林縣私立麥豐社區長照機構", "雲林縣口湖鄉老人福利協進會附設雲林縣私立下崙社區長照機構", "瑋霆企業有限公司附設雲林縣私立崙豐社區式長照機構", "社團法人雲林縣復健青年協進會附設雲林縣私立心圓寶社區式服務類長期照顧服務機構", "康泰長照學苑附設雲林縣私立北港康泰老學堂社區長照機構", "雲林縣家園關懷協會附設雲林縣私立銀髮樂園社區長照機構", "中國醫藥大學北港附設醫院附設雲林縣私立元長社區長照機構", "鄉親長照社團法人私立天禧綜合長照機構", "樂臨企業有限公司附設雲林縣私立樂臨社區式長照機構"], "短照": ["雲林縣私立康安居家長照機構", "樂臨企業有限公司附設雲林縣私立樂臨居家長照機構", "康泰健康事業有限公司附設雲林縣私立康泰居家長照機構", "社團法人雲林縣紅十字會私立不老坣東勢居家長照機構", "安得寶股份有限公司附設雲林縣私立安得寶居家長照機構", "守護寧健康有限公司附設雲林縣私立溪頂居家式長照機構", "雲林縣私立伯欣居家式長照機構", "慈暉股份有限公司附設雲林縣私立慈暉長期健康管理居家式照顧機構", "雲林縣私立承鑫居家式長照機構", "正唯健康產業有限公司附設雲林縣私立正唯居家長照機構", "雲林縣四湖鄉立居家式服務類長期照顧服務機構", "雲林縣私立庭安居家式長期照顧服務機構", "太舜健康產業股份有限公司附設雲林縣私立太舜居家長照機構", "永安健康事業有限公司附設雲林縣私立永安居家長照機構", "祥賀健康有限公司附設雲林縣私立平安居家長照機構", "星奇股份有限公司附設雲林縣私立星奇居家式服務類長期照顧服務機構", "雲林縣私立臺西居家長照機構", "臻樂福有限公司附設雲林縣私立臻賀居家長照機構"], "機喘": ["雲林縣私立三和老人長期照顧中心", "雲林縣私立安家園老人長期照顧中心", "雲林縣私立吉祥老人長期照顧中心", "雲林縣私立幸福之家老人長期照顧中心", "私立安泰老人長期照護中心", "私立玉妹紀念護理之家", "雲林縣私立長榮老人長期照顧中心", "襃忠三仁診所附設護理之家", "長青護理之家", "佳佳護理之家", "嘉義縣私立大林老人養護中心", "安生醫院附設護理之家", "中國醫藥大學北港附設醫院附設護理之家", "雲林縣私立慈恩護理之家", "雲林縣私立石龜老人養護中心", "雲林縣私立恩惠老人長期照顧中心(養護型)", "雲林縣私立聖誕老人長期照顧中心(養護型)", "雲林縣私立雙福寶佛門老人養護中心", "雲林縣私立永祥老人長期照顧中心(養護型)", "天主教若瑟醫療財團法人附設若瑟護理之家", "雲林縣私立博愛養護中心", "彰化基督教醫療財團法人附設雲林基督教護理之家", "雲林縣私立長青老人長期照顧中心(養護型)", "雲林縣私立新樂園老人長期照顧中心(養護型)"], "餐飲(OT)": ["社團法人雲林縣紅十字會", "雲林縣四湖鄉立居家式服務類長期照顧服務機構", "社團法人雲林縣秉鑫長照協會"], "家托": ["雲林縣私立玩蓉社區長照機構", "雲林縣私立小可社區長照機構", "雲林縣私立淑滿社區長照機構", "雲林縣私立素勤社區長照機構", "雲林縣私立大有社區長照機構", "雲林縣私立後安社區長照機構", "雲林縣私立真兆固社區長照機構", "雲林縣私立吳義雄社區長照機構", "雲林縣私立喜樂社區長照機構", "雲林縣私立詠淳社區長照機構", "雲林縣私立理想部落社區長照機構", "雲林縣私立麥豐社區長照機構", "雲林縣私立麥照社區長照機構"], "沐浴車": ["社團法人臺灣樂福國際慈善福利協會", "樂臨企業有限公司附設雲林縣私立樂臨居家長照機構", "社團法人雲林縣志願服務協會", "社團法人雲林縣紅十字會私立不老坣東勢居家長照機構", "天主教若瑟醫療財團法人若瑟醫院"], "輔具": ["雲林縣輔助器具資源中心"], "社區交通": ["樂臨企業有限公司", "社團法人雲林縣復健青年協進會(北港區)"], "小規機": ["社團法人雲林縣老人福利保護協會附設雲林縣私立褒忠長泰老學堂小規模多機能社區式服務類長期照顧服務機構"]};
+const AIDS_CENTER = '雲林縣輔助器具資源中心';
 const LELING_FULL = '樂臨企業有限公司附設雲林縣私立樂臨居家長照機構', LELING_CO = '樂臨企業有限公司';
 const RC_HOME = '社團法人雲林縣紅十字會私立不老坣東勢居家長照機構', RC_DONGSHI = '社團法人雲林縣紅十字會私立不老坣東勢社區長照機構',
   RC_TAIXI = '社團法人雲林縣紅十字會私立不老坣台西社區長照機構', RC_ASSOC = '社團法人雲林縣紅十字會';
@@ -430,13 +431,14 @@ const UNIT_NOISE = /(轉介|指定|輪派|居家|交通車|社區交通|交通|�
 // raw：總表寫的單位；sheet：統計表的服務類別（B單位、交通、日照…）；extra：其他已知全名（匯入的舊檔欄位）
 function canonUnit(raw, sheet, units, extra) {
   if (/^（未填/.test(String(raw))) return String(raw);
+  if (sheet === '輔具') return AIDS_CENTER;   // 輔具一律算在輔具資源中心（就是輔具使用人數）
   const n = normName(raw).replace(/樂鄰/g, '樂臨'); if (!n) return '';
   const cands = [...new Set([...(KNOWN_UNITS[sheet] || []), ...(extra || []).map(normName)])];
   // 0. 本來就是全名
   if ((KNOWN_UNITS[sheet] || []).includes(n)) return n;
-  // 1. 使用者在畫面上填過全名的簡稱（只套用在當時那個服務類別）
+  // 1. 使用者在統計表上填過全名的簡稱（只套用在當時那個服務類別，也只用在服務單位統計，總表照樣顯示簡稱）
   const catKey = STAT2CAT[sheet];
-  for (const u of units || []) if ((u.cats || []).includes(catKey) && (u.aliases || []).some(x => normName(x) === n)) return normName(u.name);
+  for (const u of units || []) if ((u.statAliases || []).some(x => x === catKey + '|' + n)) return normName(u.name);
   // 2. 指定的簡稱規則
   if (/紅會|紅十字/.test(n)) {
     if (/台西|臺西/.test(n)) return RC_TAIXI;
@@ -726,7 +728,12 @@ function unitStats(kind, month, db) {
   for (const e of db.events) {
     if (e.month !== month || !f(e) || !db.cases.has(e.caseId)) continue;
     const c = db.cases.get(e.caseId);
-    for (const [k, u] of Object.entries(caseUnits(e, c, canon))) (out[k] = out[k] || {})[u] = (out[k][u] || 0) + 1;
+    const us = caseUnits(e, c, canon);
+    // 復健青年協進會只做社區交通：總表寫在「交通」欄的，改算到社區交通（補上社區交通的「未填單位」）
+    if (us.traffic && /復健青年/.test(us.traffic)) { us.ctraffic = canonUnit(us.traffic, '社區交通', db.units, []); delete us.traffic; }
+    // 社區交通沒填單位（例如「僅社區交通」）→ 先算到復健青年協進會，之後總表補上單位就照總表
+    if (us.ctraffic === '（未填單位）') us.ctraffic = '社團法人雲林縣復健青年協進會(北港區)';
+    for (const [k, u] of Object.entries(us)) (out[k] = out[k] || {})[u] = (out[k][u] || 0) + 1;
   }
   return out;
 }
@@ -784,7 +791,7 @@ function unitStatBook(kind, db, hist, toMonth) {
       return { m, src: h ? '匯入' : '', v };
     });
     // 系統不認識的名稱（不是舊檔的全名、也不在單位主檔）→ 畫面上請使用者填全名
-    const knownSet = new Set([...(KNOWN_UNITS[cat] || []), ...extra.map(canon).filter(u => /(機構|協會|公司|中心|所|醫院|之家|診所|基金會|紅十字會)$/.test(u)), ...(db.units || []).map(u => normName(u.name))]);
+    const knownSet = new Set([AIDS_CENTER, ...(KNOWN_UNITS[cat] || []), ...extra.map(canon).filter(u => /(機構|協會|公司|中心|所|醫院|之家|診所|基金會|紅十字會)$/.test(u)), ...(db.units || []).map(u => normName(u.name))]);
     const unknown = cols.filter(u => !knownSet.has(u) && !/^（未填/.test(u)).map(u => ({ name: u, n: rows.reduce((a, r) => a + (r.v[u] || 0), 0) }));
     return { cat, cols, rows, unknown, known: [...knownSet] };
   });
@@ -2109,7 +2116,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     if (nt && nt.includes('轉入')) setC({ ...c, src: '轉入' });
     else if (nt && !c.src) setC({ ...c, src: nt.includes('出備') ? '出備' : '初評' });
   };
-  const unitNames = useMemo(() => [...new Set(db.units.map(u => u.short || u.name).filter(Boolean))], [db]);
+  const unitNames = useMemo(() => [...new Set(db.units.filter(u => !u.statOnly).map(u => u.short || u.name).filter(Boolean))], [db]);
 
   const diff = (a, b) => { const out = {}; for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { if (k.startsWith('_') || k === 'caseId' || k === 'month' || k === 'caseNo') continue; if (JSON.stringify(a[k] ?? '') !== JSON.stringify(b[k] ?? '')) out[k] = b[k] ?? ''; } return out; };
   const save = async () => {
@@ -2503,9 +2510,11 @@ function UnknownUnits({ db, book, user, refresh }) {
     if (name === it.name) return toast('全名跟簡稱一樣：如果這就是全名，請在「設定 → 服務單位」新增', true);
     setBusy(key);
     try {
-      const catKey = STAT2CAT[it.cat], hit = db.units.find(u => normName(u.name) === normName(name));
-      const d = hit ? { name: hit.name, short: hit.short || '', aliases: [...new Set([...(hit.aliases || []), it.name])], cats: [...new Set([...(hit.cats || []), catKey].filter(Boolean))] }
-        : { name, short: '', aliases: [it.name], cats: catKey ? [catKey] : [] };
+      // 只記在 statAliases（服務單位統計專用），不動總表的簡稱顯示
+      const catKey = STAT2CAT[it.cat], hit = db.units.find(u => normName(u.name) === normName(name)), sa = catKey + '|' + normName(it.name);
+      const { _id, ...rest } = hit || {};
+      const d = hit ? { ...rest, statAliases: [...new Set([...(hit.statAliases || []), sa])] }
+        : { name, short: '', aliases: [], cats: catKey ? [catKey] : [], statOnly: true, statAliases: [sa] };
       await call('m', 'data:saveUnit', { ...(hit ? { id: hit._id } : {}), d: JSON.stringify(d), by: user });
       await refresh(); toast(`已記住：${it.name} → ${name}`);
     } catch (e) { toast('儲存失敗：' + e.message, true); }
@@ -2513,13 +2522,13 @@ function UnknownUnits({ db, book, user, refresh }) {
   };
   const keep = async it => {   // 這個名稱本身就是全名
     const key = it.cat + '|' + it.name; setBusy(key);
-    try { await call('m', 'data:saveUnit', { d: JSON.stringify({ name: it.name, short: '', aliases: [], cats: [STAT2CAT[it.cat]].filter(Boolean) }), by: user }); await refresh(); toast('已記住為全名'); }
+    try { await call('m', 'data:saveUnit', { d: JSON.stringify({ name: it.name, short: '', aliases: [], cats: [STAT2CAT[it.cat]].filter(Boolean), statOnly: true }), by: user }); await refresh(); toast('已記住為全名'); }
     catch (e) { toast('儲存失敗：' + e.message, true); }
     setBusy('');
   };
   return html`<div class="card" style="margin-bottom:10px;border-left:4px solid #e0a100">
     <b>有 ${list.length} 個單位名稱系統不認識，請填全名</b>
-    <div class="sub" style="margin:4px 0 8px">可以直接打全名，或從下拉清單挑舊統計表裡已有的單位。存好後，這個簡稱之後都會自動換成全名（在「設定 → 服務單位」可以修改）。</div>
+    <div class="sub" style="margin:4px 0 8px">可以直接打全名，或從下拉清單挑舊統計表裡已有的單位。存好後，這個簡稱在服務單位統計裡都會自動換成全名；總表裡照樣顯示你打的簡稱。</div>
     <div class="tw"><table class="grid"><thead><tr><th>服務類別</th><th>總表寫法</th><th class="num">件數</th><th>全名</th><th></th></tr></thead><tbody>
     ${list.map(it => { const key = it.cat + '|' + it.name, dl = 'dl-' + it.cat.replace(/\W/g, '');
       return html`<tr><td>${it.cat}</td><td><b>${it.name}</b></td><td class="num">${it.n}</td>
@@ -3143,7 +3152,8 @@ function UnitsCard({ db, user, refresh }) {
   const [edit, setEdit] = useState(null), [q, setQ] = useState('');
   const save = async () => {
     if (!String(edit.name || '').trim()) return toast('請填寫單位全名', true);
-    const d = { name: edit.name.trim(), short: (edit.short || '').trim(), aliases: String(edit.aliasesText ?? (edit.aliases || []).join('\n')).split(/\n/).map(s => s.trim()).filter(Boolean), cats: edit.cats || [] };
+    const { _id: _x, aliasesText: _y, ...keep } = edit;   // 保留統計表填的全名對應（statAliases）
+    const d = { ...keep, name: edit.name.trim(), short: (edit.short || '').trim(), aliases: String(edit.aliasesText ?? (edit.aliases || []).join('\n')).split(/\n/).map(s => s.trim()).filter(Boolean), cats: edit.cats || [] };
     try { await call('m', 'data:saveUnit', { id: edit._id, d: JSON.stringify(d), by: user }); await refresh(); setEdit(null); toast('已儲存'); }
     catch (e) { toast('儲存失敗：' + e.message, true); }
   };
