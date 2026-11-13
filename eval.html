@@ -1357,7 +1357,12 @@ function dispatchStatMonth(month, db) {
   const rows = [], groups = { 指定: new Map(), 輪派: new Map() };
   evs.forEach((e, i) => {
     const c = db.cases.get(e.caseId), units = caseUnits(e, c, db.resolveUnit), home = (e.services || {}).home || (c.services || {}).home || '';
-    const unit = isUnitName(home) ? shortUnit(home, db) : home ? String(home).trim() : (Object.entries(units).find(([, u]) => u !== '（未填單位）') || [])[1] || '';
+    // 派案單位：先看居家；沒有居家單位（例如「僅交通」）就依序找其他服務的單位（交通是樂臨就填樂臨）；只有輔具才填「僅輔具」
+    const other = isUnitName(home) ? '' : (CATS.map(cat => cat.key).filter(k => k !== 'home' && k !== 'aids')
+      .map(k => (e.services || {})[k] || (c.services || {})[k] || '').find(v => isUnitName(v)) || '');
+    const unit = isUnitName(home) ? shortUnit(home, db) : other ? shortUnit(other, db)
+      : (/輔具/.test(home) || isUnitName((e.services || {}).aids || (c.services || {}).aids) || (cc0 => (cc0.輔具 || 0) > 0)(codeCounts(e.codes || latestCodes(db, c, month)))) ? '僅輔具'
+      : home ? String(home).trim() : '';
     const cc = codeCounts(e.codes || latestCodes(db, c, month));
     rows.push([i + 1, c.name || '', unit, ...CODE_COLS.map(k => cc[k] || '')]);
     const mech = c.svcMech || {}, who = `${c.name || ''}(${RG_CH[regionOf(c.caseNo)] || ''})`;
