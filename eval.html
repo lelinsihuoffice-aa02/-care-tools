@@ -764,13 +764,14 @@ function onlyCatOf(v) {
   return hit ? hit.key : null;
 }
 // 一個個案在某個月各服務類別的單位（不是單位名稱的不算；「僅交通」但交通欄沒填 → 交通記「（未填單位）」）
-// 某個月該用的服務單位：那個月有匯入總表就照那個月；但 11 月起如果個案資料比那個月的資料晚改（在個案編輯改了單位），以個案資料為準
+// 某個月該用的服務單位：那個月有匯入總表就照那個月；11 月起的最新月份以個案資料為準
 function monthSvc(e, c) {
   const es = (e && e.services) || {}, cs = (c && c.services) || {};
   if (!e) return k => cs[k] || '';
   if (!e.onList) return k => es[k] || cs[k] || '';
-  const caseNewer = e.month >= SYSTEM_FROM && (c.updatedAt || 0) > (e.updatedAt || 0);
-  return caseNewer ? k => (k in cs ? cs[k] : es[k]) || '' : k => es[k] || '';
+  // 11 月起、而且這個月是個案最新的月份（之後沒有再匯入更新的總表）→ 個案資料就是這個月的狀態（匯入會寫進個案資料，你在個案編輯改的也在這裡）
+  const caseIsThisMonth = e.month >= SYSTEM_FROM && e.month >= (c.importMonth || '');
+  return caseIsThisMonth ? k => (k in cs ? cs[k] : es[k]) || '' : k => es[k] || '';
 }
 function caseUnits(e, c, resolveUnit) {
   // 那個月有匯入總表（onList）→ 只看那個月總表寫的服務，不拿個案最新的服務去補（避免後來才加的居喘、短照算到以前的月份）
@@ -2505,7 +2506,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
       const ep = diff(evOrig || {}, ev);
       // 個案的服務單位改了 → 這個月的資料也一起改（統計、派案統計看的是這個月的資料）
       if (evOrig) {
-        const caseNewer = cp.services || (orig && (orig.updatedAt || 0) > (evOrig.updatedAt || 0));
+        const caseNewer = cp.services || (em >= SYSTEM_FROM && em >= (c.importMonth || ''));
         const sync = {}; if (caseNewer) for (const k of CATS.map(x => x.key)) { const a = String((c.services || {})[k] || ''), b = String((evOrig.services || {})[k] || ''); if (a !== b) sync[k] = a; }
         if (Object.keys(sync).length) ep.services = { ...(ep.services || {}), ...sync };
       }
