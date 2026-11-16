@@ -2129,6 +2129,9 @@ function annualTplSpec(name, T, data, yy) {
 // 個案總表：照原本 Excel（11月 工作表）的格式；下方「台西區-11月(截止)」統計區照原檔位置與公式
 const SUMMARY_X = 45;   // 原檔 A～AS 欄
 function summaryTplSpec(aoa, month, db) {
+  // 本月新案（觸發是新案-開頭）統一放在最下面，其他照編號排（跟原檔一樣）
+  const isNewRow = r => /^新案/.test(String(r[1] || ''));
+  aoa = [aoa[0], ...aoa.slice(1).filter(r => !isNewRow(r)), ...aoa.slice(1).filter(isNewRow)];
   const n = aoa.length - 1, m = +month.slice(5), rows = [{ r: 1, tr: 1, vals: [] }];
   const dash = new Set([1, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 14]);   // 原檔空白寫「-」的欄
   for (let i = 1; i <= n; i++) {
