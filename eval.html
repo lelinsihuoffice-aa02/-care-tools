@@ -2351,22 +2351,26 @@ async function writeTplDocx(tplName, blocks, fileName) {
   zip.file('word/document.xml', fillDocTpl(await zip.file('word/document.xml').async('string'), blocks));
   downloadBlob(await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), fileName);
 }
-const TPL_REPORT = { dispatch: { tpl: 'dispatch', spec: dispatchSheetSpec, sheet: m => `${+m.slice(5)}月` }, discharge: { tpl: 'discharge', spec: dischargeSheetSpec, sheet: m => `${m.slice(5)}月` } };
+// 檔名照原本的檔案（不要改名）
+const REPORT_FILE = { aa01: yy => `台西區-${yy}年每月AA01名單.xlsx`, reassess: yy => `台西區-${yy}年每月複評名單.xlsx` };
+const TPL_REPORT = { dispatch: { tpl: 'dispatch', spec: dispatchSheetSpec, sheet: m => `${+m.slice(5)}月`, file: yy => `台西區-${yy}年A單位個管員派案時效及品質名冊.xlsx` },
+  discharge: { tpl: 'discharge', spec: dischargeSheetSpec, sheet: m => `${m.slice(5)}月`, file: yy => `台西區-${yy}年出備個案時效追蹤.xlsx` } };
 async function exportReport(key, month, db, wholeYear) {
   const R = REPORTS[key], T = TPL_REPORT[key];
   if (T) {
     const ms = wholeYear ? Array.from({ length: 12 }, (_, i) => `${month.slice(0, 4)}-${pad(i + 1)}`) : [month];
-    await writeTplXlsx(T.tpl, ms.map(m => ({ name: T.sheet(m), src: '10月', spec: T.spec(m, db) })), wholeYear ? `${+month.slice(0, 4) - 1911}年${R.title}.xlsx` : `${rocMonth(month)}${R.title}.xlsx`);
+    const yy = +month.slice(0, 4) - 1911;
+    await writeTplXlsx(T.tpl, ms.map(m => ({ name: T.sheet(m), src: '10月', spec: T.spec(m, db) })), T.file(yy));
     return;
   }
   const wb = XLSX.utils.book_new();
   if (wholeYear) {
     const y = month.slice(0, 4);
     for (let m = 1; m <= 12; m++) XLSX.utils.book_append_sheet(wb, reportAoa(key, `${y}-${pad(m)}`, db), `${m}月`);
-    XLSX.writeFile(wb, `${+y - 1911}年${R.title}.xlsx`);
+    XLSX.writeFile(wb, REPORT_FILE[key] ? REPORT_FILE[key](+y - 1911) : `${+y - 1911}年${R.title}.xlsx`);
   } else {
     XLSX.utils.book_append_sheet(wb, reportAoa(key, month, db), rocMonth(month));
-    XLSX.writeFile(wb, `${rocMonth(month)}${R.title}.xlsx`);
+    XLSX.writeFile(wb, REPORT_FILE[key] ? REPORT_FILE[key](+month.slice(0, 4) - 1911) : `${rocMonth(month)}${R.title}.xlsx`);
   }
 }
 // 服務單位統計：每個服務類別一個工作表，列 = 月份，欄 = 單位（與原本統計表相同格式）
