@@ -675,7 +675,7 @@ const mechToOpt = m => m === '指定' ? '1.個案意願' : m === '輪派' ? '2.�
 function bMechOf(c) {
   const m = (c && c.svcMech) || {};
   if (m.home) return m.home;
-  const k = CATS.find(x => m[x.key]); return k ? m[k.key] : '';
+  const k = CATS.find(x => x.key !== 'aids' && m[x.key]); return k ? m[k.key] : '';   // 輔具不是 B單位
 }
 const editVal = (col, r) => (r.e[col.edit] || (col.fallback ? col.fallback(r) : '') || '');
 function cellText(col, r) {
@@ -741,6 +741,8 @@ function histRowFor(R, hist, row) {
 // kind：'new' 新案 / 'reassess' 複評；回傳 { [類別key]: { [單位]: 件數 } }
 // 總表服務欄位裡不是單位名稱的寫法（僅交通、僅日照、無、-…）
 const NOT_UNIT = /^(僅|只有|無$|-+$|\/$|暫停|待)/;
+// 輔具欄：填數字＝申請數量；舊資料寫的是輔具名稱或單位，算 1
+const aidsQty = v => { const t = String(v ?? '').trim(); if (/^\d+$/.test(t)) return +t; return isUnitName(t) ? 1 : 0; };
 const isUnitName = v => { const s = String(v || '').replace(/\s+/g, ''); return !!s && !NOT_UNIT.test(s); };
 // 「僅交通」「僅日照」→ 指向哪個服務類別
 // 「僅A、B、C」→ 每一項各是哪個服務類別
@@ -765,7 +767,12 @@ function onlyCatOf(v) {
 function caseUnits(e, c, resolveUnit) {
   // 那個月有匯入總表（onList）→ 只看那個月總表寫的服務，不拿個案最新的服務去補（避免後來才加的居喘、短照算到以前的月份）
   const out = {}, src = k => (e && (e.services || {})[k]) || (e && e.onList ? '' : (c.services || {})[k]) || '';
-  for (const cat of CATS) { const raw = src(cat.key); if (isUnitName(raw)) out[cat.key] = resolveUnit(raw, cat.key); }
+  for (const cat of CATS) {
+    const raw = src(cat.key);
+    // 輔具：總表填的是申請數量，單位一律是雲林縣輔助器具資源中心
+    if (cat.key === 'aids') { if (aidsQty(raw) > 0) out.aids = resolveUnit(AIDS_CENTER, 'aids'); continue; }
+    if (isUnitName(raw)) out[cat.key] = resolveUnit(raw, cat.key);
+  }
   // 「僅復能、交通、輔具」→ 復能、交通、輔具都算有；那個月沒寫單位時，先用個案資料上的單位，還是沒有才記「（未填單位）」
   for (const cat of CATS) for (const t of onlyCatsOf(src(cat.key))) if (!out[t]) {
     const cv = (c.services || {})[t];
@@ -1544,7 +1551,11 @@ function dispatchStatMonth(month, db) {
     .sort((a, b) => String(db.cases.get(a.caseId).caseNo).localeCompare(String(db.cases.get(b.caseId).caseNo), 'zh-Hant', { numeric: true }));
   const rows = [], groups = { 指定: new Map(), 輪派: new Map() };
   evs.forEach((e, i) => {
-    const c = db.cases.get(e.caseId), units = caseUnits(e, c, db.resolveUnit), sv = k => (e.services || {})[k] || (e.onList ? '' : (c.services || {})[k]) || '', home = sv('home');
+    const c = db.cases.get(e.caseId), own = k => String((e.services || {})[k] || '').trim(),
+      // 那個月總表有寫服務單位就照那個月；那個月完全沒寫（例如居服單位欄空白）才用個案資料上的單位
+      ownAny = CATS.some(x => isUnitName(own(x.key)) || /^(僅|只有)/.test(own(x.key))),
+      sv = k => own(k) || (e.onList && ownAny ? '' : (c.services || {})[k]) || '', home = sv('home'),
+      units = caseUnits(e.onList && !ownAny ? { ...e, onList: false } : e, c, db.resolveUnit);
     // 派案單位：先看居家；沒有居家單位（例如「僅交通」）就依序找其他服務的單位（交通是樂臨就填樂臨）；只有輔具才填「僅輔具」
     //   居家寫「僅日照」→ 先找日照單位；「僅交通、居喘」→ 先交通再居喘（照寫的順序），都沒有才找其他有填的服務
     const words = { 復能: 'prof', 專業: 'prof', 社區交通: 'ctraffic', 交通: 'traffic', 居喘: 'resp', 日喘: 'dayresp', 日照: 'day', 短照: 'short', 機喘: 'inst', 送餐: 'meal', 營養: 'meal', OT01: 'meal', 家托: 'family', 沐浴: 'bath', 小規機: 'small' };
@@ -1555,14 +1566,16 @@ function dispatchStatMonth(month, db) {
     const other = otherK ? sv(otherK) : '';
     // 派案單位用簡稱
     const unit = isUnitName(home) ? fullUnit(home, 'home', db) : other ? fullUnit(other, otherK, db)
-      : (/輔具/.test(home) || isUnitName(sv('aids')) || (cc0 => (cc0.輔具 || 0) > 0)(codeCounts(e.codes || latestCodes(db, c, month)))) ? '僅輔具'
+      : (/輔具/.test(home) || aidsQty(sv('aids')) > 0 || (cc0 => (cc0.輔具 || 0) > 0)(codeCounts(e.codes || latestCodes(db, c, month)))) ? '僅輔具'
       : home ? String(home).trim() : '';
     const cc = codeCounts(e.codes || latestCodes(db, c, month));
     rows.push([i + 1, c.name || '', unit, ...CODE_COLS.map(k => cc[k] || '')]);
     const mech = c.svcMech || {}, who = `${c.name || ''}(${RG_CH[regionOf(c.caseNo)] || ''})`;
     for (const [k, u] of Object.entries(units)) {
-      const mm = mech[k]; if (!MECH.includes(mm) || u === '（未填單位）') continue;
-      const key = `${mm}${u}${catWord(k)}`; const g = groups[mm];
+      // 指定／輪派：個案資料「派案方式」優先；沒填就看派案時效「派案B單位機制」（1.個案意願＝指定、2.輪派）
+      const dm = String(e.dispatchMech || ''), mm = mech[k] || (/^1|個案意願/.test(dm) ? '指定' : /^2|輪派/.test(dm) ? '輪派' : '');
+      if (!MECH.includes(mm) || u === '（未填單位）') continue;
+      const key = k === 'aids' ? `${mm}輔具` : `${mm}${u}${catWord(k)}`; const g = groups[mm];
       g.set(key, [...(g.get(key) || []), who]);
     }
   });
@@ -1893,9 +1906,8 @@ const DISCHARGE_X = [
 const numOr = v => typeof v === 'number' ? v : (/^-?\d+(\.\d+)?$/.test(String(v || '').trim()) ? +v : v);
 // 一個月的名冊列：系統有名單用系統，沒有就用匯入的舊表
 function reportXRows(key, month, db, X) {
-  const { R, rows } = buildReport(key, month, db);
-  if (rows.length) return { list: rows.map(r => X.map(([, f]) => f(r, R))), rows };
-  const hist = histOf(db, key, month);
+  const { R, rows } = buildReport(key, month, db), hist = histOf(db, key, month);
+  if (rows.length && !(month < SYSTEM_FROM && hist)) return { list: rows.map(r => X.map(([, f]) => f(r, R))), rows };
   if (!hist) return { list: [], rows: [] };
   const list = hist.rows.map(hr => { const a = histRowFor(R, hist, hr); return X.map(([h], j) => { if (j === 0) return ''; const i = h ? R.cols.findIndex(c => c.h === h) : -1; return i < 0 ? '' : h === 'CMS' ? cmsLv(a[i]) : numOr(a[i]); }); });
   list.forEach((r, i) => { r[0] = i + 1; });
@@ -2218,7 +2230,7 @@ function sheetFromAoa(aoa, widths, merges) {
 }
 function reportAoa(key, month, db) {
   const { R, rows, summary } = buildReport(key, month, db);
-  const head = R.cols.map(c => c.h), hist = !rows.length && histOf(db, key, month);
+  const head = R.cols.map(c => c.h), hist = (month < SYSTEM_FROM || !rows.length) && histOf(db, key, month);
   const body = hist ? hist.rows.map(r => histRowFor(R, hist, r)) : rows.map(r => R.cols.map(c => cellText(c, r)));
   const aoa = [[`${ORG_TITLE}\n${rocMonth(month)}-${R.title}`], head, ...body];
   if (summary.length && !hist) { aoa.push([]); for (const [k, v] of summary) aoa.push([k, String(v)]); }
@@ -2591,7 +2603,14 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
       <div class="bar" style="margin-bottom:4px"><span class="sub" style="min-width:64px">A單位</span><${Toggle} opts=${MECH} value=${c.aMech || ''} onChange=${v => setC({ ...c, aMech: v })} />
         <span class="sub">照專派給本單位的方式（派案時效名冊「照專派貴單位的機制」）</span></div>
       <div class="sect">目前服務單位</div>
-      <div class="form">${CATS.map(cat => html`<label>${cat.label}<input class="inp" list="dl-units" value=${c.services[cat.key] || ''}
+      <div class="form">${CATS.map(cat => cat.key === 'aids' ? (() => {
+        // 輔具：填申請數量；單位固定是雲林縣輔助器具資源中心
+        const v = c.services.aids || '', legacy = v && !/^\d+$/.test(String(v).trim());
+        return html`<label>輔具（申請數量）<input class="inp" type="number" min="0" step="1" placeholder="0" value=${legacy ? '' : v}
+          onInput=${e => setC({ ...c, services: { ...c.services, aids: e.target.value } })} />
+          <span class="sub">單位：雲林縣輔助器具資源中心${legacy ? `（原本寫「${v}」，算 1 件）` : ''}</span>
+          ${aidsQty(v) > 0 && html`<${Toggle} opts=${['指定']} value=${(c.svcMech || {}).aids || ''} onChange=${x => setC({ ...c, svcMech: { ...(c.svcMech || {}), aids: x } })} />`}</label>`; })()
+        : html`<label>${cat.label}<input class="inp" list="dl-units" value=${c.services[cat.key] || ''}
         onInput=${e => setC({ ...c, services: { ...c.services, [cat.key]: e.target.value } })} />
         ${isUnitName(c.services[cat.key]) && html`<${Toggle} opts=${MECH} value=${(c.svcMech || {})[cat.key] || ''} onChange=${v => setC({ ...c, svcMech: { ...(c.svcMech || {}), [cat.key]: v } })} />`}</label>`)}</div>
       <div class="sub" style="margin-top:6px">每個服務單位可選「指定」或「輪派」；派案時效名冊的「派案B單位機制」會自動帶入（先看居家，沒有居家就看第一個有選的項目）。</div>
@@ -2748,7 +2767,8 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
     try { await call('m', 'data:patchEvent', { caseId: r.caseId, month, patch: JSON.stringify({ [field]: val }), by: user }); await refresh(); }
     catch (e) { toast('儲存失敗：' + e.message, true); }
   };
-  const hist = !rep.rows.length && histOf(db, key, month);
+  // 11 月以前有匯入舊報表就用匯入的；11 月起（或沒匯入）用系統
+  const hist = (month < SYSTEM_FROM || !rep.rows.length) && histOf(db, key, month);
   const histAll = (db.kv['report:' + key] || {}).months || {};
   const [busy, setBusy] = useState(false);
   const importHist = async f => {
@@ -2782,7 +2802,7 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
     <div class="trigbar"><span class="sub">${+month.slice(0, 4) - 1911}年各月：</span>${Array.from({ length: 12 }, (_, i) => `${month.slice(0, 4)}-${pad(i + 1)}`).map(mk => {
       const sys = buildReport(key, mk, db).rows.length, h = histAll[mk];
       return html`<span class=${'tag ' + (mk === month ? 't-warn' : sys ? 't-new' : h ? 't-close' : '')} style="padding:4px 8px" title=${sys ? '系統資料' : h ? '匯入的舊資料' : '沒有資料'}>${+mk.slice(5)}月 ${sys ? '系統' + sys : h ? '匯入' + h.rows.length : '—'}</span>`; })}</div>
-    ${hist ? html`<div class="card" style="background:#FDFBF6;margin-bottom:8px"><span class="tag t-close">匯入的舊資料</span> <span class="sub">${rocMonth(month)}系統裡沒有名單，以下是匯入的舊報表內容（共 ${hist.rows.length} 筆，只能看，要修改請改原 Excel 再匯入一次）。</span></div>
+    ${hist ? html`<div class="card" style="background:#FDFBF6;margin-bottom:8px"><span class="tag t-close">匯入的舊資料</span> <span class="sub">${rocMonth(month)}有匯入舊報表，照匯入的內容顯示（11 月起才由系統產生；共 ${hist.rows.length} 筆，只能看，要修改請改原 Excel 再匯入一次）。</span></div>
     <div class="tw"><table class="grid"><thead><tr>${rep.R.cols.map(c => html`<th>${c.h}</th>`)}</tr></thead>
       <tbody>${hist.rows.map(r => html`<tr>${histRowFor(rep.R, hist, r).map(v => html`<td>${v}</td>`)}</tr>`)}</tbody></table></div>`
     : rep.rows.length === 0 ? html`<div class="card empty">${rocMonth(month)}沒有符合條件的個案</div>` : html`
