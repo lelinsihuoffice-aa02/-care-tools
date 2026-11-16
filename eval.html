@@ -53,8 +53,13 @@
   table.cmp tr.open td{background:#FBF3E6}
   table.cmp tr.detail td{background:#FFFCF7;text-align:left;padding:10px 16px;white-space:normal}
   table.grid.cmp{width:100%}
-  .dgrid{display:flex;flex-wrap:wrap;gap:10px 26px;align-items:center;width:0;min-width:100%}
+  .dgrid{display:flex;flex-direction:column;gap:10px;width:0;min-width:100%}
+  .dsec{display:flex;align-items:flex-start;gap:10px;overflow-x:auto}.dsh{flex:0 0 88px;font-weight:700;color:var(--green);padding-top:8px}
+  table.grid.mini{width:auto;min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+  table.mini th{position:static;font-size:12px;padding:6px 10px;white-space:normal;max-width:150px;vertical-align:bottom}
+  table.mini td{border-bottom:0;padding:6px 10px}
   .dcell{display:flex;align-items:center;gap:6px}.dcell .dl{color:var(--sub);font-size:12px}
+  .dcell.need{background:#FFF1DE;border:1px solid #F2C98F;border-radius:10px;padding:3px 8px}.dcell.need .dl{color:#B26A16;font-weight:700}
   table.grid{border-collapse:separate;border-spacing:0;font-size:13px;width:max-content;min-width:100%}
   .grid th{position:sticky;top:0;background:#f4ede3;font-weight:600;text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:2}
   .grid td{padding:6px 8px;border-bottom:1px solid #f0e8dc;white-space:nowrap;vertical-align:middle}
@@ -540,6 +545,26 @@ const cmsNum = c => parseInt(String(c || '').replace(/\D/g, ''), 10) || null;
 const isDc = r => normTrigger(r.e.trigger) === '新案-出備';
 const supDate = r => isDc(r) ? r.e.visit : r.e.supervisor;
 
+// ---- 時效的計算方式（可在報表上切換：日曆天／工作天／工作天＋上下午分界），存在共用設定 calcModes ----
+const CALC_MODES = { cal: '日曆天', work: '工作天', noon: '工作天（上下午分界）' };
+const CALC_METRICS = {
+  'dispatch.plan': { label: '訪案及計畫擬定（督導審核→照專簽審）', def: 'noon', modes: ['noon', 'work', 'cal'] },
+  'dispatch.planDc': { label: '新案-出備計畫擬定（個管訪視→照專簽審）', def: 'work', modes: ['work', 'cal'] },
+  'dispatch.sa': { label: '送審至照專簽審', def: 'cal', modes: ['cal', 'work'] },
+  'dispatch.refA': { label: '照管中心評估後轉介至A（匯出用）', def: 'cal', modes: ['cal', 'work'] },
+  'dispatch.toB': { label: '個管照會B單位（照專簽審→照會B單位）', def: 'work', modes: ['work', 'cal'] },
+  'dispatch.link': { label: '服務連結時效（照會B單位→B單位首次服務）', def: 'work', modes: ['work', 'cal'] },
+  'discharge.dv': { label: '出院至訪視', def: 'work', modes: ['work', 'cal'] },
+  'discharge.va': { label: '訪視至計畫通過', def: 'cal', modes: ['cal', 'work'] },
+};
+const calcMode = (db, k) => { const m = ((db && db.kv && db.kv.calcModes) || {})[k], M = CALC_METRICS[k]; return M && M.modes.includes(m) ? m : (M ? M.def : 'work'); };
+const unitOf = mode => mode === 'cal' ? '日曆天' : '工作天';
+// 依計算方式算天數（noon 要上下午）
+function daysBy(mode, a, b, H, aT, bT) {
+  if (mode === 'cal') return calDays(a, b);
+  if (mode === 'noon') return noonDays(a, aT, b, bT, H);
+  return workDays(a, b, H);
+}
 const REPORTS = {
   dispatch: {
     title: '個管員派案時效及品質名冊', note: '當月新案（含出轉初）', bTrack: true,
@@ -556,34 +581,36 @@ const REPORTS = {
       { h: '個管照顧計畫送審日期', date: 1, v: r => r.e.submit },
       { h: '照專簽審日期', date: 1, v: r => r.e.approve },
       { h: '照專簽審上/下午', edit: 'approveTime', opts: AMPM, width: 80, hide: isDc },
-      { h: '送審至照專簽審(日曆天)', num: 1, v: r => r.k.sa, hint: '僅供檢查，不列入完成率',
+      { h: '送審至照專簽審(日曆天)', mk: 'dispatch.sa', num: 1, v: r => r.k.sa, hint: '僅供檢查，不列入完成率',
         bad: r => r.k.sa > 3 ? '逾3天' : r.k.sa < 0 ? '日期順序錯誤' : '' },
       { h: '照會B單位日期', date: 1, noB: 1, v: r => r.e.referB },
-      { h: '訪案及計畫擬定3天內完成率', num: 1, v: r => r.k.plan, hint: '督導審核→照專簽審，工作天，上下午分界；出備：訪視→簽審',
+      { h: '訪案及計畫擬定3天內完成率', mk: 'dispatch.plan', num: 1, v: r => r.k.plan, hint: '督導審核→照專簽審；出備：訪視→簽審',
         bad: r => r.k.plan > 3 ? '逾3天' : r.k.plan !== null && r.k.plan < 1 ? '日期順序錯誤' : '',
-        warn: r => r.k.plan !== null && !isDc(r) && (!r.e.supervisorTime || !r.e.approveTime) ? '未選上/下午' : '' },
+        warn: r => r.k.plan !== null && !isDc(r) && r.k.planMode === 'noon' && (!r.e.supervisorTime || !r.e.approveTime) ? '未選上/下午' : '' },
       { h: '逾3天未完成計畫擬定原因', edit: 'planLate', need: r => r.k.plan > 3 },
-      { h: '個管照會B單位(工作天)', num: 1, noB: 1, v: r => r.k.toB, bad: r => r.k.toB > 3 ? '逾3天' : r.k.toB < 0 ? '日期順序錯誤' : '' },
+      { h: '個管照會B單位(工作天)', mk: 'dispatch.toB', num: 1, noB: 1, v: r => r.k.toB, bad: r => r.k.toB > 3 ? '逾3天' : r.k.toB < 0 ? '日期順序錯誤' : '' },
       { h: '逾3天未完成照會B單位原因', noB: 2, edit: 'referBLate', opts: OPTS.referBLate, need: r => r.k.toB > 3 },
       { h: '派案B單位機制', edit: 'dispatchMech', opts: OPTS.dispatchMech, fallback: r => mechToOpt(bMechOf(r.c)), hint: '沒填時帶入個案服務單位的指定／輪派' },
       { h: 'B單位第一次提供服務日期', noB: 1, edit: 'bFirst', type: 'date', fallback: r => r.bFirstAuto, hint: '沒填時帶入總表的「B單位第一次提供服務日期（居服進場）」' },
-      { h: '服務連結時效(工作天)', num: 1, noB: 1, v: r => r.k.link, hint: '照會B單位→B單位首次服務', bad: r => r.k.link > 6 ? '逾期（超過3+3天）' : r.k.link < 0 ? '日期順序錯誤' : '' },
+      { h: '服務連結時效(工作天)', mk: 'dispatch.link', num: 1, noB: 1, v: r => r.k.link, hint: '照會B單位→B單位首次服務', bad: r => r.k.link > 6 ? '逾期（超過3+3天）' : r.k.link < 0 ? '日期順序錯誤' : '' },
       { h: 'B單位逾3+3天未提供服務原因', noB: 2, edit: 'bLate', opts: OPTS.bLate, need: r => r.k.link > 6 },
-      { h: '服務逾期追蹤日期', noB: 2, edit: 'followDate', type: 'date' },
-      { h: '服務逾期追蹤結果', noB: 2, edit: 'followResult' },
+      { h: '服務逾期追蹤日期', noB: 2, edit: 'followDate', type: 'date', need: r => r.k.link > 6 },
+      { h: '服務逾期追蹤結果', noB: 2, edit: 'followResult', need: r => r.k.link > 6 },
       { h: '照專派貴單位的機制', edit: 'assignMech', opts: OPTS.assignMech, fallback: r => mechToOpt(r.c.aMech), hint: '沒填時帶入個案的 A單位指定／輪派' },
     ],
-    calc: (r, H) => ({
-      // 一般新案：督導審核→照專簽審，上下午分界，審核當段算第1天
-      // 新案-出備：個管訪視→照專簽審，一般工作天（訪視當天不算），3天內
-      plan: isDc(r) ? workDays(r.e.visit, r.e.approve, H) : noonDays(r.e.supervisor, r.e.supervisorTime, r.e.approve, r.e.approveTime, H),
-      sa: calDays(r.e.submit, r.e.approve),
-      toB: workDays(r.e.approve, r.e.referB, H),
-      link: workDays(r.e.referB, r.e.bFirst || r.bFirstAuto, H),
+    calc: (r, H, ctx) => ({
+      // 一般新案：督導審核→照專簽審（預設工作天、上下午分界，審核當段算第1天）
+      // 新案-出備：個管訪視→照專簽審（預設工作天，訪視當天不算），3天內
+      plan: isDc(r) ? daysBy(ctx.mode('dispatch.planDc'), r.e.visit, r.e.approve, H) : daysBy(ctx.mode('dispatch.plan'), r.e.supervisor, r.e.approve, H, r.e.supervisorTime, r.e.approveTime),
+      planMode: isDc(r) ? ctx.mode('dispatch.planDc') : ctx.mode('dispatch.plan'),
+      sa: daysBy(ctx.mode('dispatch.sa'), r.e.submit, r.e.approve, H),
+      refA: daysBy(ctx.mode('dispatch.refA'), r.e.assess, r.e.referA, H),
+      toB: daysBy(ctx.mode('dispatch.toB'), r.e.approve, r.e.referB, H),
+      link: daysBy(ctx.mode('dispatch.link'), r.e.referB, r.e.bFirst || r.bFirstAuto, H),
     }),
-    summary: rows => [
+    summary: (rows, U) => [
       ['訪案及計畫擬定3天內完成率', rate(rows, r => r.k.plan, x => x <= 3)],
-      ['個管照會B單位平均天數（工作天）', avg(rows, r => r.k.toB)],
+      [`個管照會B單位平均天數（${U('dispatch.toB')}）`, avg(rows, r => r.k.toB)],
     ],
   },
   discharge: {
@@ -597,15 +624,15 @@ const REPORTS = {
       { h: '出院日期', edit: 'discharge', type: 'date' },
       { h: '個管訪視日期', date: 1, v: r => r.e.visit },
       { h: '照專簽審日期', date: 1, v: r => r.e.approve },
-      { h: '出院至訪視(工作天)', num: 1, v: r => r.k.dv, bad: r => r.e.discharge && r.e.visit && r.e.visit <= r.e.discharge ? '訪視日須晚於出院日' : r.k.dv > 3 ? '逾3天' : '' },
+      { h: '出院至訪視(工作天)', mk: 'discharge.dv', num: 1, v: r => r.k.dv, bad: r => r.e.discharge && r.e.visit && r.e.visit <= r.e.discharge ? '訪視日須晚於出院日' : r.k.dv > 3 ? '逾3天' : '' },
       { h: '逾3天未完成計畫擬定原因', edit: 'dcLate', need: r => r.k.dv > 3 },
-      { h: '訪視至計畫通過(日曆天)', num: 1, v: r => r.k.va, bad: r => r.k.va > 3 ? '逾3天' : r.k.va < 0 ? '日期順序錯誤' : '' },
+      { h: '訪視至計畫通過(日曆天)', mk: 'discharge.va', num: 1, v: r => r.k.va, bad: r => r.k.va > 3 ? '逾3天' : r.k.va < 0 ? '日期順序錯誤' : '' },
       { h: '逾3天計畫未通過原因', edit: 'dcApproveLate', need: r => r.k.va > 3 },
     ],
-    calc: (r, H) => ({ dv: workDays(r.e.discharge, r.e.visit, H), va: calDays(r.e.visit, r.e.approve) }),
-    summary: rows => [
-      ['個案出院至訪視平均天數（工作天）', avg(rows, r => r.k.dv)],
-      ['訪視至計畫通過平均天數（日曆天）', avg(rows, r => r.k.va)],
+    calc: (r, H, ctx) => ({ dv: daysBy(ctx.mode('discharge.dv'), r.e.discharge, r.e.visit, H), va: daysBy(ctx.mode('discharge.va'), r.e.visit, r.e.approve, H) }),
+    summary: (rows, U) => [
+      [`個案出院至訪視平均天數（${U('discharge.dv')}）`, avg(rows, r => r.k.dv)],
+      [`訪視至計畫通過平均天數（${U('discharge.va')}）`, avg(rows, r => r.k.va)],
     ],
   },
   aa01: {
@@ -675,6 +702,7 @@ function buildReport(key, month, db) {
   const evs = db.events.filter(e => e.month === month && R.filter(e) && db.cases.has(e.caseId));
   evs.sort((a, b) => String(db.cases.get(a.caseId).caseNo).localeCompare(String(db.cases.get(b.caseId).caseNo), 'zh-Hant', { numeric: true }));
   const ctx = {
+    mode: k => calcMode(db, k),
     prevVisit(caseId, mk, before) {
       let best = '';
       for (const e of db.events) if (e.caseId === caseId && e.month < mk && e.visit && (!before || e.visit < before) && e.visit > best) best = e.visit;
@@ -698,7 +726,7 @@ function buildReport(key, month, db) {
     if (r.noB) { r.k.toB = null; r.k.link = null; }
     return r;
   });
-  return { R, rows, summary: R.summary(rows) };
+  return { R, rows, summary: R.summary(rows, k => unitOf(calcMode(db, k))) };
 }
 // 報表某一格的顯示文字（畫面與匯出共用）
 // 指定／輪派 → 報表的選項文字
@@ -710,7 +738,9 @@ function bMechOf(c) {
   if (m.home) return m.home;
   const k = CATS.find(x => x.key !== 'aids' && m[x.key]); return k ? m[k.key] : '';   // 輔具不是 B單位
 }
-const editVal = (col, r) => (r.e[col.edit] || (col.fallback ? col.fallback(r) : '') || '');
+// 可填欄位對應的資料欄（可以依個案不同，例如出備的督導審核其實是個管訪視日期）
+const ekey = (col, r) => typeof col.edit === 'function' ? col.edit(r) : col.edit;
+const editVal = (col, r) => (r.e[ekey(col, r)] || (col.fallback ? col.fallback(r) : '') || '');
 function cellText(col, r) {
   if (col.noB && r.noB) return col.noB === 1 ? r.noB : '';
   const val = col.edit ? editVal(col, r) : col.v(r);
@@ -1940,7 +1970,7 @@ const DISPATCH_X = [
   ['照專評估日期', r => dt(r.e.assess)], ['轉介A單位日期', r => dt(r.e.referA)], ['督導審核日期', r => dt(supDate(r))],
   ['個管照顧計畫送審日期', r => dt(r.e.submit)], ['照專簽審日期', r => dt(r.e.approve)], ['照會B單位日期', r => r.noB || dt(r.e.referB)],
   ['訪案及計畫擬定3天內完成率', r => r.k.plan], ['逾3天未完成計畫擬定原因', r => r.e.planLate || ''],
-  [null, r => calDays(r.e.assess, r.e.referA)], ['個管照會B單位(工作天)', r => r.noB || r.k.toB], ['逾3天未完成照會B單位原因', r => r.e.referBLate || ''],
+  [null, r => r.k.refA], ['個管照會B單位(工作天)', r => r.noB || r.k.toB], ['逾3天未完成照會B單位原因', r => r.e.referBLate || ''],
   ['派案B單位機制', (r, R) => editVal(R.cols.find(c => c.edit === 'dispatchMech'), r)], ['B單位第一次提供服務日期', r => r.noB || dt(r.e.bFirst || r.bFirstAuto)],
   ['服務連結時效(工作天)', r => r.noB || r.k.link], ['B單位逾3+3天未提供服務原因', r => r.e.bLate || ''], ['服務逾期追蹤日期', r => dt(r.e.followDate)],
   ['服務逾期追蹤結果', r => r.e.followResult || ''], ['照專派貴單位的機制', (r, R) => editVal(R.cols.find(c => c.edit === 'assignMech'), r)],
@@ -2837,19 +2867,33 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
   const pickView = v => { setView(v); try { localStorage.setItem('rptView2:' + key, v); } catch { } };
   const shown = views && views[view] ? rep0.R.cols.filter(c => REPORT_FIXED.includes(c.h) || views[view].includes(c.h)) : rep0.R.cols;
   const rep = { ...rep0, R: { ...rep0.R, cols: shown } };
-  const [edit, setEdit] = useState(null), [open, setOpen] = useState(null);
+  const [edit, setEdit] = useState(null), [open, setOpen] = useState(null), [calcOpen, setCalcOpen] = useState(false);
+  // 欄名的（工作天）（日曆天）跟著目前的計算方式變
+  const colHead = col => col.mk ? col.h.replace(/\((工作天|日曆天)\)/, `(${unitOf(calcMode(db, col.mk))})`) : col.h;
+  const colHint = col => [col.hint, col.mk && `計算：${CALC_MODES[calcMode(db, col.mk)]}`].filter(Boolean).join('；');
+  const metrics = Object.entries(CALC_METRICS).filter(([k]) => k.startsWith(key + '.'));
+  const setMode = async (k, v) => {
+    try { await call('m', 'data:saveKv', { key: 'calcModes', d: JSON.stringify({ ...(db.kv.calcModes || {}), [k]: v }), by: user }); await refresh(); toast(`已改成${CALC_MODES[v]}`); }
+    catch (e) { toast('儲存失敗：' + e.message, true); }
+  };
   const compactName = '精簡（點列展開）', compact = !!views && view === compactName;
   const colBy = h => rep0.R.cols.find(c => c.h === h) || { h, v: () => '' };
   const CMP_COLS = ['訪案及計畫擬定3天內完成率', '個管照會B單位(工作天)', '服務連結時效(工作天)'];
-  const missingReason = r => rep0.R.cols.some(c => c.need && c.need(r) && !r.e[c.edit]);
+  const missingReason = r => rep0.R.cols.some(c => c.need && c.need(r) && !r.e[ekey(c, r)]);
   const anyBad = r => rep0.R.cols.some(c => c.bad && c.bad(r));
   const dateGap = r => !(isDc(r) ? r.e.visit : r.e.supervisor) || !r.e.approve || (key === 'dispatch' && !r.noB && (!r.e.referB || !(r.e.bFirst || r.bFirstAuto)));
-  const filters = [['all', '全部', () => true], ['bad', '有逾期／異常', anyBad], ['need', '逾期未填原因', missingReason], ...(key === 'dispatch' ? [['gap', '日期沒填齊', dateGap]] : [])];
+  const filters = [['all', '全部', () => true], ['bad', '有逾期／異常', anyBad], ['need', '逾期未填原因／追蹤', missingReason], ...(key === 'dispatch' ? [['gap', '日期沒填齊', dateGap]] : [])];
   const [flt, setFlt] = useState('all'), pickFlt = k => setFlt(k);
   const rowsF = rep0.rows.filter((filters.find(f => f[0] === flt) || filters[0])[2]);
+  // 展開明細：依分頁分組，每組一張小表（欄名一列、內容一列，跟 Excel 一樣橫著看）
+  const detailGroups = (() => { if (!views) return []; const used = new Set(['序號', '姓名', 'CMS', '身分證號']), out = [];
+    for (const [g, hs] of Object.entries(views)) { const cols = hs.filter(h => !used.has(h)).map(h => rep0.R.cols.find(c => c.h === h)).filter(Boolean); cols.forEach(c => used.add(c.h)); if (cols.length) out.push([g, cols]); }
+    const rest = rep0.R.cols.filter(c => !used.has(c.h)); if (rest.length) out.unshift(['個案', rest]); return out; })();
   const statusOf = r => { const out = [];
     for (const c of rep0.R.cols) { const m = c.bad && c.bad(r); if (m) out.push([`${c.h.replace(/\(.*\)|3天內完成率|日期/g, '')}${m}`, 't-warn']); }
-    if (missingReason(r)) out.push(['未填逾期原因', 't-org']);
+    const miss = rep0.R.cols.filter(c => c.need && c.need(r) && !r.e[ekey(c, r)]);
+    if (miss.some(c => !/追蹤/.test(c.h))) out.push(['未填逾期原因', 't-org']);
+    if (miss.some(c => /追蹤/.test(c.h))) out.push(['未填服務逾期追蹤', 't-org']);
     if (key === 'dispatch' && dateGap(r)) out.push(['日期沒填齊', 't-close']);
     return out; };
   // 一格（可填或顯示）
@@ -2857,15 +2901,15 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
     if (col.edit && col.hide && col.hide(r)) return html`<span class="sub">—</span>`;
     if (col.noB && r.noB) return html`<span class="sub">${col.noB === 1 ? r.noB : '—'}</span>`;
     if (col.edit) return col.type === 'date'
-      ? html`<${DateInput} value=${editVal(col, r)} onChange=${v => save(r, col.edit, v)} />${!r.e[col.edit] && col.fallback && col.fallback(r) ? html`<span class="tag t-close" style="margin-left:4px" title="從總表帶入">帶入</span>` : ''}`
-      : col.opts === AMPM ? html`<${AmPm} value=${r.e[col.edit]} onChange=${v => save(r, col.edit, v)} />`
-      : html`<${TextCell} value=${editVal(col, r)} opts=${col.opts} width=${col.width} onChange=${v => save(r, col.edit, v)} />${!r.e[col.edit] && col.fallback && col.fallback(r) ? html`<span class="tag t-close" style="margin-left:4px" title="從個案資料帶入">帶入</span>` : ''}`;
+      ? html`<${DateInput} value=${editVal(col, r)} onChange=${v => save(r, ekey(col, r), v)} />${!r.e[ekey(col, r)] && col.fallback && col.fallback(r) ? html`<span class="tag t-close" style="margin-left:4px" title="從總表帶入">帶入</span>` : ''}`
+      : col.opts === AMPM ? html`<${AmPm} value=${r.e[ekey(col, r)]} onChange=${v => save(r, ekey(col, r), v)} />`
+      : html`<${TextCell} value=${editVal(col, r)} opts=${col.opts} width=${col.width} onChange=${v => save(r, ekey(col, r), v)} />${!r.e[ekey(col, r)] && col.fallback && col.fallback(r) ? html`<span class="tag t-close" style="margin-left:4px" title="從個案資料帶入">帶入</span>` : ''}`;
     const msg = col.bad ? col.bad(r) : '', warn = !msg && col.warn ? col.warn(r) : '';
     return html`${cellText(col, r)}${msg && !col.num ? html` <span class="tag t-warn">${msg}</span>` : ''}${warn ? html` <span class="tag t-org">${warn}</span>` : ''}`;
   };
   const cell = (col, r) => {
     if (col.noB && r.noB) return html`<td class="sub" title="沒有 BA（不含沐浴車）／BB 碼，不追蹤 B 單位">${col.noB === 1 ? r.noB : ''}</td>`;
-    const need = col.edit && col.need && col.need(r) && !r.e[col.edit], msg = !col.edit && col.bad ? col.bad(r) : '', warn = !col.edit && !msg && col.warn ? col.warn(r) : '';
+    const need = col.edit && col.need && col.need(r) && !r.e[ekey(col, r)], msg = !col.edit && col.bad ? col.bad(r) : '', warn = !col.edit && !msg && col.warn ? col.warn(r) : '';
     return html`<td class=${(need ? 'need ' : '') + (msg ? 'flag' : '')} title=${need ? '逾期，請填寫原因' : (msg || warn)}>${cellInner(col, r)}</td>`;
   };
   const save = async (r, field, val) => {
@@ -2889,19 +2933,25 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
     setBusy(false);
   };
   const bad = rep.rows.reduce((n, r) => n + (rep.R.cols.some(c => c.bad && c.bad(r)) ? 1 : 0), 0);
-  const missing = rep.rows.reduce((n, r) => n + (rep.R.cols.some(c => c.need && c.need(r) && !r.e[c.edit]) ? 1 : 0), 0);
+  const missing = rep.rows.reduce((n, r) => n + (rep.R.cols.some(c => c.need && c.need(r) && !r.e[ekey(c, r)]) ? 1 : 0), 0);
   return html`<div class="page">
     <div class="bar">
       ${picker}
       <span class="sub">${rep.R.note}</span><span class="grow"></span>
       <label class="btn light" style="cursor:pointer" title="匯入以前的報表 Excel（一個月一張工作表），系統沒有資料的月份會用它">${busy ? '匯入中…' : '匯入舊報表 Excel'}<input type="file" accept=".xlsx,.xls" style="display:none" onChange=${e => { importHist(e.target.files[0]); e.target.value = ''; }} /></label>
+      ${metrics.length > 0 && html`<button class=${'btn ' + (calcOpen ? '' : 'light')} onClick=${() => setCalcOpen(!calcOpen)}>計算方式</button>`}
       <button class="btn light" onClick=${() => exportReport(key, month, db, false)}>匯出${rocMonth(month)} Excel</button>
       <button class="btn light" onClick=${() => exportReport(key, month, db, true)}>匯出${+month.slice(0, 4) - 1911}年整年（12 個工作表）</button>
     </div>
+    ${calcOpen && metrics.length > 0 && html`<div class="card" style="margin-bottom:10px;border-left:4px solid var(--green)">
+      <b>天數的計算方式</b><span class="sub">　改了之後，所有月份、所有人看到的這份報表都會跟著改（匯出 Excel 也是）。工作天會排除週末、國定假日、颱風假（在「設定」維護）。</span>
+      <div class="tw" style="margin-top:8px;max-height:none"><table class="grid"><thead><tr><th>項目</th><th>計算方式</th></tr></thead><tbody>
+      ${metrics.map(([k, M]) => html`<tr><td>${M.label}</td><td><span class="ampm">${M.modes.map(m => html`<button class=${calcMode(db, k) === m ? 'on' : ''} onClick=${() => calcMode(db, k) !== m && setMode(k, m)}>${CALC_MODES[m]}${m === M.def ? '（預設）' : ''}</button>`)}</span></td></tr>`)}
+      </tbody></table></div></div>`}
     <div class="chips">
       <div class="chip"><span class="sub">${rocMonth(month)}名單</span><b>${rep.rows.length} 案</b></div>
       <div class="chip"><span class="sub">有逾期或異常</span><b style=${bad ? 'color:var(--red)' : ''}>${bad} 案</b></div>
-      <div class="chip"><span class="sub">逾期但未填原因</span><b style=${missing ? 'color:var(--org)' : ''}>${missing} 案</b></div>
+      <div class="chip"><span class="sub">逾期但未填原因／追蹤</span><b style=${missing ? 'color:var(--org)' : ''}>${missing} 案</b></div>
       ${rep.summary.map(([k, v]) => html`<div class="chip"><span class="sub">${k}</span><b>${v}</b></div>`)}
     </div>
     <div class="trigbar"><span class="sub">${+month.slice(0, 4) - 1911}年各月：</span>${Array.from({ length: 12 }, (_, i) => `${month.slice(0, 4)}-${pad(i + 1)}`).map(mk => {
@@ -2917,17 +2967,18 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
       ${views && html`<span class="sub">看法：</span><span class="ampm">${[compactName, '完整表格', ...Object.keys(views)].map(v => html`<button class=${view === v ? 'on' : ''} onClick=${() => pickView(v)}>${v}</button>`)}</span>`}</div>
     ${!rowsF.length ? html`<div class="card sub">沒有符合篩選的個案</div>`
     : compact ? html`<div class="tw"><table class="grid ctr cmp">
-      <thead><tr><th>序號</th><th>姓名<span class="hint">點姓名修改個案資料</span></th><th>CMS</th>${CMP_COLS.map(h => html`<th>${h.replace('(工作天)', '').replace('3天內完成率', '')}<span class="hint">天數</span></th>`)}<th>狀態</th><th></th></tr></thead>
+      <thead><tr><th>序號</th><th>姓名<span class="hint">點姓名修改個案資料</span></th><th>CMS</th>${CMP_COLS.map(h => { const c = colBy(h); return html`<th>${h.replace(/\((工作天|日曆天)\)/, '').replace('3天內完成率', '')}<span class="hint">${c.mk ? CALC_MODES[calcMode(db, c.mk)] : '天數'}</span></th>`; })}<th>狀態</th><th></th></tr></thead>
       <tbody>${rowsF.map(r => { const isOpen = open === r.caseId, st = statusOf(r);
         return html`<tr class=${'click' + (isOpen ? ' open' : '')} onClick=${() => setOpen(isOpen ? null : r.caseId)}>
           <td>${r.i}</td><td><a class="namelink" onClick=${ev => { ev.stopPropagation(); setEdit(r.caseId); }} title="修改個案資料">${r.c.name}</a></td><td>${cellText(colBy('CMS'), r)}</td>
           ${CMP_COLS.map(h => cell(colBy(h), r))}
           <td>${st.length ? st.map(([t, cls]) => html`<span class=${'tag ' + cls} style="margin:1px">${t}</span>`) : html`<span class="tag t-new">準時</span>`}</td>
           <td class="sub">${isOpen ? '▲' : '▼'}</td></tr>
-        ${isOpen && html`<tr class="detail"><td colspan=${CMP_COLS.length + 5}><div class="dgrid">${rep0.R.cols.filter(c => !['序號', '姓名', 'CMS', ...CMP_COLS].includes(c.h)).map(col => html`<div class="dcell"><span class="dl">${col.h}</span>${cellInner(col, r)}</div>`)}</div></td></tr>`}`; })}
+        ${isOpen && html`<tr class="detail"><td colspan=${CMP_COLS.length + 5}><div class="dgrid">${detailGroups.map(([g, cols]) => html`<div class="dsec"><div class="dsh">${g}</div>
+          <table class="grid ctr mini"><thead><tr>${cols.map(c => html`<th>${colHead(c)}</th>`)}</tr></thead><tbody><tr>${cols.map(c => cell(c, r))}</tr></tbody></table></div>`)}</div></td></tr>`}`; })}
       </tbody></table></div>`
     : html`<div class="tw"><table class="grid stick2 ctr">
-      <thead><tr>${rep.R.cols.map(c => html`<th>${c.h}${c.hint && html`<span class="hint">${c.hint}</span>`}</th>`)}</tr></thead>
+      <thead><tr>${rep.R.cols.map(c => html`<th>${colHead(c)}${colHint(c) && html`<span class="hint">${colHint(c)}</span>`}</th>`)}</tr></thead>
       <tbody>${rowsF.map(r => html`<tr>${rep.R.cols.map(col => col.h === '姓名' ? html`<td><a class="namelink" onClick=${() => setEdit(r.caseId)} title="修改個案資料">${r.c.name}</a></td>` : cell(col, r))}</tr>`)}</tbody></table></div>`}
     ${edit && html`<${CaseEditor} key=${'rpt' + edit} db=${db} month=${month} user=${user} id=${edit} onClose=${() => setEdit(null)} refresh=${refresh} />`}
     <div class="sub" style="margin-top:8px">紅色＝逾期或日期有問題（滑鼠移上去看說明）；橘色＝逾期但還沒填原因。工作天已排除週末、國定假日與颱風假（在「設定」維護）。計畫擬定以上午／下午分界（中午 12 點）：督導審核當段算第 1 天，下午就跳到下一個工作天；沒選時當作上午。</div>`}
