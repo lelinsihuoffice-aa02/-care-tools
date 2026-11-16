@@ -1928,10 +1928,15 @@ function fillTplSheet(xml, spec) {
     const tplCols = Object.keys(TR.cells).map(Number), last = tplCols.length ? Math.max(...tplCols) : 0;
     const cols = new Set([...tplCols, ...vals.map((v, j) => v === undefined ? -1 : j).filter(j => j >= 0)]);
     const cs = [...cols].sort((a, b) => a - b).map(c => {
-      const ref = colL(c) + r, tc = TR.cells[c], s = tc ? tc.s : (spec.styleFor ? spec.styleFor(tr, c, T) : (TR.cells[last] || {}).s);
+      const ref = colL(c) + r, tc = TR.cells[c]; let s = tc ? tc.s : (spec.styleFor ? spec.styleFor(tr, c, T) : (TR.cells[last] || {}).s);
       const v = vals[c];
       if (tc && same && ((v === undefined && spec.keepTpl) || (tc.f && spec.keepFormulas && (v === undefined || typeof v === 'number' || v === ''))))
         return `<c r="${ref}"${tc.attrs.replace(/\s*\br="[^"]*"/, '')}>${tc.body}</c>`.replace(`<c r="${ref}" `, `<c r="${ref}" `);
+      // 原檔有些格子格式是「日期」，寫天數進去會變成 1900/1/0 → 改借同一欄其他列的一般格式
+      if (typeof v === 'number' && spec.dateStyles && spec.dateStyles.has(String(s))) {
+        let alt; for (const row of Object.values(T.rows)) { const x = row.cells[c]; if (x && !spec.dateStyles.has(String(x.s))) { alt = x.s; break; } }
+        s = alt;
+      }
       return cellXml(ref, v, s);
     });
     let attrs = TR.attrs; if (height) attrs = attrs.replace(/\s*\bht="[^"]*"|\s*customHeight="[^"]*"/g, '') + ` ht="${height}" customHeight="1"`;
@@ -1946,6 +1951,14 @@ function fillTplSheet(xml, spec) {
     x = /<cols>[\s\S]*?<\/cols>/.test(x) ? x.replace(/<cols>[\s\S]*?<\/cols>/, cx) : x.replace('<sheetData>', cx + '<sheetData>');
   }
   return x;
+}
+// styles.xml 裡哪些格式是日期（內建 14～22、45～47，或自訂格式含 y/m/d）
+function dateStyleIds(styles) {
+  const custom = {}; for (const m of styles.matchAll(/<numFmt numFmtId="(\d+)" formatCode="([^"]*)"/g)) custom[m[1]] = m[2];
+  const isDate = id => (id >= 14 && id <= 22) || (id >= 45 && id <= 47) || (custom[id] && /[ymd]/i.test(custom[id].replace(/"[^"]*"|\[[^\]]*\]/g, '')));
+  const xfs = (styles.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/) || [])[1] || '', out = new Set();
+  [...xfs.matchAll(/<xf\b([^>]*)/g)].forEach((m, i) => { const id = +((/numFmtId="(\d+)"/.exec(m[1]) || [])[1] || 0); if (isDate(id)) out.add(String(i)); });
+  return out;
 }
 // 把多張工作表組成一個 xlsx 檔（files：範本裡的 styles／theme）
 function xlsxPackage(sheetXmls, names, styles, theme) {
@@ -2329,7 +2342,7 @@ async function loadXlsxTpl(name) {
 // outs：[{ name, src: 範本工作表, spec }]
 async function writeTplXlsx(tplName, outs, fileName) {
   const T = await loadXlsxTpl(tplName), zip = new T.JSZip();
-  const files = xlsxPackage(outs.map(o => fillTplSheet(T.sheets[o.src], typeof o.spec === 'function' ? o.spec(readTplSheet(T.sheets[o.src])) : o.spec)), outs.map(o => o.name), T.styles, T.theme);
+  const ds = dateStyleIds(T.styles), files = xlsxPackage(outs.map(o => { const sp = typeof o.spec === 'function' ? o.spec(readTplSheet(T.sheets[o.src])) : o.spec; return fillTplSheet(T.sheets[o.src], { ...sp, dateStyles: ds }); }), outs.map(o => o.name), T.styles, T.theme);
   for (const [k, v] of Object.entries(files)) zip.file(k, v);
   downloadBlob(await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fileName);
 }
