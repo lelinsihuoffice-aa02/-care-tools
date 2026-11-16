@@ -1851,7 +1851,7 @@ function fillMonthlyTemplate(files, spec) {
   }
   return out;
 }
-const xmlEsc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const xmlEsc = s => String(s).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 function chartXml(ch) {
   const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
   const strCache = `<c:strCache><c:ptCount val="${ch.cats.length}"/>${ch.cats.map((v, i) => `<c:pt idx="${i}"><c:v>${xmlEsc(v)}</c:v></c:pt>`).join('')}</c:strCache>`;
@@ -1919,6 +1919,41 @@ function readTplSheet(xml) {
   const merges = [...xml.matchAll(/<mergeCell ref="([^"]+)"/g)].map(m => m[1]);
   return { rows, merges };
 }
+// 公式先算好結果一起存（Excel 開「受保護的檢視」時不會重算，沒有結果就會一片空白）
+// 範本裡的公式只有加減乘除、SUM(A1:B2) 這幾種
+function withFormulaValues(out) {
+  const num = {}, fx = {};
+  for (const m of out.matchAll(/<c r="([A-Z]+\d+)"([^>/]*)>([\s\S]*?)<\/c>/g)) {
+    const f = /<f>([^<]*)<\/f>/.exec(m[3]);
+    if (f) fx[m[1]] = f[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    else if (!/\bt="/.test(m[2])) { const v = /<v>([^<]*)<\/v>/.exec(m[3]); if (v && v[1] !== '' && isFinite(+v[1])) num[m[1]] = +v[1]; }
+  }
+  const colN = c => [...c].reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0);
+  const memo = {}, busy = new Set();
+  const get = ref => {
+    ref = ref.replace(/\$/g, '');
+    if (ref in memo) return memo[ref];
+    if (!(ref in fx)) return num[ref] || 0;
+    if (busy.has(ref)) return NaN;
+    busy.add(ref);
+    let v;
+    try {
+      const js = fx[ref].replace(/SUM\((\$?[A-Z]+\$?\d+):(\$?[A-Z]+\$?\d+)\)/gi, (m0, a, b) => {
+        const [, c1, r1] = /([A-Z]+)(\d+)/.exec(a.replace(/\$/g, '')), [, c2, r2] = /([A-Z]+)(\d+)/.exec(b.replace(/\$/g, ''));
+        let t = 0; for (let c = Math.min(colN(c1), colN(c2)); c <= Math.max(colN(c1), colN(c2)); c++) for (let r = Math.min(+r1, +r2); r <= Math.max(+r1, +r2); r++) { const x = get(colL(c - 1) + r); t += isFinite(x) ? x : 0; }
+        return '(' + t + ')';
+      }).replace(/\$?([A-Z]{1,3})\$?(\d+)/g, (m0, c, r) => '(' + get(c + r) + ')');
+      v = /^[\d\s+\-*/().eEaNInfity]*$/.test(js) ? Function('return (' + js + ')')() : undefined;
+    } catch { v = undefined; }
+    busy.delete(ref); memo[ref] = v; return v;
+  };
+  return out.replace(/<c r="([A-Z]+\d+)"([^>/]*)><f>([^<]*)<\/f>(?:<v>[^<]*<\/v>)?<\/c>/g, (m0, ref, attrs, f) => {
+    const v = get(ref), a = attrs.replace(/\s*\bt="[^"]*"/, '');
+    if (typeof v === 'number' && isFinite(v)) return `<c r="${ref}"${a}><f>${f}</f><v>${Math.round(v * 1e10) / 1e10}</v></c>`;
+    if (typeof v === 'number') return `<c r="${ref}"${a} t="e"><f>${f}</f><v>#DIV/0!</v></c>`;
+    return m0;
+  });
+}
 function fillTplSheet(xml, spec) {
   const T = readTplSheet(xml);
   const cellXml = (ref, v, s) => {
@@ -1951,10 +1986,17 @@ function fillTplSheet(xml, spec) {
     let attrs = TR.attrs; if (height) attrs = attrs.replace(/\s*\bht="[^"]*"|\s*customHeight="[^"]*"/g, '') + ` ht="${height}" customHeight="1"`;
     out += `<row r="${r}"${attrs}>${cs.join('')}</row>`;
   }
+  out = withFormulaValues(out);
   const merges = spec.merges || T.merges;
   let x = xml.replace(/<dimension [^>]*\/>/, '').replace(/<sheetData>[\s\S]*?<\/sheetData>|<sheetData\/>/, `<sheetData>${out}</sheetData>`)
     .replace(/<mergeCells[\s\S]*?<\/mergeCells>/, '').replace(/<autoFilter[\s\S]*?(\/>|<\/autoFilter>)/, '');
-  if (merges.length) x = x.replace('</sheetData>', `</sheetData><mergeCells count="${merges.length}">${merges.map(m => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>`);
+  // mergeCells 要放在 Excel 規定的位置（sheetProtection 之後、pageMargins 之前），放錯 Excel 會說檔案損毀
+  if (merges.length) {
+    const mc = `<mergeCells count="${merges.length}">${merges.map(m => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>`, after = x.indexOf('</sheetData>') + 12;
+    const tags = ['<phoneticPr', '<conditionalFormatting', '<dataValidations', '<hyperlinks', '<printOptions', '<pageMargins', '<pageSetup', '<headerFooter', '<rowBreaks', '<colBreaks', '<drawing', '<legacyDrawing', '<tableParts', '<extLst', '</worksheet>'];
+    const at = Math.min(...tags.map(t => x.indexOf(t, after)).filter(i => i >= 0));
+    x = x.slice(0, at) + mc + x.slice(at);
+  }
   if (spec.colWidths) {   // 自訂欄寬：[{ c, w }]
     const cx = `<cols>${spec.colWidths.map(({ c, w }) => `<col min="${c + 1}" max="${c + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>`;
     x = /<cols>[\s\S]*?<\/cols>/.test(x) ? x.replace(/<cols>[\s\S]*?<\/cols>/, cx) : x.replace('<sheetData>', cx + '<sheetData>');
