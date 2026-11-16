@@ -41,6 +41,10 @@
   .t-new{background:var(--bluebg);color:var(--blue)}.t-close{background:#f1f5f9;color:#64748b}.t-ev{background:var(--soft);color:var(--green)}
   .t-warn{background:var(--redbg);color:var(--red)}.t-ok{background:var(--okbg);color:var(--ok)}.t-org{background:var(--orgbg);color:var(--org)}
   .tw{overflow:auto;border:1px solid var(--line);border-radius:14px;max-height:calc((100vh - 210px) / var(--z, 1));background:#fff}
+  /* 報表：序號、姓名固定在左邊 */
+  table.stick2 th:nth-child(1),table.stick2 td:nth-child(1){position:sticky;left:0;z-index:2;background:#fff;min-width:46px;max-width:46px}
+  table.stick2 th:nth-child(2),table.stick2 td:nth-child(2){position:sticky;left:46px;z-index:2;background:#fff;box-shadow:2px 0 0 var(--line)}
+  table.stick2 thead th:nth-child(1),table.stick2 thead th:nth-child(2){z-index:4;background:#f4ede3}
   table.grid{border-collapse:separate;border-spacing:0;font-size:13px;width:max-content;min-width:100%}
   .grid th{position:sticky;top:0;background:#f4ede3;font-weight:600;text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:2}
   .grid td{padding:6px 8px;border-bottom:1px solid #f0e8dc;white-space:nowrap;vertical-align:middle}
@@ -528,7 +532,7 @@ const supDate = r => isDc(r) ? r.e.visit : r.e.supervisor;
 
 const REPORTS = {
   dispatch: {
-    title: '個管員派案時效及品質名冊', note: '當月新案（含出轉初）',
+    title: '個管員派案時效及品質名冊', note: '當月新案（含出轉初）', bTrack: true,
     filter: e => isNewTrigger(e.trigger),
     cols: [
       { h: '序號', v: r => r.i },
@@ -544,19 +548,19 @@ const REPORTS = {
       { h: '照專簽審上/下午', edit: 'approveTime', opts: AMPM, width: 80, hide: isDc },
       { h: '送審至照專簽審(日曆天)', num: 1, v: r => r.k.sa, hint: '僅供檢查，不列入完成率',
         bad: r => r.k.sa > 3 ? '逾3天' : r.k.sa < 0 ? '日期順序錯誤' : '' },
-      { h: '照會B單位日期', date: 1, v: r => r.e.referB },
+      { h: '照會B單位日期', date: 1, noB: 1, v: r => r.e.referB },
       { h: '訪案及計畫擬定3天內完成率', num: 1, v: r => r.k.plan, hint: '督導審核→照專簽審，工作天，上下午分界；出備：訪視→簽審',
         bad: r => r.k.plan > 3 ? '逾3天' : r.k.plan !== null && r.k.plan < 1 ? '日期順序錯誤' : '',
         warn: r => r.k.plan !== null && !isDc(r) && (!r.e.supervisorTime || !r.e.approveTime) ? '未選上/下午' : '' },
       { h: '逾3天未完成計畫擬定原因', edit: 'planLate', need: r => r.k.plan > 3 },
-      { h: '個管照會B單位(工作天)', num: 1, v: r => r.k.toB, bad: r => r.k.toB > 3 ? '逾3天' : r.k.toB < 0 ? '日期順序錯誤' : '' },
-      { h: '逾3天未完成照會B單位原因', edit: 'referBLate', opts: OPTS.referBLate, need: r => r.k.toB > 3 },
+      { h: '個管照會B單位(工作天)', num: 1, noB: 1, v: r => r.k.toB, bad: r => r.k.toB > 3 ? '逾3天' : r.k.toB < 0 ? '日期順序錯誤' : '' },
+      { h: '逾3天未完成照會B單位原因', noB: 2, edit: 'referBLate', opts: OPTS.referBLate, need: r => r.k.toB > 3 },
       { h: '派案B單位機制', edit: 'dispatchMech', opts: OPTS.dispatchMech, fallback: r => mechToOpt(bMechOf(r.c)), hint: '沒填時帶入個案服務單位的指定／輪派' },
-      { h: 'B單位第一次提供服務日期', edit: 'bFirst', type: 'date', fallback: r => r.bFirstAuto, hint: '沒填時帶入總表的「B單位第一次提供服務日期（居服進場）」' },
-      { h: '服務連結時效(工作天)', num: 1, v: r => r.k.link, hint: '照會B單位→B單位首次服務', bad: r => r.k.link > 6 ? '逾期（超過3+3天）' : r.k.link < 0 ? '日期順序錯誤' : '' },
-      { h: 'B單位逾3+3天未提供服務原因', edit: 'bLate', opts: OPTS.bLate, need: r => r.k.link > 6 },
-      { h: '服務逾期追蹤日期', edit: 'followDate', type: 'date' },
-      { h: '服務逾期追蹤結果', edit: 'followResult' },
+      { h: 'B單位第一次提供服務日期', noB: 1, edit: 'bFirst', type: 'date', fallback: r => r.bFirstAuto, hint: '沒填時帶入總表的「B單位第一次提供服務日期（居服進場）」' },
+      { h: '服務連結時效(工作天)', num: 1, noB: 1, v: r => r.k.link, hint: '照會B單位→B單位首次服務', bad: r => r.k.link > 6 ? '逾期（超過3+3天）' : r.k.link < 0 ? '日期順序錯誤' : '' },
+      { h: 'B單位逾3+3天未提供服務原因', noB: 2, edit: 'bLate', opts: OPTS.bLate, need: r => r.k.link > 6 },
+      { h: '服務逾期追蹤日期', noB: 2, edit: 'followDate', type: 'date' },
+      { h: '服務逾期追蹤結果', noB: 2, edit: 'followResult' },
       { h: '照專派貴單位的機制', edit: 'assignMech', opts: OPTS.assignMech, fallback: r => mechToOpt(r.c.aMech), hint: '沒填時帶入個案的 A單位指定／輪派' },
     ],
     calc: (r, H) => ({
@@ -640,6 +644,22 @@ function rate(rows, f, ok) {
 
 // db：{ cases: Map(id→case), events: [event], holidays: {date→kind}, resolveUnit }
 // 事件 event = { _id, caseId, month, ...欄位 }；個案 case = { _id, caseNo, ...欄位 }
+// 需要追蹤 B 單位（照會、第一次提供服務）嗎？有 BA 碼（不含沐浴車 BA09）或 BB 碼才需要
+// 不需要時回傳要顯示的文字，例如「僅交通」「僅交通、輔具」
+function noBText(e, c, month, db) {
+  const codes = String(e.codes || latestCodes(db, c, month) || '').toUpperCase().split(/[,，、;；\s]+/).filter(Boolean);
+  const home = String(monthSvc(e, c)('home') || '').trim();
+  if (codes.length) {
+    if (codes.some(x => /^BA(?!09)/.test(x) || /^BB/.test(x))) return '';
+  } else if (!/^(僅|只有)/.test(home)) return '';   // 沒有服務代碼：居服單位有寫單位就當作要追蹤
+  else if (/日照/.test(home)) return '';
+  if (/^(僅|只有)/.test(home)) return home.replace(/^只有/, '僅');
+  const names = { 沐浴車: '沐浴車', 交通: '交通', 輔具: '輔具', 喘息: '喘息' }, cc = codeCounts(codes.join(','));
+  const ks = Object.keys(names).filter(k => cc[k]);
+  if (codes.some(x => /^C[A-D]/.test(x))) ks.push('專業服務');
+  if (codes.some(x => /^OT/.test(x))) ks.push('營養餐飲');
+  return ks.length ? '僅' + ks.join('、') : '無B碼';
+}
 function buildReport(key, month, db) {
   const R = REPORTS[key];
   const evs = db.events.filter(e => e.month === month && R.filter(e) && db.cases.has(e.caseId));
@@ -662,7 +682,10 @@ function buildReport(key, month, db) {
     for (const x of db.events) if (x.caseId === e.caseId && x.month >= month && x.bFirst && (!bf || x.bFirst < bf)) bf = x.bFirst;
     if (!bf && c.homeStart && c.homeStart >= (e.assess || e.referA || month + '-01').slice(0, 7) + '-01') bf = c.homeStart;
     r.bFirstAuto = bf;
+    // 只有 BA 碼（不含沐浴車 BA09）、BB 碼要照會 B 單位、追蹤第一次提供服務；其他（僅交通、僅輔具…）這幾欄填文字、不計算
+    r.noB = R.bTrack ? noBText(e, c, month, db) : '';
     r.k = R.calc(r, db.holidays, ctx);
+    if (r.noB) { r.k.toB = null; r.k.link = null; }
     return r;
   });
   return { R, rows, summary: R.summary(rows) };
@@ -679,6 +702,7 @@ function bMechOf(c) {
 }
 const editVal = (col, r) => (r.e[col.edit] || (col.fallback ? col.fallback(r) : '') || '');
 function cellText(col, r) {
+  if (col.noB && r.noB) return col.noB === 1 ? r.noB : '';
   const val = col.edit ? editVal(col, r) : col.v(r);
   if (val === null || val === undefined) return '';
   if (col.date || col.type === 'date') return roc(val);
@@ -1904,11 +1928,11 @@ const dt = v => /^\d{4}-\d\d-\d\d/.test(v || '') ? { date: v } : (v || '');
 const DISPATCH_X = [
   ['序號', r => r.i], ['姓名', r => r.c.name], ['身分證號', r => r.c.idNo], ['CMS', r => cmsLv(r.c.cms)],
   ['照專評估日期', r => dt(r.e.assess)], ['轉介A單位日期', r => dt(r.e.referA)], ['督導審核日期', r => dt(supDate(r))],
-  ['個管照顧計畫送審日期', r => dt(r.e.submit)], ['照專簽審日期', r => dt(r.e.approve)], ['照會B單位日期', r => dt(r.e.referB)],
+  ['個管照顧計畫送審日期', r => dt(r.e.submit)], ['照專簽審日期', r => dt(r.e.approve)], ['照會B單位日期', r => r.noB || dt(r.e.referB)],
   ['訪案及計畫擬定3天內完成率', r => r.k.plan], ['逾3天未完成計畫擬定原因', r => r.e.planLate || ''],
-  [null, r => calDays(r.e.assess, r.e.referA)], ['個管照會B單位(工作天)', r => r.k.toB], ['逾3天未完成照會B單位原因', r => r.e.referBLate || ''],
-  ['派案B單位機制', (r, R) => editVal(R.cols.find(c => c.edit === 'dispatchMech'), r)], ['B單位第一次提供服務日期', r => dt(r.e.bFirst || r.bFirstAuto)],
-  ['服務連結時效(工作天)', r => r.k.link], ['B單位逾3+3天未提供服務原因', r => r.e.bLate || ''], ['服務逾期追蹤日期', r => dt(r.e.followDate)],
+  [null, r => calDays(r.e.assess, r.e.referA)], ['個管照會B單位(工作天)', r => r.noB || r.k.toB], ['逾3天未完成照會B單位原因', r => r.e.referBLate || ''],
+  ['派案B單位機制', (r, R) => editVal(R.cols.find(c => c.edit === 'dispatchMech'), r)], ['B單位第一次提供服務日期', r => r.noB || dt(r.e.bFirst || r.bFirstAuto)],
+  ['服務連結時效(工作天)', r => r.noB || r.k.link], ['B單位逾3+3天未提供服務原因', r => r.e.bLate || ''], ['服務逾期追蹤日期', r => dt(r.e.followDate)],
   ['服務逾期追蹤結果', r => r.e.followResult || ''], ['照專派貴單位的機制', (r, R) => editVal(R.cols.find(c => c.edit === 'assignMech'), r)],
 ];
 const DISCHARGE_X = [
@@ -2780,8 +2804,22 @@ function ReportView({ db, month, user, refresh }) {
   if (UNIT_REPORTS[key]) return html`<${UnitStatReport} db=${db} month=${month} user=${user} refresh=${refresh} kind=${UNIT_REPORTS[key][0]} title=${UNIT_REPORTS[key][1]} picker=${picker} />`;
   return html`<${EvalReport} db=${db} month=${month} user=${user} refresh=${refresh} rkey=${key} picker=${picker} />`;
 }
+// 報表欄位太多時分頁看：每頁都固定顯示序號、姓名、CMS
+const REPORT_VIEWS = {
+  dispatch: {
+    計畫擬定: ['照專評估日期', '轉介A單位日期', '督導審核日期', '督導審核上/下午', '個管照顧計畫送審日期', '照專簽審日期', '照專簽審上/下午', '送審至照專簽審(日曆天)', '訪案及計畫擬定3天內完成率', '逾3天未完成計畫擬定原因'],
+    照會B單位: ['照專簽審日期', '照會B單位日期', '個管照會B單位(工作天)', '逾3天未完成照會B單位原因', '派案B單位機制', '照專派貴單位的機制'],
+    服務連結與追蹤: ['照會B單位日期', 'B單位第一次提供服務日期', '服務連結時效(工作天)', 'B單位逾3+3天未提供服務原因', '服務逾期追蹤日期', '服務逾期追蹤結果'],
+  },
+};
+const REPORT_FIXED = ['序號', '姓名', 'CMS'];
 function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
-  const rep = useMemo(() => buildReport(key, month, db), [key, month, db]);
+  const rep0 = useMemo(() => buildReport(key, month, db), [key, month, db]);
+  const views = REPORT_VIEWS[key];
+  const [view, setView] = useState(() => { try { return localStorage.getItem('rptView:' + key) || '全部欄位'; } catch { return '全部欄位'; } });
+  const pickView = v => { setView(v); try { localStorage.setItem('rptView:' + key, v); } catch { } };
+  const shown = views && views[view] ? rep0.R.cols.filter(c => REPORT_FIXED.includes(c.h) || views[view].includes(c.h)) : rep0.R.cols;
+  const rep = { ...rep0, R: { ...rep0.R, cols: shown } };
   const save = async (r, field, val) => {
     try { await call('m', 'data:patchEvent', { caseId: r.caseId, month, patch: JSON.stringify({ [field]: val }), by: user }); await refresh(); }
     catch (e) { toast('儲存失敗：' + e.message, true); }
@@ -2825,10 +2863,13 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
     <div class="tw"><table class="grid"><thead><tr>${rep.R.cols.map(c => html`<th>${c.h}</th>`)}</tr></thead>
       <tbody>${hist.rows.map(r => html`<tr>${histRowFor(rep.R, hist, r).map(v => html`<td>${v}</td>`)}</tr>`)}</tbody></table></div>`
     : rep.rows.length === 0 ? html`<div class="card empty">${rocMonth(month)}沒有符合條件的個案</div>` : html`
-    <div class="tw"><table class="grid">
+    ${views && html`<div style="margin:0 0 8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px"><span class="ampm">${['全部欄位', ...Object.keys(views)].map(v => html`<button class=${view === v ? 'on' : ''} onClick=${() => pickView(v)}>${v}</button>`)}</span>
+      <span class="sub" style="margin-left:8px">序號、姓名固定在左邊，左右捲動時不會跑掉</span></div>`}
+    <div class="tw"><table class="grid stick2">
       <thead><tr>${rep.R.cols.map(c => html`<th>${c.h}${c.hint && html`<span class="hint">${c.hint}</span>`}</th>`)}</tr></thead>
       <tbody>${rep.rows.map(r => html`<tr>${rep.R.cols.map(col => {
         if (col.edit && col.hide && col.hide(r)) return html`<td class="sub">—</td>`;
+        if (col.noB && r.noB) return html`<td class=${'sub' + (col.num ? ' num' : '')} title="沒有 BA（不含沐浴車）／BB 碼，不追蹤 B 單位">${col.noB === 1 ? r.noB : ''}</td>`;
         if (col.edit) {
           const need = col.need && col.need(r) && !r.e[col.edit];
           return html`<td class=${need ? 'need' : ''} title=${need ? '逾期，請填寫原因' : ''}>${col.type === 'date'
