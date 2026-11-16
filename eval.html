@@ -764,9 +764,17 @@ function onlyCatOf(v) {
   return hit ? hit.key : null;
 }
 // 一個個案在某個月各服務類別的單位（不是單位名稱的不算；「僅交通」但交通欄沒填 → 交通記「（未填單位）」）
+// 某個月該用的服務單位：那個月有匯入總表就照那個月；但 11 月起如果個案資料比那個月的資料晚改（在個案編輯改了單位），以個案資料為準
+function monthSvc(e, c) {
+  const es = (e && e.services) || {}, cs = (c && c.services) || {};
+  if (!e) return k => cs[k] || '';
+  if (!e.onList) return k => es[k] || cs[k] || '';
+  const caseNewer = e.month >= SYSTEM_FROM && (c.updatedAt || 0) > (e.updatedAt || 0);
+  return caseNewer ? k => (k in cs ? cs[k] : es[k]) || '' : k => es[k] || '';
+}
 function caseUnits(e, c, resolveUnit) {
   // 那個月有匯入總表（onList）→ 只看那個月總表寫的服務，不拿個案最新的服務去補（避免後來才加的居喘、短照算到以前的月份）
-  const out = {}, src = k => (e && (e.services || {})[k]) || (e && e.onList ? '' : (c.services || {})[k]) || '';
+  const out = {}, src = monthSvc(e, c);
   for (const cat of CATS) {
     const raw = src(cat.key);
     // 輔具：總表填的是申請數量，單位一律是雲林縣輔助器具資源中心
@@ -794,7 +802,7 @@ function unitStats(kind, month, db) {
     if (us.ctraffic === '（未填單位）') us.ctraffic = '社團法人雲林縣復健青年協進會(北港區)';
     for (const [k, u] of Object.entries(us)) {
       (out[k] = out[k] || {})[u] = (out[k][u] || 0) + 1;
-      if (u === '（未填單位）') unfilled.push({ k, caseId: e.caseId, month, raw: Object.fromEntries(CATS.map(x => [x.key, (e.services || {})[x.key] || (e.onList ? '' : (c.services || {})[x.key]) || '']).filter(([, v]) => v)) });
+      if (u === '（未填單位）') unfilled.push({ k, caseId: e.caseId, month, raw: Object.fromEntries(CATS.map(x => [x.key, monthSvc(e, c)(x.key)]).filter(([, v]) => v)) });
     }
   }
   Object.defineProperty(out, 'unfilled', { value: unfilled, enumerable: false });   // 未填單位的個案（畫面列出來方便補）
@@ -1551,7 +1559,7 @@ function dispatchStatMonth(month, db) {
     .sort((a, b) => String(db.cases.get(a.caseId).caseNo).localeCompare(String(db.cases.get(b.caseId).caseNo), 'zh-Hant', { numeric: true }));
   const rows = [], groups = { 指定: new Map(), 輪派: new Map() };
   evs.forEach((e, i) => {
-    const c = db.cases.get(e.caseId), own = k => String((e.services || {})[k] || '').trim(),
+    const c = db.cases.get(e.caseId), msv = monthSvc(e, c), own = k => String(msv(k) || '').trim(),
       // 那個月總表有寫服務單位就照那個月；那個月完全沒寫（例如居服單位欄空白）才用個案資料上的單位
       ownAny = CATS.some(x => isUnitName(own(x.key)) || /^(僅|只有)/.test(own(x.key))),
       sv = k => own(k) || (e.onList && ownAny ? '' : (c.services || {})[k]) || '', home = sv('home'),
@@ -2168,8 +2176,8 @@ const J = s => { try { return JSON.parse(s); } catch (e) { return {}; } };
 // 把快取轉成計算用的資料
 function buildDb() {
   const cases = new Map();
-  for (const x of store.rows.cases.values()) cases.set(x._id, { ...J(x.d), _id: x._id, caseNo: x.caseNo });
-  const events = [...store.rows.events.values()].map(x => ({ ...J(x.d), _id: x._id, caseId: x.caseId, month: x.month }));
+  for (const x of store.rows.cases.values()) cases.set(x._id, { ...J(x.d), _id: x._id, caseNo: x.caseNo, updatedAt: x.updatedAt });
+  const events = [...store.rows.events.values()].map(x => ({ ...J(x.d), _id: x._id, caseId: x.caseId, month: x.month, updatedAt: x.updatedAt }));
   // 舊版「請填全名」存成 aliases（沒有簡稱、只有一個服務類別）→ 當成統計表專用的對應，不影響總表與派案統計的顯示
   const units = [...store.rows.units.values()].map(x => ({ ...J(x.d), _id: x._id })).map(u => !u.short && (u.aliases || []).length && (u.cats || []).length === 1 && !u.statAliases
     ? { ...u, aliases: [], statOnly: true, statAliases: u.aliases.map(a => u.cats[0] + '|' + normName(a)) } : u);
@@ -2495,6 +2503,12 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
       const cp = diff(orig || {}, c);
       if (!curId || Object.keys(cp).length || caseNo !== orig.caseNo) cid = await call('m', 'data:saveCase', { id: curId || undefined, caseNo: caseNo.trim(), d: JSON.stringify(curId ? cp : c), by: user });
       const ep = diff(evOrig || {}, ev);
+      // 個案的服務單位改了 → 這個月的資料也一起改（統計、派案統計看的是這個月的資料）
+      if (evOrig) {
+        const caseNewer = cp.services || (orig && (orig.updatedAt || 0) > (evOrig.updatedAt || 0));
+        const sync = {}; if (caseNewer) for (const k of CATS.map(x => x.key)) { const a = String((c.services || {})[k] || ''), b = String((evOrig.services || {})[k] || ''); if (a !== b) sync[k] = a; }
+        if (Object.keys(sync).length) ep.services = { ...(ep.services || {}), ...sync };
+      }
       if (Object.keys(ep).length) await call('m', 'data:patchEvent', { caseId: cid, month: em, patch: JSON.stringify(ep), by: user });
       writeDraft(null); await refresh(); toast('已儲存'); onClose();
     } catch (e) { console.error(e); toast('儲存失敗：' + (e.message || e), true); }
