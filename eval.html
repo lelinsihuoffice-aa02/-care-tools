@@ -47,6 +47,14 @@
   table.stick2 thead th:nth-child(1),table.stick2 thead th:nth-child(2){z-index:4;background:#f4ede3}
   /* 評鑑報表：全部置中（跟原本 Excel 一樣） */
   table.ctr th,table.ctr td,table.ctr td.num{text-align:center}
+  /* 評鑑報表：精簡表格、展開明細、點姓名修改 */
+  a.namelink{color:var(--ink);font-weight:700;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer}
+  a.namelink:hover{color:var(--green)}
+  table.cmp tr.open td{background:#FBF3E6}
+  table.cmp tr.detail td{background:#FFFCF7;text-align:left;padding:10px 16px;white-space:normal}
+  table.grid.cmp{width:100%}
+  .dgrid{display:flex;flex-wrap:wrap;gap:10px 26px;align-items:center;width:0;min-width:100%}
+  .dcell{display:flex;align-items:center;gap:6px}.dcell .dl{color:var(--sub);font-size:12px}
   table.grid{border-collapse:separate;border-spacing:0;font-size:13px;width:max-content;min-width:100%}
   .grid th{position:sticky;top:0;background:#f4ede3;font-weight:600;text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:2}
   .grid td{padding:6px 8px;border-bottom:1px solid #f0e8dc;white-space:nowrap;vertical-align:middle}
@@ -2248,10 +2256,15 @@ function AmPm({ value, onChange }) {
 function TextCell({ value, onChange, opts, width }) {
   const [txt, setTxt] = useState(value || '');
   useEffect(() => setTxt(value || ''), [value]);
-  if (opts) return html`<select class="inp" style=${'width:' + (width || 150) + 'px'} value=${value || ''} onChange=${e => onChange(e.target.value)}>
+  // 寬度隨文字長度變（太長就換成可多行的框）
+  const w0 = width || (opts ? 150 : 170), fit = t => Math.min(460, Math.max(w0, String(t || '').length * 14 + (opts ? 46 : 30)));
+  if (opts) return html`<select class="inp" style=${'width:' + fit(value) + 'px'} value=${value || ''} onChange=${e => onChange(e.target.value)}>
     <option value=""></option>${opts.map(o => html`<option value=${o}>${o}</option>`)}
     ${value && !opts.includes(value) ? html`<option value=${value}>${value}</option>` : ''}</select>`;
-  return html`<input class="inp" style=${'width:' + (width || 170) + 'px'} value=${txt} onInput=${e => setTxt(e.target.value)}
+  const long = String(txt || '').length * 14 + 30 > 460;
+  if (long) return html`<textarea class="inp" style="width:460px;resize:vertical;line-height:1.5" rows=${Math.min(6, Math.ceil(String(txt).length * 14 / 430))} value=${txt} onInput=${e => setTxt(e.target.value)}
+    onBlur=${() => { if ((txt || '') !== (value || '')) onChange(txt); }} />`;
+  return html`<input class="inp" style=${'width:' + fit(txt) + 'px'} value=${txt} onInput=${e => setTxt(e.target.value)}
     onBlur=${() => { if ((txt || '') !== (value || '')) onChange(txt); }} onKeyDown=${e => e.key === 'Enter' && e.target.blur()} />`;
 }
 function ConfirmBtn({ label, onYes, cls }) {
@@ -2551,7 +2564,9 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     try { await call('m', 'data:remove', { table: 'events', id: evOrig._id, by: user }); await refresh(); toast(`已刪除 ${rocMonth(em)} 的觸發紀錄`); }
     catch (e) { toast('刪除失敗：' + e.message, true); }
   };
-  const field = (obj, set) => ([k, label, t]) => html`<label>${label}
+  // 地址這類長文字：字越多欄位越寬（跨 2 格或整列）
+  const growSpan = (k, v) => { if (!['address', 'srcNote', 'note', 'closeNote'].includes(k)) return ''; const n = String(v || '').length; return n > 24 ? 'grid-column:1/-1' : n > 11 ? 'grid-column:span 2' : ''; };
+  const field = (obj, set) => ([k, label, t]) => html`<label style=${growSpan(k, obj[k])}>${label}
     ${t && t.select ? html`<select class="inp" value=${obj[k] || ''} onChange=${e => set({ ...obj, [k]: e.target.value })}>
         <option value="">（未填）</option>${[...t.select, ...(obj[k] && !t.select.includes(obj[k]) ? [obj[k]] : [])].map(o => html`<option value=${o}>${o}</option>`)}</select>`
     : t === 'date' ? html`<${DateInput} style="width:100%" value=${obj[k] || ''} onChange=${v => set({ ...obj, [k]: v })} />`
@@ -2818,10 +2833,41 @@ const REPORT_FIXED = ['序號', '姓名', 'CMS'];
 function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
   const rep0 = useMemo(() => buildReport(key, month, db), [key, month, db]);
   const views = REPORT_VIEWS[key];
-  const [view, setView] = useState(() => { try { return localStorage.getItem('rptView:' + key) || '全部欄位'; } catch { return '全部欄位'; } });
-  const pickView = v => { setView(v); try { localStorage.setItem('rptView:' + key, v); } catch { } };
+  const [view, setView] = useState(() => { try { const v = localStorage.getItem('rptView2:' + key); return v || '精簡（點列展開）'; } catch { return '精簡（點列展開）'; } });
+  const pickView = v => { setView(v); try { localStorage.setItem('rptView2:' + key, v); } catch { } };
   const shown = views && views[view] ? rep0.R.cols.filter(c => REPORT_FIXED.includes(c.h) || views[view].includes(c.h)) : rep0.R.cols;
   const rep = { ...rep0, R: { ...rep0.R, cols: shown } };
+  const [edit, setEdit] = useState(null), [open, setOpen] = useState(null);
+  const compactName = '精簡（點列展開）', compact = !!views && view === compactName;
+  const colBy = h => rep0.R.cols.find(c => c.h === h) || { h, v: () => '' };
+  const CMP_COLS = ['訪案及計畫擬定3天內完成率', '個管照會B單位(工作天)', '服務連結時效(工作天)'];
+  const missingReason = r => rep0.R.cols.some(c => c.need && c.need(r) && !r.e[c.edit]);
+  const anyBad = r => rep0.R.cols.some(c => c.bad && c.bad(r));
+  const dateGap = r => !(isDc(r) ? r.e.visit : r.e.supervisor) || !r.e.approve || (key === 'dispatch' && !r.noB && (!r.e.referB || !(r.e.bFirst || r.bFirstAuto)));
+  const filters = [['all', '全部', () => true], ['bad', '有逾期／異常', anyBad], ['need', '逾期未填原因', missingReason], ...(key === 'dispatch' ? [['gap', '日期沒填齊', dateGap]] : [])];
+  const [flt, setFlt] = useState('all'), pickFlt = k => setFlt(k);
+  const rowsF = rep0.rows.filter((filters.find(f => f[0] === flt) || filters[0])[2]);
+  const statusOf = r => { const out = [];
+    for (const c of rep0.R.cols) { const m = c.bad && c.bad(r); if (m) out.push([`${c.h.replace(/\(.*\)|3天內完成率|日期/g, '')}${m}`, 't-warn']); }
+    if (missingReason(r)) out.push(['未填逾期原因', 't-org']);
+    if (key === 'dispatch' && dateGap(r)) out.push(['日期沒填齊', 't-close']);
+    return out; };
+  // 一格（可填或顯示）
+  const cellInner = (col, r) => {
+    if (col.edit && col.hide && col.hide(r)) return html`<span class="sub">—</span>`;
+    if (col.noB && r.noB) return html`<span class="sub">${col.noB === 1 ? r.noB : '—'}</span>`;
+    if (col.edit) return col.type === 'date'
+      ? html`<${DateInput} value=${editVal(col, r)} onChange=${v => save(r, col.edit, v)} />${!r.e[col.edit] && col.fallback && col.fallback(r) ? html`<span class="tag t-close" style="margin-left:4px" title="從總表帶入">帶入</span>` : ''}`
+      : col.opts === AMPM ? html`<${AmPm} value=${r.e[col.edit]} onChange=${v => save(r, col.edit, v)} />`
+      : html`<${TextCell} value=${editVal(col, r)} opts=${col.opts} width=${col.width} onChange=${v => save(r, col.edit, v)} />${!r.e[col.edit] && col.fallback && col.fallback(r) ? html`<span class="tag t-close" style="margin-left:4px" title="從個案資料帶入">帶入</span>` : ''}`;
+    const msg = col.bad ? col.bad(r) : '', warn = !msg && col.warn ? col.warn(r) : '';
+    return html`${cellText(col, r)}${msg && !col.num ? html` <span class="tag t-warn">${msg}</span>` : ''}${warn ? html` <span class="tag t-org">${warn}</span>` : ''}`;
+  };
+  const cell = (col, r) => {
+    if (col.noB && r.noB) return html`<td class="sub" title="沒有 BA（不含沐浴車）／BB 碼，不追蹤 B 單位">${col.noB === 1 ? r.noB : ''}</td>`;
+    const need = col.edit && col.need && col.need(r) && !r.e[col.edit], msg = !col.edit && col.bad ? col.bad(r) : '', warn = !col.edit && !msg && col.warn ? col.warn(r) : '';
+    return html`<td class=${(need ? 'need ' : '') + (msg ? 'flag' : '')} title=${need ? '逾期，請填寫原因' : (msg || warn)}>${cellInner(col, r)}</td>`;
+  };
   const save = async (r, field, val) => {
     try { await call('m', 'data:patchEvent', { caseId: r.caseId, month, patch: JSON.stringify({ [field]: val }), by: user }); await refresh(); }
     catch (e) { toast('儲存失敗：' + e.message, true); }
@@ -2865,23 +2911,25 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
     <div class="tw"><table class="grid ctr"><thead><tr>${rep.R.cols.map(c => html`<th>${c.h}</th>`)}</tr></thead>
       <tbody>${hist.rows.map(r => html`<tr>${histRowFor(rep.R, hist, r).map(v => html`<td>${v}</td>`)}</tr>`)}</tbody></table></div>`
     : rep.rows.length === 0 ? html`<div class="card empty">${rocMonth(month)}沒有符合條件的個案</div>` : html`
-    ${views && html`<div style="margin:0 0 8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px"><span class="ampm">${['全部欄位', ...Object.keys(views)].map(v => html`<button class=${view === v ? 'on' : ''} onClick=${() => pickView(v)}>${v}</button>`)}</span>
-      <span class="sub" style="margin-left:8px">序號、姓名固定在左邊，左右捲動時不會跑掉</span></div>`}
-    <div class="tw"><table class="grid stick2 ctr">
+    <div style="margin:0 0 8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+      <span class="ampm">${filters.map(([k, label, f]) => { const n = rep0.rows.filter(f).length; return html`<button class=${flt === k ? 'on' : ''} onClick=${() => pickFlt(k)}>${label} ${n}</button>`; })}</span>
+      <span class="grow"></span>
+      ${views && html`<span class="sub">看法：</span><span class="ampm">${[compactName, '完整表格', ...Object.keys(views)].map(v => html`<button class=${view === v ? 'on' : ''} onClick=${() => pickView(v)}>${v}</button>`)}</span>`}</div>
+    ${!rowsF.length ? html`<div class="card sub">沒有符合篩選的個案</div>`
+    : compact ? html`<div class="tw"><table class="grid ctr cmp">
+      <thead><tr><th>序號</th><th>姓名<span class="hint">點姓名修改個案資料</span></th><th>CMS</th>${CMP_COLS.map(h => html`<th>${h.replace('(工作天)', '').replace('3天內完成率', '')}<span class="hint">天數</span></th>`)}<th>狀態</th><th></th></tr></thead>
+      <tbody>${rowsF.map(r => { const isOpen = open === r.caseId, st = statusOf(r);
+        return html`<tr class=${'click' + (isOpen ? ' open' : '')} onClick=${() => setOpen(isOpen ? null : r.caseId)}>
+          <td>${r.i}</td><td><a class="namelink" onClick=${ev => { ev.stopPropagation(); setEdit(r.caseId); }} title="修改個案資料">${r.c.name}</a></td><td>${cellText(colBy('CMS'), r)}</td>
+          ${CMP_COLS.map(h => cell(colBy(h), r))}
+          <td>${st.length ? st.map(([t, cls]) => html`<span class=${'tag ' + cls} style="margin:1px">${t}</span>`) : html`<span class="tag t-new">準時</span>`}</td>
+          <td class="sub">${isOpen ? '▲' : '▼'}</td></tr>
+        ${isOpen && html`<tr class="detail"><td colspan=${CMP_COLS.length + 5}><div class="dgrid">${rep0.R.cols.filter(c => !['序號', '姓名', 'CMS', ...CMP_COLS].includes(c.h)).map(col => html`<div class="dcell"><span class="dl">${col.h}</span>${cellInner(col, r)}</div>`)}</div></td></tr>`}`; })}
+      </tbody></table></div>`
+    : html`<div class="tw"><table class="grid stick2 ctr">
       <thead><tr>${rep.R.cols.map(c => html`<th>${c.h}${c.hint && html`<span class="hint">${c.hint}</span>`}</th>`)}</tr></thead>
-      <tbody>${rep.rows.map(r => html`<tr>${rep.R.cols.map(col => {
-        if (col.edit && col.hide && col.hide(r)) return html`<td class="sub">—</td>`;
-        if (col.noB && r.noB) return html`<td class="sub" style="text-align:center" title="沒有 BA（不含沐浴車）／BB 碼，不追蹤 B 單位">${col.noB === 1 ? r.noB : ''}</td>`;
-        if (col.edit) {
-          const need = col.need && col.need(r) && !r.e[col.edit];
-          return html`<td class=${need ? 'need' : ''} title=${need ? '逾期，請填寫原因' : ''}>${col.type === 'date'
-            ? html`<${DateInput} value=${editVal(col, r)} onChange=${v => save(r, col.edit, v)} />${!r.e[col.edit] && col.fallback && col.fallback(r) ? html`<span class="tag t-close" style="margin-left:4px" title="從總表帶入">帶入</span>` : ''}`
-            : col.opts === AMPM ? html`<${AmPm} value=${r.e[col.edit]} onChange=${v => save(r, col.edit, v)} />`
-            : html`<${TextCell} value=${editVal(col, r)} opts=${col.opts} width=${col.width} onChange=${v => save(r, col.edit, v)} />${!r.e[col.edit] && col.fallback && col.fallback(r) ? html`<span class="tag t-close" style="margin-left:4px" title="從個案資料帶入">帶入</span>` : ''}`}</td>`;
-        }
-        const msg = col.bad ? col.bad(r) : '', warn = !msg && col.warn ? col.warn(r) : '';
-        return html`<td class=${(col.num ? 'num ' : '') + (msg ? 'flag' : '')} title=${msg || warn}>${cellText(col, r)}${msg && !col.num ? html` <span class="tag t-warn">${msg}</span>` : ''}${warn ? html` <span class="tag t-org">${warn}</span>` : ''}</td>`;
-      })}</tr>`)}</tbody></table></div>
+      <tbody>${rowsF.map(r => html`<tr>${rep.R.cols.map(col => col.h === '姓名' ? html`<td><a class="namelink" onClick=${() => setEdit(r.caseId)} title="修改個案資料">${r.c.name}</a></td>` : cell(col, r))}</tr>`)}</tbody></table></div>`}
+    ${edit && html`<${CaseEditor} key=${'rpt' + edit} db=${db} month=${month} user=${user} id=${edit} onClose=${() => setEdit(null)} refresh=${refresh} />`}
     <div class="sub" style="margin-top:8px">紅色＝逾期或日期有問題（滑鼠移上去看說明）；橘色＝逾期但還沒填原因。工作天已排除週末、國定假日與颱風假（在「設定」維護）。計畫擬定以上午／下午分界（中午 12 點）：督導審核當段算第 1 天，下午就跳到下一個工作天；沒選時當作上午。</div>`}
   </div>`;
 }
