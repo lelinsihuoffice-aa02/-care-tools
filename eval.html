@@ -1571,7 +1571,11 @@ function dispatchStatMonth(month, db) {
     const cc = codeCounts(e.codes || latestCodes(db, c, month));
     rows.push([i + 1, c.name || '', unit, ...CODE_COLS.map(k => cc[k] || '')]);
     const mech = c.svcMech || {}, who = `${c.name || ''}(${RG_CH[regionOf(c.caseNo)] || ''})`;
+    // 輔具：有申請輔具（輔具欄有數量、居家寫「僅輔具」或核定有輔具碼）一律列在「指定」欄的「輔具」（照原檔寫法）
+    if (aidsQty(sv('aids')) > 0 || /輔具/.test(String(home || '')) || (codeCounts(e.codes || latestCodes(db, c, month)).輔具 || 0) > 0)
+      groups.指定.set('輔具', [...(groups.指定.get('輔具') || []), who]);
     for (const [k, u] of Object.entries(units)) {
+      if (k === 'aids') continue;
       // 指定／輪派：個案資料「派案方式」優先；沒填就看派案時效「派案B單位機制」（1.個案意願＝指定、2.輪派）
       const dm = String(e.dispatchMech || ''), mm = mech[k] || (/^1|個案意願/.test(dm) ? '指定' : /^2|輪派/.test(dm) ? '輪派' : '');
       if (!MECH.includes(mm) || u === '（未填單位）') continue;
@@ -1579,7 +1583,7 @@ function dispatchStatMonth(month, db) {
       g.set(key, [...(g.get(key) || []), who]);
     }
   });
-  const lines = mm => [...groups[mm].entries()].map(([k, names]) => `${k}\n(${names.join('、')})`);
+  const lines = mm => [...groups[mm].entries()].sort((a, b) => (a[0] === '輔具') - (b[0] === '輔具')).map(([k, names]) => `${k}\n(${names.join('、')})`);   // 輔具放最後（照原檔）
   return { title: `${yy}年${m}月派案統計 : (總計人數${S.withClosed.length}人)`, head: ['編號', '姓名', '派案單位', ...CODE_COLS], rows, designated: lines('指定'), rotation: lines('輪派') };
 }
 function latestCodes(db, c, upTo) { let best = '', v = ''; for (const e of db.events) if (e.caseId === c._id && e.codes && e.month <= upTo && e.month >= best) { best = e.month; v = e.codes; } return v; }
