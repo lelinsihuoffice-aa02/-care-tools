@@ -45,6 +45,8 @@
   table.stick2 th:nth-child(1),table.stick2 td:nth-child(1){position:sticky;left:0;z-index:2;background:#fff;min-width:46px;max-width:46px}
   table.stick2 th:nth-child(2),table.stick2 td:nth-child(2){position:sticky;left:46px;z-index:2;background:#fff;box-shadow:2px 0 0 var(--line)}
   table.stick2 thead th:nth-child(1),table.stick2 thead th:nth-child(2){z-index:4;background:#f4ede3}
+  /* 評鑑報表：全部置中（跟原本 Excel 一樣） */
+  table.ctr th,table.ctr td,table.ctr td.num{text-align:center}
   table.grid{border-collapse:separate;border-spacing:0;font-size:13px;width:max-content;min-width:100%}
   .grid th{position:sticky;top:0;background:#f4ede3;font-weight:600;text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:2}
   .grid td{padding:6px 8px;border-bottom:1px solid #f0e8dc;white-space:nowrap;vertical-align:middle}
@@ -2860,16 +2862,16 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
       const sys = buildReport(key, mk, db).rows.length, h = histAll[mk];
       return html`<span class=${'tag ' + (mk === month ? 't-warn' : sys ? 't-new' : h ? 't-close' : '')} style="padding:4px 8px" title=${sys ? '系統資料' : h ? '匯入的舊資料' : '沒有資料'}>${+mk.slice(5)}月 ${sys ? '系統' + sys : h ? '匯入' + h.rows.length : '—'}</span>`; })}</div>
     ${hist ? html`<div class="card" style="background:#FDFBF6;margin-bottom:8px"><span class="tag t-close">匯入的舊資料</span> <span class="sub">${rocMonth(month)}有匯入舊報表，照匯入的內容顯示（11 月起才由系統產生；共 ${hist.rows.length} 筆，只能看，要修改請改原 Excel 再匯入一次）。</span></div>
-    <div class="tw"><table class="grid"><thead><tr>${rep.R.cols.map(c => html`<th>${c.h}</th>`)}</tr></thead>
+    <div class="tw"><table class="grid ctr"><thead><tr>${rep.R.cols.map(c => html`<th>${c.h}</th>`)}</tr></thead>
       <tbody>${hist.rows.map(r => html`<tr>${histRowFor(rep.R, hist, r).map(v => html`<td>${v}</td>`)}</tr>`)}</tbody></table></div>`
     : rep.rows.length === 0 ? html`<div class="card empty">${rocMonth(month)}沒有符合條件的個案</div>` : html`
     ${views && html`<div style="margin:0 0 8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px"><span class="ampm">${['全部欄位', ...Object.keys(views)].map(v => html`<button class=${view === v ? 'on' : ''} onClick=${() => pickView(v)}>${v}</button>`)}</span>
       <span class="sub" style="margin-left:8px">序號、姓名固定在左邊，左右捲動時不會跑掉</span></div>`}
-    <div class="tw"><table class="grid stick2">
+    <div class="tw"><table class="grid stick2 ctr">
       <thead><tr>${rep.R.cols.map(c => html`<th>${c.h}${c.hint && html`<span class="hint">${c.hint}</span>`}</th>`)}</tr></thead>
       <tbody>${rep.rows.map(r => html`<tr>${rep.R.cols.map(col => {
         if (col.edit && col.hide && col.hide(r)) return html`<td class="sub">—</td>`;
-        if (col.noB && r.noB) return html`<td class=${'sub' + (col.num ? ' num' : '')} title="沒有 BA（不含沐浴車）／BB 碼，不追蹤 B 單位">${col.noB === 1 ? r.noB : ''}</td>`;
+        if (col.noB && r.noB) return html`<td class="sub" style="text-align:center" title="沒有 BA（不含沐浴車）／BB 碼，不追蹤 B 單位">${col.noB === 1 ? r.noB : ''}</td>`;
         if (col.edit) {
           const need = col.need && col.need(r) && !r.e[col.edit];
           return html`<td class=${need ? 'need' : ''} title=${need ? '逾期，請填寫原因' : ''}>${col.type === 'date'
