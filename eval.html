@@ -1161,13 +1161,16 @@ function parseSummarySheet(aoa, month) {
   for (let i = hr + 1; i < aoa.length; i++) {
     const row = aoa[i]; if (!row) continue;
     const c = { services: {} }, e = { services: {} }; let caseNo = '';
+    let ageHint = null, birthSerial = false;
     heads.forEach((h, j) => {
+      if (h === '年齡') { const a = parseInt(String(row[j] ?? '').replace(/\D/g, ''), 10); if (a >= 0 && a < 130) ageHint = a; return; }
       const m = IMPORT_MAP[h]; if (!m) return;
       let val = row[j]; if (val === undefined || val === null) val = '';
       if (m[0] === 'caseNo') { caseNo = normCaseNo(val); return; }
       if (m[2] === 'date') {
         const t = timeFromText(val);
         if (t && m[0] === 'e' && (m[1] === 'supervisor' || m[1] === 'approve')) e[m[1] + 'Time'] = toAmPm(t);
+        if (m[1] === 'birth' && typeof val === 'number') birthSerial = true;
         val = parseDate(typeof val === 'number' ? Math.floor(val) : String(val).trim().replace(/(\s+|上午|下午|早上|晚上).*$/, ''));
       } else val = String(val).trim();
       if (m[0] === 'c') c[m[1]] = val;
@@ -1178,6 +1181,7 @@ function parseSummarySheet(aoa, month) {
       if (c.name && c.name !== '姓名') skipped.push({ row: i + 1, caseNo, name: c.name, why: caseNo ? '編號格式不對' : '沒有編號' });
       continue;
     }
+    if (c.birth) c.birth = fixBirth(c.birth, ageHint, birthSerial);   // 出生日期是民國年被 Excel 當西元 → 用「年齡」欄對回來
     e.trigger = normTrigger(e.trigger);   // 「-」視為沒有觸發
     const hasTrigger = !!e.trigger;
     // 個案也存一份最新日期，總表畫面不用回頭找事件
@@ -1290,6 +1294,16 @@ const genderOf = c => /男/.test(c.gender || '') ? '男' : /女/.test(c.gender |
 const identOf = c => { const s = String(c.identity || ''); return /中低/.test(s) ? '中低收' : /低收/.test(s) ? '低收入戶' : '一般戶'; };
 const disOf = c => { const s = String(c.disLevel || ''); for (const k of ['極重度', '重度', '中度', '輕度']) if (s.includes(k)) return k; return '無'; };
 const cmsOf = c => cmsNum(c.cms);
+// 出生日期修正：總表的出生日期其實是「民國年」（例如 27/4/10＝民國27年），
+// 但 Excel 把它當成西元 2027/4/10、77/9/7 當成 1977/9/7 → 真正的年份是「後兩位＋1911」。
+// 有「年齡」欄就選跟年齡最接近的寫法；Excel 日期格（fromSerial）一律當民國年；其他只修明顯錯的（20xx 年、未滿 18 歲）
+function fixBirth(iso, ageHint, fromSerial) {
+  const m = /^(\d{4})(-\d\d-\d\d)$/.exec(iso || ''); if (!m) return iso;
+  const y = +m[1], now = new Date().getFullYear(), roc = (y % 100) + 1911;
+  if (ageHint != null) { const c = [y, roc, y - 100].sort((p, q) => Math.abs(now - p - ageHint) - Math.abs(now - q - ageHint))[0]; return c + m[2]; }
+  if (fromSerial) return roc + m[2];
+  return y >= 2000 && now - y < 18 ? roc + m[2] : iso;
+}
 function ageAt(c, month) {
   if (!c.birth) return null;
   const end = addDays(shiftMonth(month, 1) + '-01', -1);
@@ -2136,7 +2150,7 @@ function summaryTplSpec(aoa, month, db) {
   const dash = new Set([1, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 14]);   // 原檔空白寫「-」的欄
   for (let i = 1; i <= n; i++) {
     const v = aoa[i].slice(0, SUMMARY_X).map((x, j) => (x === '' || x == null) && dash.has(j) ? '-' : x);
-    if (v[9] && /^\d{2,3}\/\d\d\/\d\d$/.test(v[9])) v[9] = { date: parseDate(v[9]) };   // 出生日期：原檔是日期
+    // 出生日期寫成民國年文字（例如 27/04/10），跟原檔看起來一樣、不會被 Excel 當成西元
     if (typeof v[10] === 'number') v[10] = v[10] + '歲';
     if (v[11] && /^\d$/.test(String(v[11]))) v[11] = v[11] + '級';
     rows.push({ r: i + 1, tr: /^新案/.test(String(v[1] || '')) ? 499 : 2, vals: v });   // 本月新案：原檔用底色標示（借原檔新案那列的格式）
@@ -2334,7 +2348,7 @@ const J = s => { try { return JSON.parse(s); } catch (e) { return {}; } };
 // 把快取轉成計算用的資料
 function buildDb() {
   const cases = new Map();
-  for (const x of store.rows.cases.values()) cases.set(x._id, { ...J(x.d), _id: x._id, caseNo: x.caseNo, updatedAt: x.updatedAt });
+  for (const x of store.rows.cases.values()) { const c = { ...J(x.d), _id: x._id, caseNo: x.caseNo, updatedAt: x.updatedAt }; if (c.birth) c.birth = fixBirth(c.birth); cases.set(x._id, c); }
   const events = [...store.rows.events.values()].map(x => ({ ...J(x.d), _id: x._id, caseId: x.caseId, month: x.month, updatedAt: x.updatedAt }));
   // 舊版「請填全名」存成 aliases（沒有簡稱、只有一個服務類別）→ 當成統計表專用的對應，不影響總表與派案統計的顯示
   const units = [...store.rows.units.values()].map(x => ({ ...J(x.d), _id: x._id })).map(u => !u.short && (u.aliases || []).length && (u.cats || []).length === 1 && !u.statAliases
