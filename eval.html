@@ -1245,6 +1245,13 @@ function closureList(db) {
       if (!s.area && imp.area) s.area = imp.area;
       continue;
     }
+    // 匯入的紀錄之間：同一人、同一個系統結案日期（例如結案 Excel 一筆＋重開案時系統自動保留的一筆）→ 合併成一列
+    const twin = out.find(o => o.from === 'import' && personKey(o.idNo, o.name) === personKey(imp.idNo, imp.name) && o.sysClose && o.sysClose === imp.sysClose && (!o.aEnd || !imp.aEnd || o.aEnd === imp.aEnd));
+    if (twin) {
+      for (const k of ['aEnd', 'sysClose', 'reason', 'codes', 'area']) if (!twin[k] && imp[k]) twin[k] = imp[k];
+      twin.dupIds = [...(twin.dupIds || []), imp.id]; if (imp.order < twin.order) twin.order = imp.order;
+      continue;
+    }
     out.push(imp);
   }
   // 預設照 Excel 原本的列順序；系統裡新結案的排在後面（依系統結案日期由舊到新）
@@ -2684,7 +2691,9 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
         for (const e of db.events) if (e.caseId === orig._id && e.codes && (!old.codes || e.month >= old.cm)) { old.codes = e.codes; old.cm = e.month; }
         delete old.cm;
         const key = closureKey(old.idNo, old.sysClose, old.name);
-        if (!(db.closures || []).some(x => x.key === key)) await call('m', 'data:saveClosure', { key, d: JSON.stringify(old), by: user });
+        const pk = personKey(old.idNo, old.name);
+        if (!(db.closures || []).some(x => x.key === key || (personKey(x.idNo, x.name) === pk && x.sysClose && x.sysClose === old.sysClose)))
+          await call('m', 'data:saveClosure', { key, d: JSON.stringify(old), by: user });
       }
       if (!curId || Object.keys(cp).length || caseNo !== orig.caseNo) cid = await call('m', 'data:saveCase', { id: curId || undefined, caseNo: caseNo.trim(), d: JSON.stringify(curId ? cp : c), by: user });
       const ep = diff(evOrig || {}, ev);
