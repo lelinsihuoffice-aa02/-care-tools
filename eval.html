@@ -1058,7 +1058,9 @@ function monthSummary(month, db) {
     //   系統裡自己新增／編輯過的（那個月有觸發紀錄）也算
     const onSheet = m => !listedMonths.has(m) || (x0.evMonths && x0.evMonths.has(m));
     // 有匯入 Excel 的月份，跟 Excel 一樣算：總表上的人，扣掉這個月觸發是結案類（結案-、1月結案-、複評-1700/結案-…）的
-    const sheetActive = m => { const t = (m === month ? trigNow : trigPrev).get(id) || ''; return onSheet(m) && !closeMonthOf(t, m); };
+    // 不在那個月 Excel 上、只是系統裡有那個月的紀錄（例如在系統改資料、找回的紀錄）：之前已經結案的不算在案
+    const closedBefore = m => { if (x0.listed && x0.listed.has(m)) return false; const ep = epAt(x0, m); return !!(ep.close && ep.close < m && !(ep.open && ep.open > ep.close)); };
+    const sheetActive = m => { const t = (m === month ? trigNow : trigPrev).get(id) || ''; return onSheet(m) && !closeMonthOf(t, m) && !closedBefore(m); };
     const activeEnd = m => listedMonths.has(m) ? sheetActive(m) : x.open <= m && !(x.close && x.close <= m);
     const activePrev = listedMonths.has(prev) ? sheetActive(prev) : xp.open && xp.open <= prev && !(xp.close && xp.close <= prev);
     if (activePrev) { s.inCase[rg]++; s.src[srcGroup(c.src)]++; s.ids.inCase.push(id); }
@@ -3767,10 +3769,24 @@ function ImportView({ db, user, refresh, month }) {
         if (!inSummaryList(c, info, m)) miss.push({ caseNo: row.caseNo, name: c.name, trig: row.hasTrigger ? row.e.trigger : '-',
           why: `系統算的開案月 ${info.open ? rocMonth(info.open) : '無'}、結案月 ${info.close ? rocMonth(info.close) : '無'}；A結束 ${roc(c.aEnd) || '空'}、系統結案 ${roc(c.sysClose) || '空'}${info.listed && info.listed.has(m) ? '' : '；沒有這個月的匯入紀錄（請重新匯入這個月）'}` });
       }
-      out.push({ sheet: x.name, month: m, excel: r.rows.length, miss });
+      // 反過來：系統這個月有列、Excel 上沒有的人（多出來的）
+      const inX = new Set(r.rows.map(row => row.caseNo)), extra = [];
+      for (const c of db.cases.values()) {
+        if (inX.has(c.caseNo)) continue;
+        const info = db.info.get(c._id) || {};
+        if (!inSummaryList(c, info, m)) continue;
+        const restored = db.events.filter(e => e.caseId === c._id && !e.onList && e.updatedAt % 1 !== 0);
+        extra.push({ id: c._id, caseNo: c.caseNo, name: c.name, restored,
+          why: `系統算的開案月 ${info.open ? rocMonth(info.open) : '無'}、結案月 ${info.close ? rocMonth(info.close) : '無'}；A結束 ${roc(c.aEnd) || '空'}、系統結案 ${roc(c.sysClose) || '空'}` });
+      }
+      out.push({ sheet: x.name, month: m, excel: r.rows.length, miss, extra });
     }
     setCheck(out);
   };
+  const [editId, setEditId] = useState(null);
+  const undoRestore = async evs => {
+    try { for (const e of evs) await call('m', 'data:remove', { table: 'events', id: e._id, by: user }); await refresh(); toast(`已移除 ${evs.length} 筆找回的紀錄，請再按一次「核對」`); setCheck(null); }
+    catch (e) { toast('移除失敗：' + e.message, true); } };
   const dupMonths = (() => { const c = {}; for (const x of sheetList) { const m = allMonths[x.name]; if (m) c[m] = (c[m] || 0) + 1; } return Object.keys(c).filter(k => c[k] > 1); })();
   return html`<div class="page"><div class="card">
     <h2>匯入個案總表 Excel</h2>
@@ -3792,8 +3808,13 @@ function ImportView({ db, user, refresh, month }) {
       ${check && html`<div style="margin-top:10px">${check.map(k => html`<div style="margin:6px 0"><b>${k.sheet}（${rocMonth(k.month)}）</b>　Excel ${k.excel} 人，
         ${k.miss.length ? html`<span style="color:#c0392b">系統少了 ${k.miss.length} 人</span>` : html`<span class="tag t-ok">全部都有</span>`}
         ${k.miss.length > 0 && html`<div class="tw" style="max-height:220px;margin-top:4px"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>觸發</th><th>原因</th></tr></thead>
-          <tbody>${k.miss.map(x => html`<tr><td>${x.caseNo}</td><td>${x.name}</td><td>${x.trig || ''}</td><td>${x.why}</td></tr>`)}</tbody></table></div>`}</div>`)}</div>`}
+          <tbody>${k.miss.map(x => html`<tr><td>${x.caseNo}</td><td>${x.name}</td><td>${x.trig || ''}</td><td>${x.why}</td></tr>`)}</tbody></table></div>`}
+        ${k.extra && k.extra.length > 0 && html`<div style="margin-top:6px"><span style="color:#B26A16">系統多了 ${k.extra.length} 人（Excel 這個月沒有）</span>
+          <div class="tw" style="max-height:260px;margin-top:4px"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>原因</th><th>處理</th></tr></thead>
+          <tbody>${k.extra.map(x => html`<tr><td>${x.caseNo}</td><td><a href="#" class="namelink" onClick=${ev => { ev.preventDefault(); setEditId(x.id); }}>${x.name}</a></td><td>${x.why}${x.restored.length ? html`<br/><span class="tag t-warn">「找回」補回來的紀錄：${x.restored.map(e => rocMonth(e.month)).join('、')}</span>` : ''}</td>
+            <td>${x.restored.length ? html`<button class="btn light" disabled=${busy} onClick=${() => undoRestore(x.restored)}>移除找回的紀錄</button>` : html`<span class="sub">點姓名修改結案日期或刪除</span>`}</td></tr>`)}</tbody></table></div></div>`}</div>`)}</div>`}
     </div>`}
+    ${editId && html`<${CaseEditor} key=${'imp' + editId} db=${db} month=${month} user=${user} id=${editId} onClose=${() => setEditId(null)} refresh=${refresh} />`}
     ${wb && html`<h3>或只匯入一張工作表</h3><div class="bar"><select class="inp" value=${sheet} onChange=${e => { setSheet(e.target.value); setResult(null); setMk(guessMonth(e.target.value, fname)); }}>${wb.SheetNames.map(n => html`<option value=${n}>${n}</option>`)}</select>
         <label class="sub">這張工作表是 <input class="inp" type="month" value=${mk} onChange=${e => { setMk(e.target.value); setResult(null); }} /> 的總表</label>
         ${!mk && html`<span class="tag t-warn">看不出這張是哪個月，請先選月份</span>`}</div>`}
