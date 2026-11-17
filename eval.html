@@ -1136,6 +1136,8 @@ function unpaidLastMonth(month, db) {
 
 // ---------- Excel 總表匯入 ----------
 // 總表欄名 → 個案欄位（c）或事件欄位（e）或服務類別（s）
+// 總表 Excel 負責的月份欄位：重新匯入時以 Excel 為準；其他（系統裡填的）保留
+const EXCEL_EVENT_KEYS = ['trigger', 'codes', 'assess', 'referA', 'supervisor', 'submit', 'approve', 'referB', 'discharge', 'visit', 'services', 'onList', 'hasTrigger'];
 const IMPORT_MAP = {
   '編號': ['caseNo'], '個案編號': ['caseNo'], '觸發': ['e', 'trigger'], '申請來源': ['c', 'src'], '申請來源備註': ['c', 'srcNote'],
   'A結束服務日期': ['c', 'aEnd', 'date'], '系統結案日期': ['c', 'sysClose', 'date'], '姓名': ['c', 'name'], '性別': ['c', 'gender'],
@@ -2710,7 +2712,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
   };
   const del = async () => {
     setBusy(true);
-    try { await call('m', 'data:remove', { table: 'cases', id: curId, by: user }); writeDraft(null); await refresh(); toast('已刪除個案'); onClose(); }
+    try { await call('m', 'data:remove', { table: 'cases', id: curId, by: user }); writeDraft(null); onClose(); toast('已刪除個案'); await refresh(); return; }
     catch (e) { toast('刪除失敗：' + e.message, true); }
     setBusy(false);
   };
@@ -2743,7 +2745,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
   }, [c, ev, caseNo, em, kind, reopen, curId]);
   return html`<div class="modal" onMouseDown=${e => { downOut.current = e.target === e.currentTarget; }} onClick=${e => { if (e.target === e.currentTarget && downOut.current) tryClose(); downOut.current = false; }}><div class="drawer">
     <${SameCaseWarn} caseId=${curId} />
-    <div class="bar"><h2 style="margin:0">${!isAdd ? `${orig.name}　${orig.caseNo}` : '新增個案'}</h2><span class="grow"></span>
+    <div class="bar"><h2 style="margin:0">${!isAdd ? `${(orig || c).name || ''}　${(orig || {}).caseNo || caseNo}` : '新增個案'}</h2><span class="grow"></span>
       ${id && html`<${ConfirmBtn} label="刪除個案" onYes=${del} />`}
       ${!isAdd && html`<button class="btn light" title="把本月觸發設為「結案-」，再填 A結束服務日期和系統結案日期" onClick=${() => { setEm(month); setEvDirty(v => ({ ...v, trigger: '結案-' })); setTimeout(() => { const el = document.getElementById('closeDates'); if (el) el.scrollIntoView({ block: 'center' }); }, 50); }}>辦理結案</button>`}
       <button class="btn light" onClick=${tryClose}>關閉</button><button class="btn" disabled=${busy || (isAdd && (!kind || (kind === 'new' && !reopen)))} onClick=${save}>${busy ? '儲存中…' : '儲存'}</button></div>
@@ -3710,6 +3712,13 @@ function ImportView({ db, user, refresh, month }) {
   };
   const byNo = useMemo(() => new Set([...db.cases.values()].map(c => c.caseNo)), [db]);
   const caseByNo = useMemo(() => new Map([...db.cases.values()].map(c => [c.caseNo, c])), [db]);
+  // 找回「在系統新增、但 Excel 上沒有」而被舊版匯入清掉的個案紀錄
+  const restoreSys = async () => { let n = 0;
+    try { n += (await call('m', 'data:relinkDeletedCases', { by: user })).relinked || 0; } catch (e) { console.warn(e); }   // 刪掉又補登的個案：接回其他月份
+    try { n += (await call('m', 'data:restoreSystemEvents', { by: user })).restored || 0; } catch (e) { console.warn(e); }
+    return n; };
+  const [restoring, setRestoring] = useState(false);
+  const restoreNow = async () => { setRestoring(true); const n = await restoreSys(); await refresh(); setRestoring(false); toast(n ? `找回 ${n} 筆月份紀錄` : '沒有需要找回的紀錄'); };
   const importRows = async (rows, label, st, seen) => {
     const B = 80;
     for (let i = 0; i < rows.length; i += B) {
@@ -3718,13 +3727,13 @@ function ImportView({ db, user, refresh, month }) {
         const ex = seen.get(x.caseNo) || caseByNo.get(x.caseNo), cd = caseDForImport(x, ex, x.month);
         seen.set(x.caseNo, { ...(ex || {}), ...cd, services: { ...((ex || {}).services || {}), ...(cd.services || {}) } });
         return { caseNo: x.caseNo, caseD: JSON.stringify(cd), month: x.month, eventD: x.e ? JSON.stringify(x.e) : undefined };
-      }), by: user });
+      }), by: user, eventKeys: EXCEL_EVENT_KEYS });
       for (const k in st) st[k] += r[k];
     }
   };
   const run = async () => {
     setBusy(true); const st = { created: 0, updated: 0, unchanged: 0, events: 0 };
-    try { await importRows(parsed.rows, '', st, new Map()); await refresh(); setResult(st); toast('匯入完成'); }
+    try { await importRows(parsed.rows, '', st, new Map()); const rs = await restoreSys(); if (rs) st.restored = rs; await refresh(); setResult(st); toast('匯入完成'); }
     catch (e) { console.error(e); toast('匯入失敗：' + e.message, true); }
     setProg(''); setBusy(false);
   };
@@ -3739,6 +3748,7 @@ function ImportView({ db, user, refresh, month }) {
         if (clearFirst) { setProg(`清除${rocMonth(m)}舊的觸發紀錄…`); let r; do { r = await call('m', 'data:clearMonthEvents', { month: m, by: user }); } while (r.left > 0); }
         const r = parseOne(x.name, m); await importRows(r.rows, `${rocMonth(m)}（${x.name}）`, st, seen);
       }
+      const rs = await restoreSys(); if (rs) st.restored = rs;
       await refresh(); setResult(st); toast(`已匯入 ${list.length} 個月份`);
     } catch (e) { console.error(e); toast('匯入失敗：' + e.message, true); }
     setProg(''); setBusy(false);
@@ -3774,7 +3784,8 @@ function ImportView({ db, user, refresh, month }) {
           ${!allMonths[x.name] && html` <span class="tag t-warn">判斷不出月份</span>`}${dupMonths.includes(allMonths[x.name]) && html` <span class="tag t-warn">月份重複</span>`}</td>
           <td class="num">${x.rows}</td><td class="num">${x.trig}</td><td class="num">${x.skipped ? html`<a href="#" style="color:#c0392b" onClick=${e => { e.preventDefault(); setSheet(x.name); setMk(allMonths[x.name] || ''); }}>${x.skipped} 列（看明細）</a>` : '0'}</td></tr>`)}</tbody></table></div>
       <label class="sub" style="display:block;margin-top:8px"><input type="checkbox" checked=${clearFirst} onChange=${e => setClearFirst(e.target.checked)} />
-        匯入前先清除這些月份原本的觸發紀錄（建議勾選：之前匯錯月份的觸發會一起清掉；但這些月份在系統裡手動改過的觸發、核銷金額也會被 Excel 的內容取代）</label>
+        匯入前先清除這些月份「從 Excel 匯入」的觸發紀錄（建議勾選：之前匯錯月份的觸發會一起清掉）。在系統裡新增的個案不會被清掉；在系統填的逾期原因、B單位首次服務、派案機制等也會保留</label>
+      <div class="sub" style="margin-top:6px">重新匯入後、或刪掉又補登的個案，其他月份不見？<button class="btn light" style="margin-left:6px" disabled=${restoring || busy} onClick=${restoreNow}>${restoring ? '找回中…' : '找回不見的個案紀錄'}</button></div>
       <div class="bar" style="margin-top:10px"><button class="btn" disabled=${busy || dupMonths.length > 0} onClick=${runAll}>${busy ? prog : `匯入全部月份（${sheetList.filter(x => allMonths[x.name]).length} 個月）`}</button>
         ${dupMonths.length > 0 && html`<span class="tag t-warn">有兩張工作表填了同一個月份，請先改正</span>`}
         <button class="btn light" disabled=${busy} onClick=${runCheck} title="比對 Excel 每個月總表上的人，系統那個月有沒有列出來">核對 Excel 和系統</button></div>
@@ -3805,7 +3816,7 @@ function ImportView({ db, user, refresh, month }) {
       ${parsed.rows.length > 30 && html`<div class="sub">只顯示前 30 列</div>`}
       <div class="bar" style="margin-top:12px"><button class="btn" disabled=${busy || !parsed.rows.length} onClick=${run}>${busy ? prog : `匯入 ${parsed.rows.length} 列到 ${rocMonth(mk)}`}</button></div>
     </div>`}
-    ${result && html`<div class="tag t-ok" style="margin-top:10px">完成：新增 ${result.created}、更新 ${result.updated}、未變動 ${result.unchanged}、觸發紀錄 ${result.events}</div>`}
+    ${result && html`<div class="tag t-ok" style="margin-top:10px">完成：新增 ${result.created}、更新 ${result.updated}、未變動 ${result.unchanged}、觸發紀錄 ${result.events}${result.restored ? `、找回系統新增的紀錄 ${result.restored}` : ''}</div>`}
     ${!wb && html`<div class="sub">${fname || '請選擇個案總表 Excel 檔'}</div>`}
   </div></div>`;
 }
