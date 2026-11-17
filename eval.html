@@ -2649,7 +2649,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     if (ex) {
       // 之前已重開過（編號尾數 2 不論重開幾次都一樣）→ 沿用那一筆，清除結案日期
       setCurId(ex._id); setC({ ...ex, aEnd: '', sysClose: '', services: { ...(ex.services || {}) } });
-      setReuseNote(`編號 ${no} 之前已重開過，會沿用這一筆並清除結案日期`);
+      setReuseNote(`編號 ${no} 之前已重開過，會沿用這一筆並清除結案日期（原本的結案紀錄會另外保留在結案表）`);
     } else {
       setCurId(null);
       const copy = {}; for (const k of BASE_COPY) if (src[k]) copy[k] = src[k];
@@ -2678,6 +2678,14 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     try {
       let cid = curId;
       const cp = diff(orig || {}, c);
+      // 把原本的結案日期刪掉（例如重開案）→ 先把舊的結案紀錄另外存一份到結案表，不會不見
+      if (orig && (orig.aEnd || orig.sysClose) && !c.aEnd && !c.sysClose) {
+        const old = { name: orig.name || '', idNo: orig.idNo || '', aEnd: orig.aEnd || '', sysClose: orig.sysClose || '', reason: orig.closeReason || '', area: regionOf(orig.caseNo) || '', caseNo: orig.caseNo, kept: '重開案前的結案紀錄' };
+        for (const e of db.events) if (e.caseId === orig._id && e.codes && (!old.codes || e.month >= old.cm)) { old.codes = e.codes; old.cm = e.month; }
+        delete old.cm;
+        const key = closureKey(old.idNo, old.sysClose, old.name);
+        if (!(db.closures || []).some(x => x.key === key)) await call('m', 'data:saveClosure', { key, d: JSON.stringify(old), by: user });
+      }
       if (!curId || Object.keys(cp).length || caseNo !== orig.caseNo) cid = await call('m', 'data:saveCase', { id: curId || undefined, caseNo: caseNo.trim(), d: JSON.stringify(curId ? cp : c), by: user });
       const ep = diff(evOrig || {}, ev);
       // 個案的服務單位改了 → 這個月的資料也一起改（統計、派案統計看的是這個月的資料）
