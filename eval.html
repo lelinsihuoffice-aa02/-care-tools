@@ -2355,7 +2355,7 @@ const J = s => { try { return JSON.parse(s); } catch (e) { return {}; } };
 // 把快取轉成計算用的資料
 function buildDb() {
   const cases = new Map();
-  for (const x of store.rows.cases.values()) { const c = { ...J(x.d), _id: x._id, caseNo: x.caseNo, updatedAt: x.updatedAt }; if (c.birth) c.birth = fixBirth(c.birth); cases.set(x._id, c); }
+  for (const x of store.rows.cases.values()) { const c = { ...J(x.d), _id: x._id, caseNo: x.caseNo, updatedAt: x.updatedAt }; if (c.birth) c.birth = fixBirth(c.birth); if (c.srcNote === '友單位' || c.srcNote === '外縣市') c.srcNote += '轉入'; cases.set(x._id, c); }
   const events = [...store.rows.events.values()].map(x => ({ ...J(x.d), _id: x._id, caseId: x.caseId, month: x.month, updatedAt: x.updatedAt }));
   // 舊版「請填全名」存成 aliases（沒有簡稱、只有一個服務類別）→ 當成統計表專用的對應，不影響總表與派案統計的顯示
   const units = [...store.rows.units.values()].map(x => ({ ...J(x.d), _id: x._id })).map(u => !u.short && (u.aliases || []).length && (u.cats || []).length === 1 && !u.statAliases
@@ -2507,7 +2507,7 @@ const EVENT_DATES = [['referA', '轉介(指派)A單位日期'], ['assess', '照�
 // 重開案時從舊個案帶入的基本資料
 const BASE_COPY = ['name', 'gender', 'idNo', 'birth', 'identity', 'living', 'dementia', 'disability', 'disLevel', 'area', 'address', 'contact', 'phone'];
 const NEW_TRIGGERS = TRIGGERS.filter(isNewTrigger);
-const TRANSFER_FROM = ['友單位', '外縣市']; // 轉入案的轉入來源，存在個案的「申請來源備註」（srcNote）
+const TRANSFER_FROM = ['友單位轉入', '外縣市轉入']; // 轉入案的轉入來源，存在個案的「申請來源備註」（srcNote）；舊資料的「友單位」「外縣市」載入時自動換成新寫法
 // 最新的日期：只看「這一次開案」以後的紀錄（重開案不會沿用上一次開案的訪視、簽審日期）
 const latestOf = (db, c, k, upTo) => {
   const x = epAt((db.info && db.info.get(c._id)) || {}, upTo || '9999-12'), from = x.openEv ? x.open : '';
