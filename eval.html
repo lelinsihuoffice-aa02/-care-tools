@@ -246,6 +246,8 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
   .rc-g{margin-bottom:8px}.rc-g .dsh{font-weight:700;color:var(--green);margin-bottom:4px}
   .rc-f{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f3ece1}.rc-f .lb{flex:0 0 42%;font-size:12px;color:var(--sub)}.rc-f .vl{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
   .rc-f .vl .inp,.rc-f .vl select,.rc-f .vl textarea{width:100%!important;max-width:100%}
+  .rc-f:has(textarea){flex-direction:column;align-items:stretch;gap:4px}.rc-f:has(textarea) .lb{flex:none}
+  textarea.tcell{resize:none;overflow:hidden;line-height:1.5;vertical-align:middle;font:inherit;min-height:34px}
   /* ---- 手機版 ---- */
   .mobonly{display:none}
   @media (max-width:700px){
@@ -2811,11 +2813,11 @@ function TextCell({ value, onChange, opts, width }) {
   if (opts) return html`<select class="inp" style=${'width:' + fit(value) + 'px'} value=${value || ''} onChange=${e => onChange(e.target.value)}>
     <option value=""></option>${opts.map(o => html`<option value=${o}>${o}</option>`)}
     ${value && !opts.includes(value) ? html`<option value=${value}>${value}</option>` : ''}</select>`;
-  const long = String(txt || '').length * 14 + 30 > 460;
-  if (long) return html`<textarea class="inp" style="width:460px;resize:vertical;line-height:1.5" rows=${Math.min(6, Math.ceil(String(txt).length * 14 / 430))} value=${txt} onInput=${e => setTxt(e.target.value)}
-    onBlur=${() => { if ((txt || '') !== (value || '')) onChange(txt); }} />`;
-  return html`<input class="inp" style=${'width:' + fit(txt) + 'px'} value=${txt} onInput=${e => setTxt(e.target.value)}
-    onBlur=${() => { if ((txt || '') !== (value || '')) onChange(txt); }} onKeyDown=${e => e.key === 'Enter' && e.target.blur()} />`;
+  // 一直用同一個 textarea（打字中換元件會失去游標，看起來像打不下去）；寬度跟著字數變，超過就自動換行長高，沒有字數限制
+  const grow = el => { if (!el) return; el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; };
+  return html`<textarea class="inp tcell" rows="1" style=${'width:' + fit(txt) + 'px;max-width:100%'} value=${txt}
+    ref=${el => grow(el)} onInput=${e => { setTxt(e.target.value); grow(e.target); }}
+    onBlur=${() => { if ((txt || '') !== (value || '')) onChange(txt); }} onKeyDown=${e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur(); } }} />`;
 }
 function ConfirmBtn({ label, onYes, cls }) {
   const [arm, setArm] = useState(false);
