@@ -274,7 +274,7 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
     .rhead .racts{margin-left:0;width:100%;flex-wrap:nowrap}.rhead .racts>*{flex:1 1 0;min-width:0}.rhead .racts .btn,.rhead .racts .menu>.btn{justify-content:center;width:100%;padding-left:4px;padding-right:4px;white-space:nowrap}.rhead .racts .menu-pop{right:auto;left:50%;transform:translateX(-50%)}
     .mstrip .sub{white-space:nowrap}
     .rpick{width:100%}.rpick-btn{width:100%}.rpick-btn b{flex:1;text-align:left;font-size:15px}
-    .rpick-pop{position:fixed;left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:75vh;overflow:auto;border-radius:18px}
+    .rpick-pop{position:absolute;left:0;right:0;top:calc(100% + 6px);width:auto;border-radius:16px;padding:10px}
     .rpick-pop .rgi{grid-template-columns:1fr 1fr}
     .kpis{display:grid;grid-template-columns:1fr 1fr;gap:6px}.kpis .chip{padding:7px 10px}.kpis .chip b{font-size:17px}
     .rfilter .fl{flex-wrap:nowrap!important;overflow-x:auto;width:100%}.rfilter .fl button{flex:0 0 auto!important;white-space:nowrap}
@@ -4500,6 +4500,7 @@ function FloatStats({ db, month }) {
   // 新案：多顯示服務項目、派案單位（只申請輔具／居家環改寫「僅輔具」「僅居家環改」）
   const ds = useMemo(() => open === 'newCase' ? dispatchStatMonth(month, db) : null, [db, month, open]);
   const svcOf = c => { const e = evM.get(c._id) || { caseId: c._id, month }; return newCaseSvc(e, c, month, db); };
+  const codesOf = c => String(((evM.get(c._id) || {}).codes) || latestCodes(db, c, month) || '').split(/[,，、;；\s]+/).filter(Boolean).join(', ');
   const list = rg ? all.filter(c => regionOf(c.caseNo) === rg) : all;
   const regs = Object.values(REGIONS).filter(r => all.some(c => regionOf(c.caseNo) === r));
   return html`<div>
@@ -4510,7 +4511,7 @@ function FloatStats({ db, month }) {
         html`<button class=${rg === k ? 'on' : ''} onClick=${() => setRg(k)}>${l}<b>${n}</b></button>`)}</div>
       <div class="tw" style="max-height:min(56vh, 460px)"><table class="grid"><thead><tr><th>編號</th><th>姓名</th>${open !== 'newCase' ? html`<th>身分證</th>` : ''}<th>地區</th><th>來源</th><th>本月觸發</th>${open === 'newCase' ? html`<th>服務項目</th><th>派案單位</th>` : html`<th>開案月</th><th>結案月</th>`}</tr></thead>
         <tbody>${list.map(c => { const x = epAt(db.info.get(c._id) || {}, month), e = evM.get(c._id); return html`<tr><td>${c.caseNo}</td><td><b>${c.name}</b></td>${open !== 'newCase' ? html`<td class="sub" style="white-space:nowrap">${c.idNo || ''}</td>` : ''}<td>${regionOf(c.caseNo)}</td><td>${c.src}</td>
-          <td>${e && normTrigger(e.trigger) || ''}</td>${open === 'newCase' ? (sv => html`<td style="white-space:normal;min-width:160px">${sv.only ? html`<span class="tag t-close">${sv.only}</span>` : sv.items.join('、') || html`<span class="sub">未填</span>`}</td>
+          <td>${e && normTrigger(e.trigger) || ''}</td>${open === 'newCase' ? (sv => html`<td style="white-space:normal;min-width:160px">${sv.only ? html`<span class="tag t-close">${sv.only}</span>` : (codesOf(c) || html`<span class="sub">還沒有服務代碼</span>`)}</td>
           <td>${sv.only || (ds && ds.unitBy.get(c._id)) || ''}</td>`)(svcOf(c)) : html`<td>${x.open ? rocMonth(x.open) : ''}</td><td>${x.close ? rocMonth(x.close) : ''}</td>`}</tr>`; })}</tbody></table></div>
     </div>`}
     <div class="fstats" title="點數字看是哪些個案">
