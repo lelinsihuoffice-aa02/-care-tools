@@ -202,15 +202,23 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
   .av i{position:absolute;right:-5px;bottom:-4px;font-style:normal;font-size:10px;background:var(--org,#c47a1c);color:#fff;border-radius:50%;width:15px;height:15px;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff}
   .online-pop{position:absolute;right:0;top:calc(100% + 8px);width:min(420px,90vw);z-index:200;box-shadow:0 10px 30px rgba(61,53,41,.18);animation:fx-fade-up .2s ease both}
   .online-row{display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid #f0e8dc;flex-wrap:wrap}
-  /* 懸浮鈕：回入口網站（左下，字體大小按鈕上面） */
-  .homefab{position:fixed;left:16px;bottom:72px;z-index:1000;display:flex;align-items:center;gap:6px;padding:9px 16px;border-radius:999px;background:var(--green);color:#fff;text-decoration:none;font-weight:700;font-size:15px;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+  /* 懸浮鈕：回入口網站（左上，上方選單左邊空出位置） */
+  .homefab{position:fixed;left:10px;top:8px;z-index:1000;display:flex;align-items:center;gap:6px;padding:4px 14px 4px 4px;border-radius:999px;
+    background:linear-gradient(135deg,#8fae84,#6c8c63);color:#fff;text-decoration:none;font-weight:700;font-size:15px;letter-spacing:.5px;
+    box-shadow:0 6px 18px rgba(76,104,68,.35),inset 0 1px 0 rgba(255,255,255,.25);transition:transform .15s,box-shadow .15s}
+  .top{padding-left:160px}
+  .homefab .ic{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center}
   body:has(.modal) .homefab{display:none}
-  .homefab:hover{filter:brightness(1.08)}.homefab .ic{font-size:18px;line-height:1}
+  .homefab:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(76,104,68,.4),inset 0 1px 0 rgba(255,255,255,.25)}
+  .homefab:active{transform:translateY(0)}
   .mcards{display:flex;flex-direction:column;gap:7px}
   .mcard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:9px 12px;cursor:pointer}
   .mcard:active{background:#fbf3e6}
   .mcard .l1{display:flex;align-items:baseline;gap:8px}.mcard .l1 b{font-size:16px}.mcard .no{color:var(--sub);font-size:12px}.mcard .rg{color:var(--sub);font-size:12px;white-space:nowrap}
   .mcard .l2{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}.mcard .fee{margin-left:auto}
+  /* 總表搜尋列：一直懸浮在上方 */
+  .sbar{position:sticky;top:var(--toph,0px);z-index:40;display:flex;gap:6px;align-items:center;background:var(--bg);padding:6px 0;margin:-4px 0 6px;box-shadow:0 6px 8px -8px rgba(0,0,0,.25)}
+  .sbar input{width:260px}
   /* ---- 手機版 ---- */
   .mobonly{display:none}
   @media (max-width:700px){
@@ -222,7 +230,8 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
     .top label.sub{order:3;flex:1 1 150px}.top label.sub input{width:100%}
     .top .btn.light{order:3}
     .fz{display:none}
-    .homefab{left:8px;bottom:8px;padding:0;width:46px;height:46px;justify-content:center}.homefab .tx{display:none}.homefab .ic{font-size:22px}
+    .homefab{left:8px;top:8px;padding:0;width:40px;height:40px;justify-content:center}.homefab .tx{display:none}.homefab .ic{background:none;width:auto;height:auto}
+    .top{padding-left:56px}
     .fstats{right:8px;bottom:8px;gap:4px}.fstats button{width:46px;height:46px}.fstats button b{font-size:14px}.fstats button span{font-size:9px}
     .page{padding:8px 8px 80px}
     .card{overflow-x:auto;padding:10px}
@@ -232,6 +241,7 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
     h2{font-size:18px}
     .kv{gap:8px}.kv b{text-align:right}
     .cols3{grid-template-columns:minmax(0,1fr)}
+    .sbar{top:0;margin:-4px -8px 6px;padding:6px 8px 6px 56px}.sbar input{flex:1;width:auto;min-width:0}
     .mobonly{display:inline-flex}.trigtoggle{width:100%;justify-content:center;margin-bottom:6px}.trigtoggle.on{border-color:var(--green);color:var(--green);font-weight:700}
     .trigchips{display:none}.trigchips.open{display:flex}
     .page .ampm{flex-wrap:wrap;max-width:100%;flex:0 1 auto}.page .ampm button{flex:1 1 auto}
@@ -2929,13 +2939,15 @@ function SummaryView({ db, month, user, refresh }) {
       <span class="ampm" style="margin-right:4px">
         <button class=${view === 'list' ? 'on' : ''} onClick=${() => setView('list')}>總表 ${base.length}</button>
         <button class=${view === 'closed' ? 'on' : ''} onClick=${() => setView('closed')}>結案表 ${nClosed}</button></span>
-      ${view === 'list' && html`<input class="inp" style="width:220px" placeholder="搜尋姓名、身分證、編號" value=${q} onInput=${e => setQ(e.target.value)} />
-      <select class="inp" value=${reg} onChange=${e => setReg(e.target.value)}>${['全部', ...Object.values(REGIONS)].map(r => html`<option value=${r}>${r}</option>`)}</select>`}
       <span class="grow"></span>
       ${view === 'list' && html`<span class="sub">共 ${list.length} 案，本月新案 ${nNew}</span>`}
       ${view === 'list' && html`<button class="btn light" onClick=${() => exportSummary(db, month, true)} title="和原本 Excel 總表一樣的欄位，一個月一張工作表">匯出${+month.slice(0, 4) - 1911}年總表</button>
         <button class="btn" onClick=${() => openEdit({ isNew: true })}>＋ 新增個案</button>`}
     </div>
+    ${view === 'list' && html`<div class="sbar">
+      <input class="inp" type="search" placeholder="搜尋姓名、身分證、編號" value=${q} onInput=${e => setQ(e.target.value)} />
+      <select class="inp" value=${reg} onChange=${e => setReg(e.target.value)}>${['全部', ...Object.values(REGIONS)].map(r => html`<option value=${r}>${r}</option>`)}</select>
+      ${q && html`<button class="btn sm gray" onClick=${() => setQ('')}>清除</button>`}</div>`}
     ${view === 'closed' ? html`<${ClosedView} db=${db} user=${user} refresh=${refresh} openCase=${id => openEdit({ id })} />`
     : html`
     ${db.cases.size > 0 && (() => {
@@ -4503,6 +4515,10 @@ function App() {
   const tabRef = useRef(tab); useEffect(() => { tabRef.current = tab; window.dispatchEvent(new Event('ca-editing')); }, [tab]);
   const logout = async () => { try { localStorage.removeItem(REFRESH_KEY); } catch (e) { } try { await call('m', 'data:heartbeat', { clientId: CLIENT_ID, name: user, leaving: true }); } catch (e) { } writeDraft(null); await IDB.clear(); location.reload(); };
 
+  useEffect(() => {   // 搜尋列懸浮在上方選單下面：記下選單高度
+    const el = document.querySelector('.top'); if (!el || !window.ResizeObserver) return;
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--toph', el.offsetHeight + 'px')); ro.observe(el); return () => ro.disconnect();
+  });
   if (checking) return html`<div class="empty">載入中…</div>`;
   if (!authed) return html`<${Login} onDone=${() => setAuthed(true)} />`;
   if (!user) return html`<div class="gate"><div class="box"><div style="font-weight:700;color:var(--green)">你是哪一位？</div>
@@ -4513,7 +4529,7 @@ function App() {
   const TABS = [['summary', '總表'], ['report', '評鑑報表'], ['stats', '統計'], ['import', '匯入'], ['settings', '設定']];
   return html`<div>
     <div class="top">
-      <span class="brand"><img src=${LOGO} alt="" />雲端資料庫<a href=${PORTAL_URL}>← 回入口網頁</a></span>
+      <span class="brand"><img src=${LOGO} alt="" />雲端資料庫</span>
       <${OnlineAvatars} />
       ${TABS.map(([k, l]) => html`<button class=${'tabbtn' + (tab === k ? ' on' : '')} onClick=${() => setTab(k)}>${l}</button>`)}
       <span class="grow"></span>
@@ -4529,7 +4545,7 @@ function App() {
       : html`<div class="page"><${HolidaysCard} db=${db} user=${user} refresh=${refresh} /><${UnitsCard} db=${db} user=${user} refresh=${refresh} /></div>`}
     ${db && tab !== 'summary' && readDraft() && html`<div class="toast" style="background:var(--org,#c47a1c);cursor:pointer;bottom:90px" onClick=${() => setTab('summary')}>「${readDraft().name}」還有資料沒儲存，點這裡回去繼續填</div>`}
     ${db && html`<${FloatStats} db=${db} month=${month} />`}
-    <a class="homefab" href=${PORTAL_URL} title="回到入口網站"><span class="ic">⌂</span><span class="tx">入口網站</span></a>
+    <a class="homefab" href=${PORTAL_URL} title="回到入口網站" aria-label="回到入口網站"><span class="ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg></span><span class="tx">回入口網站</span></a>
     ${toastMsg && html`<div class="toast" style=${'background:' + (toastMsg.err ? 'var(--red)' : 'var(--green)')}>${toastMsg.msg}</div>`}
   </div>`;
 }
