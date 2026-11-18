@@ -163,7 +163,7 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
   @keyframes fx-row{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
   @keyframes fx-shine{from{background-position:-200% 0}to{background-position:200% 0}}
   @keyframes fx-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
-  .page>*{animation:fx-fade-up .35s ease both}
+  .page>*{animation:fx-fade-up .35s ease backwards}
   .page>*:nth-child(2){animation-delay:.04s}.page>*:nth-child(3){animation-delay:.08s}.page>*:nth-child(4){animation-delay:.12s}.page>*:nth-child(5){animation-delay:.16s}
   .modal{animation:fx-fade .2s ease both}
   .drawer{animation:fx-slide-in .28s cubic-bezier(.2,.8,.2,1) both}
@@ -3444,6 +3444,8 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
   const compactName = '精簡（點列展開）', compact = !!views && view === compactName;
   const colBy = h => rep0.R.cols.find(c => c.h === h) || { h, v: () => '' };
   const CMP_COLS = ['訪案及計畫擬定3天內完成率', '個管照會B單位(工作天)', '服務連結時效(工作天)'];
+  // 手機卡片上的天數小方塊：派案時效用上面三個；其他報表（出備時效…）用所有天數欄
+  const CARD_COLS = key === 'dispatch' ? CMP_COLS : rep0.R.cols.filter(c => c.num).map(c => c.h);
   const missingReason = r => rep0.R.cols.some(c => c.need && c.need(r) && !r.e[ekey(c, r)]);
   const anyBad = r => rep0.R.cols.some(c => c.bad && c.bad(r));
   const dateGap = r => !(isDc(r) ? r.e.visit : r.e.supervisor) || !r.e.approve || (key === 'dispatch' && !r.noB && (!r.e.referB || !(r.e.bFirst || r.bFirstAuto)));
@@ -3451,7 +3453,7 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
   const [flt, setFlt] = useState('all'), pickFlt = k => setFlt(k);
   const rowsF = rep0.rows.filter((filters.find(f => f[0] === flt) || filters[0])[2]);
   // 展開明細：依分頁分組，每組一張小表（欄名一列、內容一列，跟 Excel 一樣橫著看）
-  const detailGroups = (() => { if (!views) return []; const used = new Set(['序號', '姓名', 'CMS', '身分證號']), out = [];
+  const detailGroups = (() => { if (!views) { const fixed = ['序號', '姓名', 'CMS']; return [['明細', rep0.R.cols.filter(c => !fixed.includes(c.h))]]; } const used = new Set(['序號', '姓名', 'CMS', '身分證號']), out = [];
     for (const [g, hs] of Object.entries(views)) { const cols = hs.filter(h => !used.has(h)).map(h => rep0.R.cols.find(c => c.h === h)).filter(Boolean); cols.forEach(c => used.add(c.h)); if (cols.length) out.push([g, cols]); }
     const rest = rep0.R.cols.filter(c => !used.has(c.h)); if (rest.length) out.unshift(['個案', rest]); return out; })();
   const statusOf = r => { const out = [];
@@ -3533,12 +3535,12 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
       <span class="grow"></span>
       ${views && !mobile && html`<span class="sub">看法：</span><span class="ampm">${[compactName, '完整表格', ...Object.keys(views)].map(v => html`<button class=${view === v ? 'on' : ''} onClick=${() => pickView(v)}>${v}</button>`)}</span>`}</div>
     ${!rowsF.length ? html`<div class="card sub">沒有符合篩選的個案</div>`
-    : mobile && views ? html`<div class="rcards">${rowsF.map(r => { const isOpen = open === r.caseId, st = statusOf(r);
+    : mobile ? html`<div class="rcards">${rowsF.map(r => { const isOpen = open === r.caseId, st = statusOf(r);
         // 手機：一人一張卡，三個時效天數做成小方塊；點卡片展開，所有欄位直接在卡片裡填
         return html`<div class=${'rcard' + (isOpen ? ' open' : '') + (st.some(x => x[1] === 't-warn') ? ' warn' : '')}>
           <div class="rc-h" onClick=${() => setOpen(isOpen ? null : r.caseId)}><span class="no">${r.i}</span><b>${r.c.name}</b><span class="sub">CMS ${cellText(colBy('CMS'), r)}</span><span class="grow"></span><span class="ar">${isOpen ? '▴' : '▾'}</span></div>
-          <div class="rc-m" onClick=${() => setOpen(isOpen ? null : r.caseId)}>${CMP_COLS.map(h => { const c = colBy(h), v = c.v(r), msg = c.bad ? c.bad(r) : '', nb = c.noB && r.noB;
-            return html`<div class=${'met' + (msg ? ' bad' : '') + (nb ? ' na' : '')}><span>${h.replace(/\((工作天|日曆天)\)/, '').replace('3天內完成率', '').replace('個管', '')}</span><b>${nb ? r.noB : v === null || v === undefined || v === '' ? '—' : v}${nb || v === null || v === undefined || v === '' ? '' : html`<small>天</small>`}</b></div>`; })}</div>
+          <div class="rc-m" style=${`grid-template-columns:repeat(${Math.max(1, CARD_COLS.length)},1fr)`} onClick=${() => setOpen(isOpen ? null : r.caseId)}>${CARD_COLS.map(h => { const c = colBy(h), v = c.v(r), msg = c.bad ? c.bad(r) : '', nb = c.noB && r.noB;
+            return html`<div class=${'met' + (msg ? ' bad' : '') + (nb ? ' na' : '')}><span>${h.replace(/\((工作天|日曆天)\)/, '').replace('3天內完成率', '').replace('個管', '').replace('平均天數', '')}</span><b>${nb ? r.noB : v === null || v === undefined || v === '' ? '—' : v}${nb || v === null || v === undefined || v === '' ? '' : html`<small>天</small>`}</b></div>`; })}</div>
           <div class="rc-s">${st.length ? st.map(([t, cls]) => html`<span class=${'tag ' + cls}>${t}</span>`) : html`<span class="tag t-new">準時</span>`}</div>
           ${isOpen && html`<div class="rc-d">${detailGroups.map(([g, cols]) => html`<div class="rc-g"><div class="dsh">${g}</div>${cols.map(c => html`<div class="rc-f"><span class="lb">${colHead(c)}</span><span class="vl">${cellInner(c, r)}</span></div>`)}</div>`)}
             <button class="btn light" style="width:100%;margin-top:8px" onClick=${() => setEdit(r.caseId)}>打開個案資料</button></div>`}</div>`; })}</div>`
