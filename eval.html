@@ -2784,9 +2784,11 @@ const toast = (msg, err) => toastFn(msg, err);
 
 // 日期輸入：輸入民國（115/10/12、1151012）或西元皆可，存成西元
 function DateInput({ value, onChange, style, ph }) {
-  const [txt, setTxt] = useState(roc(value)), [bad, setBad] = useState(false);
-  useEffect(() => { setTxt(roc(value)); setBad(false); }, [value]);
+  const [txt, setTxt] = useState(roc(value)), [bad, setBad] = useState(false), dirty = useRef(false);
+  useEffect(() => { setTxt(roc(value)); setBad(false); dirty.current = false; }, [value]);
+  // 只有真的打過字才存（只是點進來看、或資料剛同步過來，都不會覆蓋別人填的）
   const commit = () => {
+    if (!dirty.current) return; dirty.current = false;
     const t = txt.trim();
     if (!t) { setBad(false); if (value) onChange(''); return; }
     const iso = parseDate(t);
@@ -2794,7 +2796,7 @@ function DateInput({ value, onChange, style, ph }) {
     setBad(false); setTxt(roc(iso)); if (iso !== value) onChange(iso);
   };
   return html`<input class=${'inp' + (bad ? ' bad' : '')} style=${style || 'width:110px'} value=${txt} placeholder=${ph || '年/月/日'}
-    title=${bad ? '日期格式不正確' : ''} onInput=${e => setTxt(e.target.value)} onBlur=${commit} onKeyDown=${e => e.key === 'Enter' && e.target.blur()} />`;
+    title=${bad ? '日期格式不正確' : ''} onInput=${e => { dirty.current = true; setTxt(e.target.value); }} onBlur=${commit} onKeyDown=${e => e.key === 'Enter' && e.target.blur()} />`;
 }
 // 上午／下午按鍵：按一下選取，再按一次取消
 // 兩三個選項的按鍵（再按一次取消）
@@ -2806,18 +2808,28 @@ function AmPm({ value, onChange }) {
   return html`<span class="ampm">${AMPM.map(x => html`<button type="button" class=${v === x ? 'on' : ''} onClick=${() => onChange(v === x ? '' : x)}>${x}</button>`)}</span>`;
 }
 function TextCell({ value, onChange, opts, width }) {
-  const [txt, setTxt] = useState(value || '');
-  useEffect(() => setTxt(value || ''), [value]);
+  const [txt, setTxt] = useState(value || ''), dirty = useRef(false);
+  useEffect(() => { setTxt(value || ''); dirty.current = false; }, [value]);
   // 寬度隨文字長度變（太長就換成可多行的框）
-  const w0 = width || (opts ? 150 : 170), fit = t => Math.min(460, Math.max(w0, String(t || '').length * 14 + (opts ? 46 : 30)));
+  const w0 = width || (opts ? 150 : 170), fit = t => Math.min(460, Math.max(w0, Math.max(...String(t || '').split('\n').map(l => l.length)) * 14 + (opts ? 46 : 30)));
   if (opts) return html`<select class="inp" style=${'width:' + fit(value) + 'px'} value=${value || ''} onChange=${e => onChange(e.target.value)}>
     <option value=""></option>${opts.map(o => html`<option value=${o}>${o}</option>`)}
     ${value && !opts.includes(value) ? html`<option value=${value}>${value}</option>` : ''}</select>`;
   // 一直用同一個 textarea（打字中換元件會失去游標，看起來像打不下去）；寬度跟著字數變，超過就自動換行長高，沒有字數限制
-  const grow = el => { if (!el) return; el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; };
+  const grow = el => { if (!el || !el.isConnected) return; el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; };
+  const ta = useRef(null);
+  // 載入、換行、欄寬改變、字型載入後都重算高度（不然存好的長原因會被切掉一半）
+  useEffect(() => {
+    const el = ta.current; if (!el) return; grow(el);
+    const raf = requestAnimationFrame(() => grow(el)), t = setTimeout(() => grow(el), 400);
+    let w = el.offsetWidth, ro = null;
+    if (window.ResizeObserver) { ro = new ResizeObserver(() => { if (el.offsetWidth !== w) { w = el.offsetWidth; grow(el); } }); ro.observe(el); }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => grow(el));
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); if (ro) ro.disconnect(); };
+  }, [txt]);
   return html`<textarea class="inp tcell" rows="1" style=${'width:' + fit(txt) + 'px;max-width:100%'} value=${txt}
-    ref=${el => grow(el)} onInput=${e => { setTxt(e.target.value); grow(e.target); }}
-    onBlur=${() => { if ((txt || '') !== (value || '')) onChange(txt); }} onKeyDown=${e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur(); } }} />`;
+    ref=${ta} onInput=${e => { dirty.current = true; setTxt(e.target.value); grow(e.target); }}
+    onBlur=${e => { if (!dirty.current) return; dirty.current = false; const v = e.target.value; if ((v || '') !== (value || '')) onChange(v); }} onKeyDown=${e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur(); } }} />`;
 }
 function ConfirmBtn({ label, onYes, cls }) {
   const [arm, setArm] = useState(false);
@@ -3539,27 +3551,27 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
     ${!rowsF.length ? html`<div class="card sub">沒有符合篩選的個案</div>`
     : mobile ? html`<div class="rcards">${rowsF.map(r => { const isOpen = open === r.caseId, st = statusOf(r);
         // 手機：一人一張卡，三個時效天數做成小方塊；點卡片展開，所有欄位直接在卡片裡填
-        return html`<div class=${'rcard' + (isOpen ? ' open' : '') + (st.some(x => x[1] === 't-warn') ? ' warn' : '')}>
+        return html`<div key=${r.caseId} class=${'rcard' + (isOpen ? ' open' : '') + (st.some(x => x[1] === 't-warn') ? ' warn' : '')}>
           <div class="rc-h" onClick=${() => setOpen(isOpen ? null : r.caseId)}><span class="no">${r.i}</span><b>${r.c.name}</b><span class="sub">CMS ${cellText(colBy('CMS'), r)}</span><span class="grow"></span><span class="ar">${isOpen ? '▴' : '▾'}</span></div>
           <div class="rc-m" style=${`grid-template-columns:repeat(${Math.max(1, CARD_COLS.length)},1fr)`} onClick=${() => setOpen(isOpen ? null : r.caseId)}>${CARD_COLS.map(h => { const c = colBy(h), v = c.v(r), msg = c.bad ? c.bad(r) : '', nb = c.noB && r.noB;
             return html`<div class=${'met' + (msg ? ' bad' : '') + (nb ? ' na' : '')}><span>${h.replace(/\((工作天|日曆天)\)/, '').replace('3天內完成率', '').replace('個管', '').replace('平均天數', '')}</span><b>${nb ? r.noB : v === null || v === undefined || v === '' ? '—' : v}${nb || v === null || v === undefined || v === '' ? '' : html`<small>天</small>`}</b></div>`; })}</div>
           <div class="rc-s">${st.length ? st.map(([t, cls]) => html`<span class=${'tag ' + cls}>${t}</span>`) : html`<span class="tag t-new">準時</span>`}</div>
-          ${isOpen && html`<div class="rc-d">${detailGroups.map(([g, cols]) => html`<div class="rc-g"><div class="dsh">${g}</div>${cols.map(c => html`<div class="rc-f"><span class="lb">${colHead(c)}</span><span class="vl">${cellInner(c, r)}</span></div>`)}</div>`)}
+          ${isOpen && html`<div class="rc-d">${detailGroups.map(([g, cols]) => html`<div class="rc-g"><div class="dsh">${g}</div>${cols.map(c => html`<div class="rc-f" key=${r.caseId + c.h}><span class="lb">${colHead(c)}</span><span class="vl">${cellInner(c, r)}</span></div>`)}</div>`)}
             <button class="btn light" style="width:100%;margin-top:8px" onClick=${() => setEdit(r.caseId)}>打開個案資料</button></div>`}</div>`; })}</div>`
     : compact ? html`<div class="tw"><table class="grid ctr cmp">
       <thead><tr><th>序號</th><th>姓名<span class="hint">點姓名修改個案資料</span></th><th>CMS</th>${CMP_COLS.map(h => { const c = colBy(h); return html`<th>${h.replace(/\((工作天|日曆天)\)/, '').replace('3天內完成率', '')}<span class="hint">${c.mk ? CALC_MODES[calcMode(db, c.mk)] : '天數'}</span></th>`; })}<th>狀態</th><th></th></tr></thead>
       <tbody>${rowsF.map(r => { const isOpen = open === r.caseId, st = statusOf(r);
-        return html`<tr class=${'click' + (isOpen ? ' open' : '')} onClick=${() => setOpen(isOpen ? null : r.caseId)}>
+        return html`<tr key=${r.caseId} class=${'click' + (isOpen ? ' open' : '')} onClick=${() => setOpen(isOpen ? null : r.caseId)}>
           <td>${r.i}</td><td><a class="namelink" onClick=${ev => { ev.stopPropagation(); setEdit(r.caseId); }} title="修改個案資料">${r.c.name}</a></td><td>${cellText(colBy('CMS'), r)}</td>
           ${CMP_COLS.map(h => cell(colBy(h), r))}
           <td>${st.length ? st.map(([t, cls]) => html`<span class=${'tag ' + cls} style="margin:1px">${t}</span>`) : html`<span class="tag t-new">準時</span>`}</td>
           <td class="sub">${isOpen ? '▲' : '▼'}</td></tr>
-        ${isOpen && html`<tr class="detail"><td colspan=${CMP_COLS.length + 5}><div class="dgrid">${detailGroups.map(([g, cols]) => html`<div class="dsec"><div class="dsh">${g}</div>
+        ${isOpen && html`<tr key=${r.caseId + ':d'} class="detail"><td colspan=${CMP_COLS.length + 5}><div class="dgrid">${detailGroups.map(([g, cols]) => html`<div class="dsec"><div class="dsh">${g}</div>
           <table class="grid ctr mini"><thead><tr>${cols.map(c => html`<th>${colHead(c)}</th>`)}</tr></thead><tbody><tr>${cols.map(c => cell(c, r))}</tr></tbody></table></div>`)}</div></td></tr>`}`; })}
       </tbody></table></div>`
     : html`<div class="tw"><table class="grid stick2 ctr">
       <thead><tr>${rep.R.cols.map(c => html`<th>${colHead(c)}${colHint(c) && html`<span class="hint">${colHint(c)}</span>`}</th>`)}</tr></thead>
-      <tbody>${rowsF.map(r => html`<tr>${rep.R.cols.map(col => col.h === '姓名' ? html`<td><a class="namelink" onClick=${() => setEdit(r.caseId)} title="修改個案資料">${r.c.name}</a></td>` : cell(col, r))}</tr>`)}</tbody></table></div>`}
+      <tbody>${rowsF.map(r => html`<tr key=${r.caseId}>${rep.R.cols.map(col => col.h === '姓名' ? html`<td><a class="namelink" onClick=${() => setEdit(r.caseId)} title="修改個案資料">${r.c.name}</a></td>` : cell(col, r))}</tr>`)}</tbody></table></div>`}
     ${edit && html`<${CaseEditor} key=${'rpt' + edit} db=${db} month=${month} user=${user} id=${edit} onClose=${() => setEdit(null)} refresh=${refresh} />`}
     <div class="sub" style="margin-top:8px">紅色＝逾期或日期有問題（滑鼠移上去看說明）；橘色＝逾期但還沒填原因。工作天已排除週末、國定假日與颱風假（在「設定」維護）；「工作天（當日算第1天）」連起始那天也算進去，例如 11/4 簽審、11/6 進場＝3 天。計畫擬定以上午／下午分界（中午 12 點）：督導審核當段算第 1 天，下午就跳到下一個工作天；沒選時當作上午。</div>`}
   </div>`;
