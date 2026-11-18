@@ -202,20 +202,17 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
   .av i{position:absolute;right:-5px;bottom:-4px;font-style:normal;font-size:10px;background:var(--org,#c47a1c);color:#fff;border-radius:50%;width:15px;height:15px;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff}
   .online-pop{position:absolute;right:0;top:calc(100% + 8px);width:min(420px,90vw);z-index:200;box-shadow:0 10px 30px rgba(61,53,41,.18);animation:fx-fade-up .2s ease both}
   .online-row{display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid #f0e8dc;flex-wrap:wrap}
-  /* 懸浮鈕：回入口網站（左上，上方選單左邊空出位置） */
-  .homefab{position:fixed;left:10px;top:8px;z-index:1000;display:flex;align-items:center;gap:6px;padding:4px 14px 4px 4px;border-radius:999px;
-    background:linear-gradient(135deg,#8fae84,#6c8c63);color:#fff;text-decoration:none;font-weight:700;font-size:15px;letter-spacing:.5px;
-    box-shadow:0 6px 18px rgba(76,104,68,.35),inset 0 1px 0 rgba(255,255,255,.25);transition:transform .15s,box-shadow .15s}
-  .top{padding-left:160px}
-  .homefab .ic{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center}
-  body:has(.modal) .homefab{display:none}
-  .homefab:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(76,104,68,.4),inset 0 1px 0 rgba(255,255,255,.25)}
-  .homefab:active{transform:translateY(0)}
+  /* 回入口網站：放在「雲端資料庫」右邊 */
+  .homebtn{display:inline-flex;align-items:center;gap:5px;margin-left:10px;padding:3px 12px 3px 4px;border-radius:999px;vertical-align:middle;
+    background:linear-gradient(135deg,#8fae84,#6c8c63);color:#fff!important;text-decoration:none;font-weight:600;font-size:13px;
+    box-shadow:0 3px 10px rgba(76,104,68,.3),inset 0 1px 0 rgba(255,255,255,.25);transition:transform .15s,box-shadow .15s}
+  .homebtn .ic{width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center}.homebtn svg{width:15px;height:15px}
+  .homebtn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(76,104,68,.38)}
   .mcards{display:flex;flex-direction:column;gap:7px}
   .mcard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:9px 12px;cursor:pointer}
   .mcard:active{background:#fbf3e6}
   .mcard .l1{display:flex;align-items:baseline;gap:8px}.mcard .l1 b{font-size:16px}.mcard .no{color:var(--sub);font-size:12px}.mcard .rg{color:var(--sub);font-size:12px;white-space:nowrap}
-  .mcard .l2{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}.mcard .fee{margin-left:auto}
+  .mcard .l2{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}.mcard .fee{flex:none}
   /* 總表搜尋列：一直懸浮在上方 */
   .sbar{position:sticky;top:var(--toph,0px);z-index:40;display:flex;gap:6px;align-items:center;background:var(--bg);padding:6px 0;margin:-4px 0 6px;box-shadow:0 6px 8px -8px rgba(0,0,0,.25)}
   .sbar input{width:260px}
@@ -223,15 +220,18 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
   .mobonly{display:none}
   @media (max-width:700px){
     .top{position:static;padding:6px 8px;gap:4px 6px}
-    .top .brand a,.top .uname,.top .grow{display:none}
+    .top .uname,.top .grow{display:none}
     .top .brand{order:0;flex:1 0 calc(100% - 110px)}
     .top > :not(.brand):not(.tabbtn):not(label):not(.btn.light){order:1}
     .top .tabbtn{order:2;flex:1 0 18%;padding:7px 2px;font-size:14px}
     .top label.sub{order:3;flex:1 1 150px}.top label.sub input{width:100%}
     .top .btn.light{order:3}
     .fz{display:none}
-    .homefab{left:8px;top:8px;padding:0;width:40px;height:40px;justify-content:center}.homefab .tx{display:none}.homefab .ic{background:none;width:auto;height:auto}
-    .top{padding-left:56px}
+    .homebtn{padding:3px;margin-left:8px}.homebtn .tx{display:none}
+    .top label.sub{display:flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap}
+    .sumtool .ampm{flex:0 0 auto}.sumtool .cnt{flex:1 1 auto;flex-basis:auto!important;text-align:right}
+    .sumtool .btn{flex:1 1 40%;justify-content:center}
+    .mcard{padding:8px 11px}.mcard .l1 b{font-size:15px}.mcard .l2{margin-top:4px;gap:5px}.mcard .l2 .rg{margin-right:2px}
     .fstats{right:8px;bottom:8px;gap:4px}.fstats button{width:46px;height:46px}.fstats button b{font-size:14px}.fstats button span{font-size:9px}
     .page{padding:8px 8px 80px}
     .card{overflow-x:auto;padding:10px}
@@ -241,7 +241,7 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
     h2{font-size:18px}
     .kv{gap:8px}.kv b{text-align:right}
     .cols3{grid-template-columns:minmax(0,1fr)}
-    .sbar{top:0;margin:-4px -8px 6px;padding:6px 8px 6px 56px}.sbar input{flex:1;width:auto;min-width:0}
+    .sbar{top:0;margin:-4px -8px 6px;padding:6px 8px}.sbar input{flex:1;width:auto;min-width:0}
     .mobonly{display:inline-flex}.trigtoggle{width:100%;justify-content:center;margin-bottom:6px}.trigtoggle.on{border-color:var(--green);color:var(--green);font-weight:700}
     .trigchips{display:none}.trigchips.open{display:flex}
     .page .ampm{flex-wrap:wrap;max-width:100%;flex:0 1 auto}.page .ampm button{flex:1 1 auto}
@@ -2935,12 +2935,12 @@ function SummaryView({ db, month, user, refresh }) {
     return html`<span class=${'tag ' + (k === 'none' ? 't-warn' : isAuto ? 't-close' : 't-ok')} title=${isAuto ? '沒選金額時的預設值' : ''}>${FEE[k].label}${isAuto ? '（預設）' : ''}</span>`;
   };
   return html`<div class="page">
-    <div class="bar">
+    <div class="bar sumtool">
       <span class="ampm" style="margin-right:4px">
         <button class=${view === 'list' ? 'on' : ''} onClick=${() => setView('list')}>總表 ${base.length}</button>
         <button class=${view === 'closed' ? 'on' : ''} onClick=${() => setView('closed')}>結案表 ${nClosed}</button></span>
       <span class="grow"></span>
-      ${view === 'list' && html`<span class="sub">共 ${list.length} 案，本月新案 ${nNew}</span>`}
+      ${view === 'list' && html`<span class="sub cnt">共 ${list.length} 案，本月新案 ${nNew}</span>`}
       ${view === 'list' && html`<button class="btn light" onClick=${() => exportSummary(db, month, true)} title="和原本 Excel 總表一樣的欄位，一個月一張工作表">匯出${+month.slice(0, 4) - 1911}年總表</button>
         <button class="btn" onClick=${() => openEdit({ isNew: true })}>＋ 新增個案</button>`}
     </div>
@@ -2964,11 +2964,11 @@ function SummaryView({ db, month, user, refresh }) {
         const e = evOf.get(c._id), x = epAt(db.info.get(c._id) || {}, month), t = trigOf(c), isAuto = !(e && normTrigger(e.trigger)) && !!t;
         const closed = x.close && x.close <= month, waiting = x.close && x.close < month;
         return html`<div class="mcard" onClick=${() => openEdit({ id: c._id })}>
-          <div class="l1"><b>${c.name}</b><span class="no">${c.caseNo}</span><span class="grow"></span><span class="rg">${regionOf(c.caseNo)}${c.cms ? `・CMS ${c.cms}` : ''}</span></div>
-          <div class="l2">${t ? html`<span class=${'tag ' + (isNewTrigger(t) ? 't-new' : /結案/.test(t) ? 't-close' : isAuto ? 't-org' : 't-ev')}>${t}${isAuto ? '（自動）' : ''}</span>` : html`<span class="tag">-</span>`}
+          <div class="l1"><b>${c.name}</b><span class="no">${c.caseNo}</span><span class="grow"></span><span class="fee">${feeCell(c)}</span></div>
+          <div class="l2"><span class="rg">${regionOf(c.caseNo)}${c.cms ? `・CMS ${String(c.cms).replace(/級$/, '')}` : ''}</span>${t ? html`<span class=${'tag ' + (isNewTrigger(t) ? 't-new' : /結案/.test(t) ? 't-close' : isAuto ? 't-org' : 't-ev')}>${t}${isAuto ? '（自動）' : ''}</span>` : ''}
             ${/轉入/.test(t || '') ? html`<span class="tag t-close">${TRANSFER_FROM.includes(c.srcNote) ? c.srcNote : '轉入來源未選'}</span>` : ''}
             ${closed ? html`<span class="tag t-close">${rocMonth(x.close)}結案${waiting && !closedOffMonth(c) ? '・待補日期' : ''}</span>` : ''}
-            <span class="fee">${feeCell(c)}</span></div></div>`;
+</div></div>`;
       })}${list.length === 0 ? html`<div class="card empty">沒有符合的個案</div>` : ''}</div>` : html`
     <div class="tw"><table class="grid">
       <thead><tr><th>編號</th><th>姓名</th><th>身分證</th><th>CMS</th><th>來源</th><th>${rocMonth(month)}觸發</th><th>核銷</th><th>照專評估</th><th>訪視</th><th>照專簽審</th><th>照會B</th><th>居服單位</th><th>狀態</th></tr></thead>
@@ -4529,7 +4529,7 @@ function App() {
   const TABS = [['summary', '總表'], ['report', '評鑑報表'], ['stats', '統計'], ['import', '匯入'], ['settings', '設定']];
   return html`<div>
     <div class="top">
-      <span class="brand"><img src=${LOGO} alt="" />雲端資料庫</span>
+      <span class="brand"><img src=${LOGO} alt="" />雲端資料庫<a class="homebtn" href=${PORTAL_URL} title="回到入口網站" aria-label="回到入口網站"><span class="ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg></span><span class="tx">回入口網站</span></a></span>
       <${OnlineAvatars} />
       ${TABS.map(([k, l]) => html`<button class=${'tabbtn' + (tab === k ? ' on' : '')} onClick=${() => setTab(k)}>${l}</button>`)}
       <span class="grow"></span>
@@ -4545,7 +4545,6 @@ function App() {
       : html`<div class="page"><${HolidaysCard} db=${db} user=${user} refresh=${refresh} /><${UnitsCard} db=${db} user=${user} refresh=${refresh} /></div>`}
     ${db && tab !== 'summary' && readDraft() && html`<div class="toast" style="background:var(--org,#c47a1c);cursor:pointer;bottom:90px" onClick=${() => setTab('summary')}>「${readDraft().name}」還有資料沒儲存，點這裡回去繼續填</div>`}
     ${db && html`<${FloatStats} db=${db} month=${month} />`}
-    <a class="homefab" href=${PORTAL_URL} title="回到入口網站" aria-label="回到入口網站"><span class="ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg></span><span class="tx">回入口網站</span></a>
     ${toastMsg && html`<div class="toast" style=${'background:' + (toastMsg.err ? 'var(--red)' : 'var(--green)')}>${toastMsg.msg}</div>`}
   </div>`;
 }
