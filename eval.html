@@ -1457,7 +1457,7 @@ function pieSheet(month, db) {
   // 人數＝本月實際在案＋本月結案（含轉外縣市），每個人只算一類；觸發是「結案-」「結案400-」的一律算「結案」：
   //   核銷選「沒吃到錢」→ 吃不到錢；否則看觸發（「上月新案-初評」這類去掉月份後再分類）；其餘（「-」、轉入-AA02、上月沒吃到錢…）→ AA02
   const pk = {};
-  for (const k of billKinds(month, db, S).values()) pk[k] = (pk[k] || 0) + 1;
+  for (const k0 of billKinds(month, db, S).values()) { const k = k0 === 'AA02-360' ? 'AA02' : k0; pk[k] = (pk[k] || 0) + 1; }
   // 「吃不到錢」這個月有才列出（跟 9 月原檔一樣）；沒有就不列（跟 10 月原檔一樣）
   const plan = ['初評', '出備', '複評', '出→初', 'AA01', 'AA02', ...(pk.吃不到錢 ? ['吃不到錢'] : []), '結案'].map(k => [k, pk[k] || 0]);
   return { units, leling, plan };
@@ -2464,7 +2464,8 @@ function billKinds(month, db, S) {
   for (const id of S.withClosed) {
     const e = evOf.get(id), t = (e ? normTrigger(e.trigger) : '') || auto.get(id) || '';
     const fee = e && FEE[e.fee] ? e.fee : defaultFee(t);
-    out.set(id, (/^結案/.test(t) || /\/\s*結案/.test(t)) ? '結案' : fee === 'none' ? '吃不到錢' : (t && planKind(t.replace(/^(\d{1,2}月|上月)/, ''))) || 'AA02');
+    const k = (/^結案/.test(t) || /\/\s*結案/.test(t)) ? '結案' : fee === 'none' ? '吃不到錢' : (t && planKind(t.replace(/^(\d{1,2}月|上月)/, ''))) || 'AA02';
+    out.set(id, k === 'AA02' && fee === '360' ? 'AA02-360' : k);   // AA02 裡核銷金額選 360 的另外算
   }
   return out;
 }
@@ -2475,7 +2476,7 @@ function billMonth(month, db) {
   const n = k => cnt[k] || 0, nr = (k, r) => (by[k] || {})[r] || 0;
   const n1700 = K1700.reduce((a, k) => a + n(k), 0), r1700 = r => K1700.reduce((a, k) => a + nr(k, r), 0);
   const nNew = new Set(S.newEvents.map(e => e.caseId)).size;
-  return { yy, m, total: S.withClosed.length, nNew, n, nr, n1700, r1700, n400: n('AA02'), closed: n('結案'), none: n('吃不到錢'), ids: K };
+  return { yy, m, total: S.withClosed.length, nNew, n, nr, n1700, r1700, n400: n('AA02'), n360: n('AA02-360'), closed: n('結案'), none: n('吃不到錢'), ids: K };
 }
 const money = v => Number(v || 0).toLocaleString('en-US');
 // Word：照原檔表格，只換格子文字（字型、粗體、顏色照原本那格）
@@ -2515,20 +2516,32 @@ function billCaseDoc(xml, B) {
     [undefined, B.n1700, ...RGS.map(r => B.r1700(r))]];
   const text = [{ from: 0, segs: [`新案：${B.nNew}位`] }, { from: 1, segs: [`AA01+複評+初評(1700)：${B.n1700}人`] },
     { from: 2, segs: [`(初評：${B.n('初評')}人`, `(出→初：${B.n('出→初')}人`, `(出備：${B.n('出備')}人`] }, { from: 3, segs: [`(複評：${B.n('複評')}人`] }, { from: 4, segs: [`(AA01：${B.n('AA01')}人`] },
-    { from: 5, segs: [''] }, { from: 6, segs: [`AA02電訪(400元):${B.n400}位`] }, { from: 7, segs: [`(AA02：${B.n400}人`] }, { from: 8, segs: [''] },
+    { from: 5, segs: [''] }, { from: 6, segs: [`AA02電訪(400元):${B.n400}位`] }, { from: 7, segs: [`(AA02：${B.n400}人`, ...(B.n360 ? [`(AA02-360元：${B.n360}人`] : [])] }, { from: 8, segs: [''] },
     { from: 9, segs: [`(結案：${B.closed}人`, `(吃不到錢：${B.none}人`] }];
   return docFillTable(xml, rows, text);
 }
 // 11510-臺西區核銷金額
+// 原檔 5 欄（區域、AA01 人數、金額、AA02 400 人數、金額）→ 後面多兩欄 AA02 360 元（複製 400 元那兩格的格式），欄寬平均分
+function addAmt360Cols(xml) {
+  const total = [...(xml.match(/<w:tblGrid>[\s\S]*?<\/w:tblGrid>/) || [''])[0].matchAll(/w:w="(\d+)"/g)].reduce((a, m) => a + +m[1], 0) || 8300, w = Math.floor(total / 7);
+  xml = xml.replace(/<w:tblGrid>[\s\S]*?<\/w:tblGrid>/, `<w:tblGrid>${'<w:gridCol w:w="' + w + '"/>'.repeat(7)}</w:tblGrid>`);
+  return xml.replace(/<w:tr\b[\s\S]*?<\/w:tr>/g, tr => {
+    const tcs = [...tr.matchAll(/<w:tc>[\s\S]*?<\/w:tc>/g)].map(m => m[0]);
+    if (tcs.length === 1) return tr.replace(/<w:gridSpan w:val="\d+"\/>/, '<w:gridSpan w:val="7"/>').replace(/(<w:tcW w:w=")\d+/, `$1${w * 7}`);
+    if (tcs.length !== 5) return tr;
+    const add = tcs.slice(3).map(tc => tc.replace(/400/g, '360')).join('');
+    return tr.replace(tcs[4], tcs[4] + add).replace(/(<w:tcW w:w=")\d+/g, `$1${w}`);
+  });
+}
 function billAmtDoc(xml, B) {
-  const RGS = ['四湖', '台西', '麥寮', '東勢'], a1 = B.n1700 * 1700, a4 = B.n400 * 400;
+  const RGS = ['四湖', '台西', '麥寮', '東勢'], a1 = B.n1700 * 1700, a4 = B.n400 * 400, a3 = B.n360 * 360;
   const rows = [[`${B.yy}年${B.m}月臺西區核銷金額`], undefined,
-    ...RGS.map(r => [undefined, B.r1700(r), money(B.r1700(r) * 1700), B.nr('AA02', r), money(B.nr('AA02', r) * 400)]),
-    [undefined, B.n1700, money(a1), B.n400, money(a4)]];
+    ...RGS.map(r => [undefined, B.r1700(r), money(B.r1700(r) * 1700), B.nr('AA02', r), money(B.nr('AA02', r) * 400), ...(B.n360 ? [B.nr('AA02-360', r), money(B.nr('AA02-360', r) * 360)] : [])]),
+    [undefined, B.n1700, money(a1), B.n400, money(a4), ...(B.n360 ? [B.n360, money(a3)] : [])]];
   const text = [{ from: 0, segs: [`AA01-1700元:${B.n1700}人；${money(a1)}元`] },
-    { from: 1, segs: [`AA02-400元:${B.n400}人：${money(a4)}元`, `結案：${B.closed}人`, `吃不到錢：${B.none}人`] },
-    { from: 2, segs: [`總計:${B.total}人；總共${money(a1 + a4)}元`] }];
-  return docFillTable(xml, rows, text);
+    { from: 1, segs: [`AA02-400元:${B.n400}人：${money(a4)}元`, ...(B.n360 ? [`AA02-360元:${B.n360}人：${money(a3)}元`] : []), `結案：${B.closed}人`, `吃不到錢：${B.none}人`] },
+    { from: 2, segs: [`總計:${B.total}人；總共${money(a1 + a4 + a3)}元`] }];
+  return docFillTable(B.n360 ? addAmt360Cols(xml) : xml, rows, text);   // 當月沒有人選 360 → 照原檔 5 欄
 }
 // ================= CORE-END =================
 // 月報範本（原本的「4.115年10月圓餅圖-台西區.xlsx」：只留格式、框線、字型、圖表樣式，數字都清掉）
@@ -3642,7 +3655,7 @@ function DispatchView({ d }) {
 function BillList({ month, db, B }) {
   const [cat, setCat] = useState('全部'), [rg, setRg] = useState('全部');
   const evOf = useMemo(() => { const m = new Map(); for (const e of db.events) if (e.month === month) m.set(e.caseId, e); return m; }, [db, month]);
-  const cats = [...K1700, 'AA02', '結案', '吃不到錢'], group = k => K1700.includes(k) ? '1700' : k === 'AA02' ? '400' : '';
+  const cats = [...K1700, 'AA02', 'AA02-360', '結案', '吃不到錢'], group = k => K1700.includes(k) ? '1700' : /^AA02/.test(k) ? '400' : '';
   const all = [...B.ids.entries()].map(([id, k]) => ({ c: db.cases.get(id), k, e: evOf.get(id) })).filter(x => x.c)
     .sort((a, b) => cats.indexOf(a.k) - cats.indexOf(b.k) || String(a.c.caseNo).localeCompare(String(b.c.caseNo), 'zh-Hant', { numeric: true }));
   const list = all.filter(x => (cat === '全部' || x.k === cat || (cat === '1700合計' && K1700.includes(x.k))) && (rg === '全部' || regionOf(x.c.caseNo) === rg));
@@ -3666,18 +3679,18 @@ function BillView({ month, db, kind }) {
       <div class="card" style="line-height:1.9"><div style="color:#c0392b;font-weight:700">新案：${B.nNew}位</div>
         <div style="color:#c0392b">AA01+複評+初評(1700)：${B.n1700}人</div>
         <div>(初評：${B.n('初評')}人　(出→初：${B.n('出→初')}人　(出備：${B.n('出備')}人　(複評：${B.n('複評')}人　(AA01：${B.n('AA01')}人</div>
-        <div style="color:#c0392b;margin-top:6px">AA02電訪(400元)：${B.n400}位</div>
+        <div style="color:#c0392b;margin-top:6px">AA02電訪(400元)：${B.n400}位</div>${B.n360 ? html`<div>(AA02-360元：${B.n360}人</div>` : ''}
         <div style="margin-top:6px">(結案：${B.closed}人　(吃不到錢：${B.none}人</div>
-        <div class="sub" style="margin-top:6px">每個人只算一類：${B.n1700}＋${B.n400}＋${B.closed}＋${B.none}＝${B.n1700 + B.n400 + B.closed + B.none} 人（派案人數 ${B.total} 人）。分類跟「4.月份圓餅圖」一樣：看本月觸發與核銷金額。</div></div></div>
+        <div class="sub" style="margin-top:6px">每個人只算一類：${B.n1700}＋${B.n400}${B.n360 ? `＋${B.n360}` : ''}＋${B.closed}＋${B.none}＝${B.n1700 + B.n400 + B.n360 + B.closed + B.none} 人（派案人數 ${B.total} 人）。分類跟「4.月份圓餅圖」一樣：看本月觸發與核銷金額。</div></div></div>
       <${BillList} month=${month} db=${db} B=${B} />`;
   }
-  const RGS = ['四湖', '台西', '麥寮', '東勢'], a1 = B.n1700 * 1700, a4 = B.n400 * 400;
+  const RGS = ['四湖', '台西', '麥寮', '東勢'], a1 = B.n1700 * 1700, a4 = B.n400 * 400, a3 = B.n360 * 360;
   return html`<h3>${B.yy}年${B.m}月臺西區核銷金額</h3>
-    <div class="cols2"><div class="card"><table class="grid" style="width:100%"><thead><tr><th>區域</th><th>人數</th><th>AA01 1700元</th><th>人數</th><th>AA02 400元</th></tr></thead>
-      <tbody>${RGS.map(r => html`<tr><td>${r}</td><td>${B.r1700(r)}</td><td>${money(B.r1700(r) * 1700)}</td><td>${B.nr('AA02', r)}</td><td>${money(B.nr('AA02', r) * 400)}</td></tr>`)}
-      <tr><td><b>總計</b></td><td><b>${B.n1700}</b></td><td><b>${money(a1)}</b></td><td><b>${B.n400}</b></td><td><b>${money(a4)}</b></td></tr></tbody></table></div>
-    <div class="card" style="line-height:1.9"><div>AA01-1700元：${B.n1700}人；${money(a1)}元</div><div>AA02-400元：${B.n400}人；${money(a4)}元</div>
-      <div>結案：${B.closed}人　吃不到錢：${B.none}人</div><div style="color:#c0392b;font-weight:700">總計：${B.total}人；總共${money(a1 + a4)}元</div></div></div>
+    <div class="cols2"><div class="card"><table class="grid" style="width:100%"><thead><tr><th>區域</th><th>人數</th><th>AA01 1700元</th><th>人數</th><th>AA02 400元</th>${B.n360 ? html`<th>人數</th><th>AA02 360元</th>` : ''}</tr></thead>
+      <tbody>${RGS.map(r => html`<tr><td>${r}</td><td>${B.r1700(r)}</td><td>${money(B.r1700(r) * 1700)}</td><td>${B.nr('AA02', r)}</td><td>${money(B.nr('AA02', r) * 400)}</td>${B.n360 ? html`<td>${B.nr('AA02-360', r)}</td><td>${money(B.nr('AA02-360', r) * 360)}</td>` : ''}</tr>`)}
+      <tr><td><b>總計</b></td><td><b>${B.n1700}</b></td><td><b>${money(a1)}</b></td><td><b>${B.n400}</b></td><td><b>${money(a4)}</b></td>${B.n360 ? html`<td><b>${B.n360}</b></td><td><b>${money(a3)}</b></td>` : ''}</tr></tbody></table></div>
+    <div class="card" style="line-height:1.9"><div>AA01-1700元：${B.n1700}人；${money(a1)}元</div><div>AA02-400元：${B.n400}人；${money(a4)}元</div>${B.n360 ? html`<div>AA02-360元：${B.n360}人；${money(a3)}元</div>` : ''}
+      <div>結案：${B.closed}人　吃不到錢：${B.none}人</div><div style="color:#c0392b;font-weight:700">總計：${B.total}人；總共${money(a1 + a4 + a3)}元</div></div></div>
     <${BillList} month=${month} db=${db} B=${B} />`;
 }
 // A單位月報表（照原本「月報表」Excel 的項目）
