@@ -3344,12 +3344,12 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
   };
   // 地址這類長文字：字越多欄位越寬（跨 2 格或整列）
   const growSpan = (k, v) => { if (!['address', 'srcNote', 'note', 'closeNote'].includes(k)) return ''; const n = String(v || '').length; return n > 24 ? 'grid-column:1/-1' : n > 11 ? 'grid-column:span 2' : ''; };
-  const field = (obj, set) => ([k, label, t]) => html`<label style=${growSpan(k, obj[k])}>${label}
+  const field = (obj, set) => ([k, label, t]) => html`<label style=${t === 'cm' ? 'grid-column:1/-1' : growSpan(k, obj[k])}>${label}
     ${t && t.select ? html`<select class="inp" value=${obj[k] || ''} onChange=${e => set({ ...obj, [k]: e.target.value })}>
         <option value="">（未填）</option>${[...t.select, ...(obj[k] && !t.select.includes(obj[k]) ? [obj[k]] : [])].map(o => html`<option value=${o}>${o}</option>`)}</select>`
     : t === 'date' ? html`<${DateInput} style="width:100%" value=${obj[k] || ''} onChange=${v => set({ ...obj, [k]: v })} />`
-      : t === 'cm' ? html`<select class="inp" value=${obj[k] || ''} onChange=${e => set({ ...obj, [k]: e.target.value })}><option value="">（未填）</option>${[...cmNames, ...(obj[k] && !cmNames.includes(obj[k]) ? [obj[k]] : [])].map(o => html`<option value=${o}>${o}</option>`)}</select>
-        ${!cmNames.length && html`<span class="sub" style="font-size:11px">還沒有個管名單：到「設定 → 個管名單」新增</span>`}`
+      : t === 'cm' ? html`<span class="trigbar" style="margin:2px 0 0">${[...cmNames, ...(obj[k] && !cmNames.includes(obj[k]) ? [obj[k]] : [])].map(o => html`<button type="button" class=${obj[k] === o ? 'on' : ''} onClick=${e => { e.preventDefault(); set({ ...obj, [k]: obj[k] === o ? '' : o }); }}>${o}</button>`)}
+        ${!cmNames.length && html`<span class="sub" style="font-size:11px">還沒有個管名單：到「設定 → 個管名單」新增</span>`}</span>`
       : Array.isArray(t) ? html`<input class="inp" list=${'dl-' + k} value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} /><datalist id=${'dl-' + k}>${t.map(o => html`<option value=${o} />`)}</datalist>`
         : html`<input class="inp" value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} />`}
     ${k === 'srcNote' && obj.src === '轉入' && html`<span class="trigbar" style="margin:4px 0 0">${TRANSFER_FROM.map(o => html`<button type="button" class=${obj.srcNote === o ? 'on' : ''} onClick=${e => { e.preventDefault(); set({ ...obj, srcNote: obj.srcNote === o ? '' : o }); }}>${o}</button>`)}</span>`}</label>`;
