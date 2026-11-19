@@ -4114,6 +4114,23 @@ async function careToken() {
   try { localStorage.setItem(CARE_RT_KEY, a.tokens.refreshToken); } catch { }
   return a.tokens.token;
 }
+// AA02 個案清單快取（只放在記憶體，不存瀏覽器）：同一次開網頁只完整讀一次，
+// 之後只抓有變動的（since）＋被刪除的（墓碑），省 AA02 的資料庫用量
+const careCache = { rows: new Map(), at: 0, tomb: 0 };
+async function careCases(token) {
+  const t0 = Date.now();
+  if (!careCache.at) {
+    const rows = await carePost('cases:list', 'query', { all: true }, token);
+    careCache.rows = new Map((rows || []).map(r => [r.caseId, r]));
+  } else {
+    const rows = await carePost('cases:list', 'query', { since: Math.max(0, careCache.at - 60000) }, token);
+    for (const r of rows || []) careCache.rows.set(r.caseId, r);
+    try { const gone = await carePost('cases:recentTombstones', 'query', { sinceMs: Math.max(0, careCache.tomb - 60000) }, token);
+      for (const g of gone || []) careCache.rows.delete(g.caseId); } catch { }
+  }
+  careCache.at = careCache.tomb = t0;
+  return [...careCache.rows.values()];
+}
 // 自動同步（這台裝置有連結 AA02 才會跑）：
 //   （每台裝置 1 小時最多一次）
 //   1. 讀 AA02 上次之後有變動的個案 → 更新個管對照（AA02 已填的個管會帶進這裡）
@@ -4150,7 +4167,7 @@ async function pushCaseToCareApp(c, careManager, cm, token0) {
   if (!c.name || !idNo) throw new Error('要有姓名和身分證');
   const token = token0 || await careToken();
   // AA02 已有同一個身分證就不建（新增新案時才讀一次 AA02 名單）
-  const recent = token0 ? [] : await carePost('cases:list', 'query', { all: true }, token);
+  const recent = token0 ? [] : await careCases(token);
   if ((recent || []).some(row => { try { return String(JSON.parse(row.data || '{}').idNo || '').trim().toUpperCase() === idNo; } catch { return false; } })) return 'exists';
   const now = Date.now(), d = new Date(), region = regionOf(c.caseNo);
   const data = { name: c.name, idNo, careManager: careManager || '', region: cm && cm.regions && cm.regions.includes(region) ? region : '', contactName: c.contact || '', contactPhone: c.phone || '',
@@ -4167,7 +4184,7 @@ function CmCompare({ db, onClose }) {
     if (!careLinked()) { setLink(true); return; }
     setSt('load'); setErr('');
     try {
-      const token = await careToken(), list = await carePost('cases:list', 'query', { all: true }, token), byId = new Map();
+      const token = await careToken(), list = await careCases(token), byId = new Map();
       for (const r of list || []) { let d = {}; try { d = JSON.parse(r.data || '{}'); } catch { } const id = String(d.idNo || '').trim().toUpperCase(); if (id) byId.set(id, { r, d }); }
       const diff = [], none = [];
       for (const c of db.cases.values()) {
@@ -4967,7 +4984,7 @@ function ManagersCard({ db, user, refresh }) {
   const fromAA02 = async () => {
     if (!careLinked()) { setLink(true); return; }
     setBusy(true);
-    try { const token = await careToken(), list = await carePost('cases:list', 'query', { all: true }, token), got = new Set();
+    try { const token = await careToken(), list = await careCases(token), got = new Set();
       for (const r of list || []) { try { const m = String(JSON.parse(r.data || '{}').careManager || '').trim(); if (m) got.add(m); } catch { } }
       const add2 = [...got].filter(x => !names.includes(x)); await save([...names, ...add2]); toast(add2.length ? `從 AA02 加入 ${add2.length} 位：${add2.join('、')}` : 'AA02 的個管都已在名單裡'); }
     catch (e) { toast('讀取 AA02 失敗：' + (e.message || e), true); }
