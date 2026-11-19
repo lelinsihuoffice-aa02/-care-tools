@@ -248,6 +248,8 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
   .rc-f .vl .inp,.rc-f .vl select,.rc-f .vl textarea{width:100%!important;max-width:100%}
   .rc-f:has(textarea){flex-direction:column;align-items:stretch;gap:4px}.rc-f:has(textarea) .lb{flex:none}
   textarea.tcell{resize:none;overflow:hidden;line-height:1.5;vertical-align:middle;font:inherit;min-height:34px}
+  .cmchip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px 6px 4px 12px;font-weight:600}
+  .cmchip small{color:var(--sub);font-weight:400}.cmchip button{border:none;background:#f3ece1;border-radius:50%;width:22px;height:22px;cursor:pointer;color:var(--sub);display:grid;place-items:center;padding:0;line-height:1;font-size:14px}.cmchip button:hover{background:#fbe1df;color:var(--red)}
   /* 儀表板 */
   .care-link{margin-top:14px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px;background:#fffdf8}
   .modal:has(.mbox){justify-content:center;align-items:center}.mbox{background:var(--bg,#faf6f0);border-radius:18px;padding:18px;width:min(100%,420px);margin:12px;box-shadow:0 20px 50px rgba(0,0,0,.25)}
@@ -3240,7 +3242,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
   const isAdd = !id;
   const cmData = db.kv.careManagers, [toCare, setToCare] = useState(() => careLinked()), [linkOpen, setLinkOpen] = useState(false);
   // 個管清單：這裡填過的＋AA02 系統有的
-  const cmNames = useMemo(() => [...new Set([...db.cases.values()].map(x => String(x.careManager || '').trim()).filter(Boolean))].sort(), [db]);
+  const cmNames = cmList(db);
   const [kind, setKind] = useState(draft ? draft.kind || '' : ''), [reopen, setReopen] = useState(draft ? draft.reopen || '' : ''), [rq, setRq] = useState(''), [reuseNote, setReuseNote] = useState('');
   const nextNo = rg => { let mx = 0; for (const c of db.cases.values()) { const p = parseCaseNo(c.caseNo); if (p && p.region === rg && p.seq > mx) mx = p.seq; } return `台-${rg}-${String(mx + 1).padStart(3, '0')}-1`; };
   const [caseNo, setCaseNo] = useState(draft ? draft.caseNo : orig ? orig.caseNo : '');
@@ -3346,7 +3348,8 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     ${t && t.select ? html`<select class="inp" value=${obj[k] || ''} onChange=${e => set({ ...obj, [k]: e.target.value })}>
         <option value="">（未填）</option>${[...t.select, ...(obj[k] && !t.select.includes(obj[k]) ? [obj[k]] : [])].map(o => html`<option value=${o}>${o}</option>`)}</select>`
     : t === 'date' ? html`<${DateInput} style="width:100%" value=${obj[k] || ''} onChange=${v => set({ ...obj, [k]: v })} />`
-      : t === 'cm' ? html`<input class="inp" list="dl-cm" placeholder="輸入或選擇個管" value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} /><datalist id="dl-cm">${cmNames.map(o => html`<option value=${o} />`)}</datalist>`
+      : t === 'cm' ? html`<select class="inp" value=${obj[k] || ''} onChange=${e => set({ ...obj, [k]: e.target.value })}><option value="">（未填）</option>${[...cmNames, ...(obj[k] && !cmNames.includes(obj[k]) ? [obj[k]] : [])].map(o => html`<option value=${o}>${o}</option>`)}</select>
+        ${!cmNames.length && html`<span class="sub" style="font-size:11px">還沒有個管名單：到「設定 → 個管名單」新增</span>`}`
       : Array.isArray(t) ? html`<input class="inp" list=${'dl-' + k} value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} /><datalist id=${'dl-' + k}>${t.map(o => html`<option value=${o} />`)}</datalist>`
         : html`<input class="inp" value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} />`}
     ${k === 'srcNote' && obj.src === '轉入' && html`<span class="trigbar" style="margin:4px 0 0">${TRANSFER_FROM.map(o => html`<button type="button" class=${obj.srcNote === o ? 'on' : ''} onClick=${e => { e.preventDefault(); set({ ...obj, srcNote: obj.srcNote === o ? '' : o }); }}>${o}</button>`)}</span>`}</label>`;
@@ -4953,6 +4956,32 @@ function FullToShort({ db, user, refresh }) {
 }
 
 // ================= 設定：服務單位、假日 =================
+// 個管名單（設定頁）：總表「負責個管」的下拉選單從這裡選；可以手動新增，或從 AA02 讀一次名單
+const cmList = db => ((db.kv.careManagerList && db.kv.careManagerList.names) || []);
+function ManagersCard({ db, user, refresh }) {
+  const names = cmList(db), [nm, setNm] = useState(''), [busy, setBusy] = useState(false), [link, setLink] = useState(false);
+  const count = useMemo(() => { const o = {}; for (const c of db.cases.values()) { const m = cmOf(c); if (m) o[m] = (o[m] || 0) + 1; } return o; }, [db]);
+  const save = async list => { try { await call('m', 'data:saveKv', { key: 'careManagerList', d: JSON.stringify({ names: [...new Set(list.map(x => x.trim()).filter(Boolean))] }), by: user }); await refresh(); } catch (e) { toast('儲存失敗：' + e.message, true); } };
+  const add = () => { const v = nm.trim(); if (!v) return; if (names.includes(v)) return toast('名單裡已經有「' + v + '」', true); save([...names, v]); setNm(''); };
+  const del = n => { if (count[n] && !confirm(`${n} 目前有 ${count[n]} 位個案，從名單移除不會改到個案資料，只是下拉選單不再出現。確定移除？`)) return; save(names.filter(x => x !== n)); };
+  const fromAA02 = async () => {
+    if (!careLinked()) { setLink(true); return; }
+    setBusy(true);
+    try { const token = await careToken(), list = await carePost('cases:list', 'query', { all: true }, token), got = new Set();
+      for (const r of list || []) { try { const m = String(JSON.parse(r.data || '{}').careManager || '').trim(); if (m) got.add(m); } catch { } }
+      const add2 = [...got].filter(x => !names.includes(x)); await save([...names, ...add2]); toast(add2.length ? `從 AA02 加入 ${add2.length} 位：${add2.join('、')}` : 'AA02 的個管都已在名單裡'); }
+    catch (e) { toast('讀取 AA02 失敗：' + (e.message || e), true); }
+    setBusy(false);
+  };
+  const unlisted = Object.keys(count).filter(n => !names.includes(n));
+  return html`<div class="card"><div class="bar"><h3 style="margin:0">個管名單</h3><span class="sub">總表個案資料「負責個管」從這裡選</span><span class="grow"></span>
+      <button class="btn light sm" disabled=${busy} onClick=${fromAA02}>${busy ? '讀取中…' : '從 AA02 匯入名單'}</button></div>
+    <div class="trigbar" style="margin:10px 0">${names.length ? names.map(n => html`<span class="cmchip">${n}<small>${count[n] || 0} 案</small><button title="移除" onClick=${() => del(n)}>×</button></span>`) : html`<span class="sub">還沒有個管：在下面輸入姓名新增，或按「從 AA02 匯入名單」。</span>`}</div>
+    <div class="bar"><input class="inp" style="width:200px" placeholder="個管姓名" value=${nm} onInput=${e => setNm(e.target.value)} onKeyDown=${e => e.key === 'Enter' && add()} /><button class="btn" onClick=${add}>＋ 新增個管</button></div>
+    ${unlisted.length > 0 && html`<div class="sub" style="margin-top:8px">個案資料裡有、但名單沒有：${unlisted.map(n => html`<button class="btn light sm" style="margin:2px" onClick=${() => save([...names, n])}>＋ ${n}</button>`)}</div>`}
+    ${link && html`<${CareLink} onClose=${ok => { setLink(false); if (ok) fromAA02(); }} />`}
+  </div>`;
+}
 function UnitsCard({ db, user, refresh }) {
   const [edit, setEdit] = useState(null), [q, setQ] = useState('');
   const save = async () => {
@@ -5171,7 +5200,7 @@ function App() {
       : tab === 'report' ? html`<${ReportView} db=${db} month=${month} user=${user} refresh=${refresh} />`
       : tab === 'stats' ? html`<${StatsView} db=${db} month=${month} />`
       : tab === 'import' ? html`<${ImportView} db=${db} month=${month} user=${user} refresh=${refresh} />`
-      : html`<div class="page"><${HolidaysCard} db=${db} user=${user} refresh=${refresh} /><${UnitsCard} db=${db} user=${user} refresh=${refresh} /></div>`}
+      : html`<div class="page"><${ManagersCard} db=${db} user=${user} refresh=${refresh} /><${HolidaysCard} db=${db} user=${user} refresh=${refresh} /><${UnitsCard} db=${db} user=${user} refresh=${refresh} /></div>`}
     ${db && tab !== 'summary' && readDraft() && html`<div class="toast" style="background:var(--org,#c47a1c);cursor:pointer;bottom:90px" onClick=${() => setTab('summary')}>「${readDraft().name}」還有資料沒儲存，點這裡回去繼續填</div>`}
     ${db && html`<${FloatStats} db=${db} month=${month} />`}
     ${toastMsg && html`<div class="toast" style=${'background:' + (toastMsg.err ? 'var(--red)' : 'var(--green)')}>${toastMsg.msg}</div>`}
