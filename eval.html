@@ -2788,11 +2788,12 @@ function referralSheetSpec(T, sh, today) {
 }
 // ---------- 個管負荷 ----------
 // cm：{ byId: {身分證: 個管}, byName: {姓名: 個管} }（從長照服務追蹤系統同步）
-const cmOf = (c, cm) => (cm && ((c.idNo && cm.byId[String(c.idNo).toUpperCase()]) || cm.byName[c.name])) || '';
+// 負責個管：只看總表個案資料填的
+const cmOf = c => String((c && c.careManager) || '').trim();
 function caseload(mk, db, cm) {
   const S = monthSets(mk, db), by = {}; let none = 0;
-  // 個管負荷＝月底實際在案（扣掉當月結案）
-  for (const id of S.latest) { const c = db.cases.get(id); if (!c) continue; const m = cmOf(c, cm); if (m) by[m] = (by[m] || 0) + 1; else none++; }
+  // 個管負荷＝月底實際在案（扣掉當月結案）；各個管加上「未填個管」＝實際在案人數
+  for (const id of S.latest) { const c = db.cases.get(id); if (!c) continue; const m = cmOf(c); if (m) by[m] = (by[m] || 0) + 1; else none++; }
   const list = Object.entries(by).sort((a, b) => b[1] - a[1]);
   return { list, none, total: S.latest.length, avg: list.length ? list.reduce((a, [, n]) => a + n, 0) / list.length : 0 };
 }
@@ -3082,7 +3083,7 @@ function exportUnitStats(kind, year, db) {
 // 基本資料（[欄位, 標題, 型態]；型態 {select: [...]} 是下拉選單）
 const CMS_OPTS = ['2級', '3級', '4級', '5級', '6級', '7級', '8級'];
 const CASE_FIELDS = [
-  ['name', '姓名'], ['gender', '性別', ['男', '女']], ['idNo', '身分證號'], ['birth', '出生日期', 'date'], ['cms', 'CMS', { select: CMS_OPTS }],
+  ['name', '姓名'], ['gender', '性別', ['男', '女']], ['idNo', '身分證號'], ['careManager', '負責個管', 'cm'], ['birth', '出生日期', 'date'], ['cms', 'CMS', { select: CMS_OPTS }],
   ['identity', '身分別', { select: ['一般', '中低收', '低收'] }], ['living', '居住狀況', { select: ['獨居', '與他人同住'] }], ['dementia', '失智', { select: ['-', '有'] }],
   ['disability', '身障（重鑑日/類別）'], ['disLevel', '身障等級', ['輕度', '中度', '重度', '極重度']],
   ['src', '申請來源', ['初評', '出備', '轉入']], ['srcNote', '申請來源備註'],
@@ -3094,7 +3095,7 @@ const CASE_DATES = [['applyDate', '申請日期'], ['openDate', '開案日期']]
 const EVENT_DATES = [['referA', '轉介(指派)A單位日期'], ['assess', '照專評估日期'], ['discharge', '出院日期'], ['visit', '個管訪視日期'],
   ['supervisor', '督導審核日期／上下午'], ['submit', '照顧計畫送審日期'], ['approve', '照專簽審日期／上下午'], ['referB', '照會B單位日期'], ['bFirst', 'B單位第一次提供服務日期']];
 // 重開案時從舊個案帶入的基本資料
-const BASE_COPY = ['name', 'gender', 'idNo', 'birth', 'identity', 'living', 'dementia', 'disability', 'disLevel', 'area', 'address', 'contact', 'phone'];
+const BASE_COPY = ['name', 'gender', 'idNo', 'careManager', 'birth', 'identity', 'living', 'dementia', 'disability', 'disLevel', 'area', 'address', 'contact', 'phone'];
 const NEW_TRIGGERS = TRIGGERS.filter(isNewTrigger);
 const TRANSFER_FROM = ['友單位轉入', '外縣市轉入']; // 轉入案的轉入來源，存在個案的「申請來源備註」（srcNote）；舊資料的「友單位」「外縣市」載入時自動換成新寫法
 // 最新的日期：只看「這一次開案」以後的紀錄（重開案不會沿用上一次開案的訪視、簽審日期）
@@ -3237,7 +3238,9 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
   const [curId, setCurId] = useState(draft ? draft.curId : id || null);
   const orig = curId ? db.cases.get(curId) : null;
   const isAdd = !id;
-  const cmData = db.kv.careManagers, [toCare, setToCare] = useState(() => careLinked()), [careMgr, setCareMgr] = useState('');
+  const cmData = db.kv.careManagers, [toCare, setToCare] = useState(() => careLinked()), [linkOpen, setLinkOpen] = useState(false);
+  // 個管清單：這裡填過的＋AA02 系統有的
+  const cmNames = useMemo(() => [...new Set([...db.cases.values()].map(x => String(x.careManager || '').trim()).filter(Boolean))].sort(), [db]);
   const [kind, setKind] = useState(draft ? draft.kind || '' : ''), [reopen, setReopen] = useState(draft ? draft.reopen || '' : ''), [rq, setRq] = useState(''), [reuseNote, setReuseNote] = useState('');
   const nextNo = rg => { let mx = 0; for (const c of db.cases.values()) { const p = parseCaseNo(c.caseNo); if (p && p.region === rg && p.seq > mx) mx = p.seq; } return `台-${rg}-${String(mx + 1).padStart(3, '0')}-1`; };
   const [caseNo, setCaseNo] = useState(draft ? draft.caseNo : orig ? orig.caseNo : '');
@@ -3320,7 +3323,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
       if (Object.keys(ep).length) await call('m', 'data:patchEvent', { caseId: cid, month: em, patch: JSON.stringify(ep), by: user });
       writeDraft(null); await refresh();
       if (isAdd && kind === 'new' && toCare) {
-        try { const r = await pushCaseToCareApp(c, careMgr, cmData); toast(r === 'added' ? '已儲存，也已新增到 AA02 系統（負責個管請到 AA02 系統填）' : '已儲存；AA02 系統已經有這位個案，沒有重複新增'); }
+        try { const r = await pushCaseToCareApp(c, String(c.careManager || '').trim(), cmData); toast(r === 'added' ? `已儲存，也已匯入 AA02 系統${c.careManager ? `（個管：${c.careManager}）` : ''}` : '已儲存；AA02 系統已經有這位個案，沒有重複新增'); }
         catch (e) { toast('已儲存，但新增到 AA02 系統失敗：' + (e.message || e), true); }
       } else toast('已儲存');
       onClose();
@@ -3343,6 +3346,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     ${t && t.select ? html`<select class="inp" value=${obj[k] || ''} onChange=${e => set({ ...obj, [k]: e.target.value })}>
         <option value="">（未填）</option>${[...t.select, ...(obj[k] && !t.select.includes(obj[k]) ? [obj[k]] : [])].map(o => html`<option value=${o}>${o}</option>`)}</select>`
     : t === 'date' ? html`<${DateInput} style="width:100%" value=${obj[k] || ''} onChange=${v => set({ ...obj, [k]: v })} />`
+      : t === 'cm' ? html`<input class="inp" list="dl-cm" placeholder="輸入或選擇個管" value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} /><datalist id="dl-cm">${cmNames.map(o => html`<option value=${o} />`)}</datalist>`
       : Array.isArray(t) ? html`<input class="inp" list=${'dl-' + k} value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} /><datalist id=${'dl-' + k}>${t.map(o => html`<option value=${o} />`)}</datalist>`
         : html`<input class="inp" value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} />`}
     ${k === 'srcNote' && obj.src === '轉入' && html`<span class="trigbar" style="margin:4px 0 0">${TRANSFER_FROM.map(o => html`<button type="button" class=${obj.srcNote === o ? 'on' : ''} onClick=${e => { e.preventDefault(); set({ ...obj, srcNote: obj.srcNote === o ? '' : o }); }}>${o}</button>`)}</span>`}</label>`;
@@ -3377,10 +3381,11 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
           <button class=${reopen === 'no' ? 'on' : ''} onClick=${() => { setReopen('no'); setCurId(null); setReuseNote(''); setC({ services: {} }); setCaseNo(nextNo('05')); }}>否，全新個案<span>自動編下一個號碼，尾數 1</span></button>
           <button class=${reopen === 'yes' ? 'on' : ''} onClick=${() => { setReopen('yes'); setCaseNo(''); setReuseNote(''); }}>是，重開案<span>沿用原編號，尾數改為 2</span></button>
         </div></div>`}
+      ${linkOpen && html`<${CareLink} onClose=${ok => { setLinkOpen(false); if (ok) setToCare(true); }} />`}
       ${kind === 'new' && html`<div class="care-link">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" checked=${toCare} disabled=${!careLinked()} onChange=${e => setToCare(e.target.checked)} /><b>同時新增到 AA02 追蹤系統</b></label>
-        ${!careLinked() ? html`<div class="sub">這台裝置還沒連結 AA02 系統：到「儀表板 → 個管負荷量 → 同步個管資料」輸入一次 AA02 系統的密碼就可以使用。</div>`
-        : toCare && html`<div class="sub" style="margin-top:4px">儲存時會帶入姓名、身分證、聯絡人、電話；負責個管請到 AA02 系統自己填。AA02 已有同一個身分證就不會重複新增。</div>`}</div>`}
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" checked=${toCare} disabled=${!careLinked()} onChange=${e => setToCare(e.target.checked)} /><b>儲存時匯入到 AA02 追蹤系統</b></label>
+        ${!careLinked() ? html`<div class="sub">這台裝置還沒連結 AA02 系統 <button class="btn light sm" onClick=${() => setLinkOpen(true)}>連結 AA02（輸入一次密碼）</button></div>`
+        : toCare && html`<div class="sub" style="margin-top:4px">會帶入姓名、身分證、負責個管、聯絡人、電話（請先在上面基本資料填好）。AA02 已有同一個身分證就不會重複新增。</div>`}</div>`}
       ${((kind === 'new' && reopen === 'no') || kind === 'other') && html`<div style="margin-top:14px"><span class="sub">地區（自動編號）：</span>
         <span class="trigbar" style="display:inline-flex">${Object.entries(REGIONS).map(([k, v]) => html`<button class=${(parseCaseNo(caseNo) || {}).region === k ? 'on' : ''} onClick=${() => setCaseNo(nextNo(k))}>${v}</button>`)}</span></div>`}
       ${kind === 'new' && reopen === 'yes' && html`<div style="margin-top:14px">
@@ -4111,7 +4116,7 @@ async function careToken() {
 //   1. 讀 AA02 上次之後有變動的個案 → 更新個管對照（AA02 已填的個管會帶進這裡）
 //   2. 這個月、上個月的新案，AA02 還沒有的 → 自動在 AA02 新增（個管留空，讓個管自己去 AA02 填）
 let careSyncBusy = false;
-async function autoCareSync(db, user, force) {
+async function autoCareSync(db, user, force, push) {
   if (!db || !careLinked() || careSyncBusy) return null;
   let last = 0; try { last = +(localStorage.getItem('evalCareSyncAt') || 0); } catch { }
   // 省免費額度：每台裝置 1 小時最多自動跑一次、只在畫面開著時跑；別台裝置 1 小時內同步過也不跑
@@ -4126,10 +4131,10 @@ async function autoCareSync(db, user, force) {
       if (idNo && cm.byId[idNo] !== m) { cm.byId[idNo] = m; changed = true; }
       if (m && d.name && cm.byName[String(d.name).trim()] !== m) { cm.byName[String(d.name).trim()] = m; changed = true; }
       if (m && !cm.managers.includes(m)) { cm.managers.push(m); changed = true; } if (d.region && !cm.regions.includes(String(d.region).trim())) cm.regions.push(String(d.region).trim()); }
-    const mk = todayMonth(), ids = [...new Set([mk, shiftMonth(mk, -1)].flatMap(m => monthSets(m, db).newEvents.map(e => e.caseId)))];
+    const mk = todayMonth(), ids = push ? [...new Set([mk, shiftMonth(mk, -1)].flatMap(m => monthSets(m, db).newEvents.map(e => e.caseId)))] : [];
     const added = [];
     for (const id of ids) { const c = db.cases.get(id); if (!c) continue; const idNo = String(c.idNo || '').trim().toUpperCase(); if (!idNo || idNo in cm.byId) continue;
-      const r = await pushCaseToCareApp(c, '', cm, token); cm.byId[idNo] = ''; changed = true; if (r === 'added') added.push(c.name); }
+      const r = await pushCaseToCareApp(c, String(c.careManager || '').trim(), cm, token); cm.byId[idNo] = String(c.careManager || '').trim(); changed = true; if (r === 'added') added.push(c.name); }
     if (changed) { cm.at = Date.now(); await call('m', 'data:saveKv', { key: 'careManagers', d: JSON.stringify(cm), by: user }); }
     try { localStorage.setItem('evalCareSyncAt', String(Date.now())); } catch { }
     return { added, changed };
@@ -4140,10 +4145,9 @@ async function autoCareSync(db, user, force) {
 async function pushCaseToCareApp(c, careManager, cm, token0) {
   const idNo = String(c.idNo || '').trim().toUpperCase();
   if (!c.name || !idNo) throw new Error('要有姓名和身分證');
-  if (cm && cm.byId && idNo in cm.byId) return 'exists';
   const token = token0 || await careToken();
-  // 上次同步之後別人新增的個案也查一下，避免重複（自動同步時已經查過了）
-  const recent = token0 ? [] : await carePost('cases:list', 'query', { since: Math.max(0, ((cm && cm.at) || 0) - 3600000) }, token);
+  // AA02 已有同一個身分證就不建（新增新案時才讀一次 AA02 名單）
+  const recent = token0 ? [] : await carePost('cases:list', 'query', { all: true }, token);
   if ((recent || []).some(row => { try { return String(JSON.parse(row.data || '{}').idNo || '').trim().toUpperCase() === idNo; } catch { return false; } })) return 'exists';
   const now = Date.now(), d = new Date(), region = regionOf(c.caseNo);
   const data = { name: c.name, idNo, careManager: careManager || '', region: cm && cm.regions && cm.regions.includes(region) ? region : '', contactName: c.contact || '', contactPhone: c.phone || '',
@@ -4153,11 +4157,74 @@ async function pushCaseToCareApp(c, careManager, cm, token0) {
   await carePost('cases:upsert', 'mutation', { caseId, closed: false, data: JSON.stringify(data), expectedUpdatedAt: 0 }, token);
   return 'added';
 }
+// 個管比對：總表填的負責個管 vs AA02，不一樣的可以勾選後更新到 AA02（只改個管，其他資料不動）
+function CmCompare({ db, onClose }) {
+  const [st, setSt] = useState('load'), [rows, setRows] = useState([]), [miss, setMiss] = useState([]), [pick, setPick] = useState({}), [err, setErr] = useState(''), [link, setLink] = useState(false), [done, setDone] = useState(null);
+  const load = async () => {
+    if (!careLinked()) { setLink(true); return; }
+    setSt('load'); setErr('');
+    try {
+      const token = await careToken(), list = await carePost('cases:list', 'query', { all: true }, token), byId = new Map();
+      for (const r of list || []) { let d = {}; try { d = JSON.parse(r.data || '{}'); } catch { } const id = String(d.idNo || '').trim().toUpperCase(); if (id) byId.set(id, { r, d }); }
+      const diff = [], none = [];
+      for (const c of db.cases.values()) {
+        const mine = cmOf(c); if (!mine) continue; const id = String(c.idNo || '').trim().toUpperCase(); const x = id && byId.get(id);
+        if (!x) { none.push(c); continue; }
+        const theirs = String(x.d.careManager || '').trim(); if (theirs !== mine) diff.push({ c, mine, theirs, row: x.r, d: x.d });
+      }
+      diff.sort((a, b) => String(a.c.caseNo).localeCompare(String(b.c.caseNo), 'zh-Hant', { numeric: true }));
+      setRows(diff); setMiss(none); setPick(Object.fromEntries(diff.map(x => [x.row.caseId, true]))); setSt('show');
+    } catch (e) { setErr(e.message || String(e)); setSt('err'); }
+  };
+  useEffect(() => { load(); }, []);
+  const apply = async () => {
+    const sel = rows.filter(x => pick[x.row.caseId]); if (!sel.length) return;
+    setSt('save'); let ok = 0, conflict = 0;
+    try {
+      const token = await careToken();
+      for (let i = 0; i < sel.length; i += 100) {
+        const part = sel.slice(i, i + 100);
+        const res = await carePost('cases:batchUpsert', 'mutation', { cases: part.map(x => ({ caseId: x.row.caseId, closed: !!x.row.closed, data: JSON.stringify({ ...x.d, careManager: x.mine }), expectedUpdatedAt: x.row.updatedAt || 0 })) }, token);
+        const cf = (res && res.conflicts) || []; conflict += cf.length; ok += part.length - cf.length;
+      }
+      setDone({ ok, conflict }); setSt('done');
+    } catch (e) { setErr(e.message || String(e)); setSt('err'); }
+  };
+  const n = rows.filter(x => pick[x.row.caseId]).length;
+  return html`<div class="modal" onClick=${e => e.target.classList.contains('modal') && onClose()}><div class="mbox" style="width:min(100%,720px)">
+    <h3 style="margin-top:0">與 AA02 比對負責個管</h3>
+    ${link && html`<${CareLink} onClose=${ok => { setLink(false); if (ok) load(); else onClose(); }} />`}
+    ${st === 'load' && !link && html`<div class="sub">讀取 AA02 名單中…</div>`}
+    ${st === 'err' && html`<div style="color:var(--red)">${err}</div><button class="btn light" style="margin-top:8px" onClick=${load}>再試一次</button>`}
+    ${st === 'done' && html`<div>已更新 ${done.ok} 位到 AA02。${done.conflict ? html`<div style="color:var(--red)">${done.conflict} 位剛好有人在 AA02 修改，沒有更新，請再比對一次。</div>` : ''}</div>`}
+    ${(st === 'show' || st === 'save') && html`
+      <div class="sub" style="margin-bottom:8px">只列出總表有填負責個管、而且和 AA02 不一樣的個案（用身分證對）。勾選的會把 AA02 的個管改成總表的，其他資料不動。${miss.length ? ` 另有 ${miss.length} 位在 AA02 找不到。` : ''}</div>
+      ${!rows.length ? html`<div class="tag t-new">總表和 AA02 的個管都一樣，不用更新</div>` : html`
+      <div class="bar" style="margin-bottom:6px"><button class="btn light sm" onClick=${() => setPick(Object.fromEntries(rows.map(x => [x.row.caseId, true])))}>全選</button><button class="btn light sm" onClick=${() => setPick({})}>全不選</button><span class="sub">已選 ${n}／${rows.length}</span></div>
+      <div class="tw" style="max-height:50vh"><table class="grid"><thead><tr><th></th><th>編號</th><th>姓名</th><th>AA02 現在</th><th>改成（總表）</th></tr></thead>
+        <tbody>${rows.map(x => html`<tr key=${x.row.caseId}><td><input type="checkbox" checked=${!!pick[x.row.caseId]} onChange=${e => setPick({ ...pick, [x.row.caseId]: e.target.checked })} /></td><td>${x.c.caseNo}</td><td><b>${x.c.name}</b></td><td>${x.theirs || html`<span class="sub">（空白）</span>`}</td><td><b style="color:#4f6b45">${x.mine}</b></td></tr>`)}</tbody></table></div>`}
+      ${miss.length > 0 && html`<details style="margin-top:8px"><summary class="sub">AA02 找不到的 ${miss.length} 位</summary><div class="sub">${miss.map(c => `${c.name}（${c.caseNo}）`).join('、')}</div></details>`}`}
+    <div class="bar" style="margin-top:12px;justify-content:flex-end"><button class="btn light" onClick=${onClose}>${st === 'done' ? '關閉' : '取消'}</button>
+      ${(st === 'show' || st === 'save') && rows.length > 0 && html`<button class="btn" disabled=${st === 'save' || !n} onClick=${apply}>${st === 'save' ? '更新中…' : `更新 ${n} 位到 AA02`}</button>`}</div>
+  </div></div>`;
+}
+// 連結 AA02：輸入一次 AA02 的密碼，這台裝置記住連結（密碼不存）
+function CareLink({ onClose }) {
+  const [pw, setPw] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState('');
+  const go = async () => { setBusy(true); setErr(''); try {
+      const a = await carePost('auth:signIn', 'action', { provider: 'password', params: { email: CARE_APP_EMAIL, password: pw, flow: 'signIn' } });
+      if (!a || !a.tokens) throw new Error('密碼錯誤'); try { localStorage.setItem(CARE_RT_KEY, a.tokens.refreshToken); } catch { }
+      toast('已連結 AA02 系統'); onClose(true); } catch (e) { setErr(/password|Invalid|密碼/i.test(e.message || '') ? '密碼錯誤' : (e.message || String(e))); } setBusy(false); };
+  return html`<div class="modal" onClick=${e => e.target.classList.contains('modal') && onClose(false)}><div class="mbox">
+    <h3 style="margin-top:0">連結 AA02 追蹤系統</h3><p class="sub">輸入 AA02（長照服務追蹤系統）的團隊密碼。這台裝置會記住連結，之後新增新案就能直接匯入；密碼不會存起來。</p>
+    <input class="inp" type="password" style="width:100%" placeholder="AA02 系統的密碼" value=${pw} onInput=${e => setPw(e.target.value)} onKeyDown=${e => e.key === 'Enter' && pw && go()} />
+    ${err && html`<div style="color:var(--red);margin-top:6px">${err}</div>`}
+    <div class="bar" style="margin-top:12px;justify-content:flex-end"><button class="btn light" onClick=${() => onClose(false)}>取消</button><button class="btn" disabled=${busy || !pw} onClick=${go}>${busy ? '連結中…' : '連結'}</button></div></div></div>`;
+}
 function CmSync({ db, user, refresh, onClose }) {
   const [pw, setPw] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState('');
   const go = async () => { setBusy(true); setErr(''); try { const cm = await syncCareManagers(pw); await call('m', 'data:saveKv', { key: 'careManagers', d: JSON.stringify(cm), by: user });
-      // 連結好就馬上把 AA02 還沒有的新案建過去
-      const r = await autoCareSync({ ...db, kv: { ...db.kv, careManagers: cm } }, user, true);
+      const r = null;
       await refresh(); toast(r && r.error ? '已連結，但新增新案失敗：' + r.error : `已連結 AA02（${cm.managers.length} 位個管）${r && r.added && r.added.length ? `，並新增 ${r.added.length} 位新案：${r.added.join('、')}` : '，新案都已在 AA02'}`, !!(r && r.error)); onClose(); } catch (e) { setErr(e.message || String(e)); } setBusy(false); };
   return html`<div class="modal" onClick=${e => e.target.classList.contains('modal') && onClose()}><div class="mbox" style="max-width:420px">
     <h3 style="margin-top:0">從長照服務追蹤系統同步個管</h3>
@@ -4208,13 +4275,13 @@ function CareStatus({ db, cm, user, refresh }) {
   const mk = todayMonth(), ids = [...new Set([mk, shiftMonth(mk, -1)].flatMap(m => monthSets(m, db).newEvents.map(e => e.caseId)))];
   const list = ids.map(id => db.cases.get(id)).filter(Boolean).map(c => { const idNo = String(c.idNo || '').trim().toUpperCase(); return { c, st: !idNo ? 'noid' : idNo in cm.byId ? 'in' : 'out', m: cmOf(c, cm) }; });
   const out = list.filter(x => x.st === 'out').length, noid = list.filter(x => x.st === 'noid').length;
-  const go = async () => { setBusy(true); const r = await autoCareSync(db, user, true); setBusy(false); if (r && r.error) toast('AA02 同步失敗：' + r.error, true); else { toast(r && r.added && r.added.length ? `已新增到 AA02：${r.added.join('、')}` : 'AA02 已是最新'); refresh(); } };
+  const go = async () => { if (out && !confirm(`把 ${out} 位還沒進 AA02 的新案匯入 AA02？（會帶入這裡填的負責個管）`)) return; setBusy(true); const r = await autoCareSync(db, user, true, true); setBusy(false); if (r && r.error) toast('AA02 同步失敗：' + r.error, true); else { toast(r && r.added && r.added.length ? `已新增到 AA02：${r.added.join('、')}` : 'AA02 已是最新'); refresh(); } };
   return html`<div class="card"><div class="bar"><h3 style="margin:0">AA02 新案建檔 <span class="sub">${rocMonth(shiftMonth(mk, -1))}～${rocMonth(mk)}新案 ${list.length} 位</span></h3>
       <span class=${'tag ' + (out ? 't-warn' : 't-new')}>${out ? `${out} 位還沒進 AA02` : '都已在 AA02'}</span>${noid ? html`<span class="tag t-close">${noid} 位沒有身分證</span>` : ''}<span class="grow"></span>
-      ${!careLinked() ? html`<span class="sub">這台裝置還沒連結（按下方「同步個管資料」）</span>` : html`<button class="btn sm" disabled=${busy} onClick=${go}>${busy ? '同步中…' : '立即同步 AA02'}</button>`}
+      ${!careLinked() ? html`<span class="sub">這台裝置還沒連結（按下方「同步個管資料」）</span>` : html`<button class="btn sm" disabled=${busy} onClick=${go}>${busy ? '處理中…' : out ? '匯入還沒建的新案' : '更新 AA02 個管'}</button>`}
       <button class="btn light sm" onClick=${() => setOpen(!open)}>${open ? '收起' : '看名單'}</button></div>
     ${open && html`<div class="tw" style="max-height:300px;margin-top:8px"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>身分證</th><th>AA02</th><th>個管</th></tr></thead>
-      <tbody>${list.map(x => html`<tr><td>${x.c.caseNo}</td><td><b>${x.c.name}</b></td><td class="sub">${x.c.idNo || ''}</td><td>${x.st === 'in' ? html`<span class="tag t-new">已在</span>` : x.st === 'out' ? html`<span class="tag t-warn">還沒建</span>` : html`<span class="tag t-close">沒有身分證，無法建</span>`}</td><td>${x.m || html`<span class="sub">（AA02 還沒填）</span>`}</td></tr>`)}</tbody></table></div>`}</div>`;
+      <tbody>${list.map(x => html`<tr><td>${x.c.caseNo}</td><td><b>${x.c.name}</b></td><td class="sub">${x.c.idNo || ''}</td><td>${x.st === 'in' ? html`<span class="tag t-new">已在</span>` : x.st === 'out' ? html`<span class="tag t-warn">還沒建</span>` : html`<span class="tag t-close">沒有身分證，無法建</span>`}</td><td>${x.c.careManager || x.m || html`<span class="sub">（還沒填）</span>`}${x.c.careManager && x.m && x.c.careManager !== x.m ? html`<div class="sub" style="color:var(--red)">AA02 寫的是 ${x.m}</div>` : ''}</td></tr>`)}</tbody></table></div>`}</div>`;
 }
 function DashboardView({ db, month, user, refresh }) {
   const year = +month.slice(0, 4), months = Array.from({ length: 12 }, (_, i) => `${year}-${pad(i + 1)}`), mi = +month.slice(5) - 1;
@@ -4225,10 +4292,11 @@ function DashboardView({ db, month, user, refresh }) {
   const dist = reasonDist(rScope === 'year' ? odYear : od);
   const refM = useMemo(() => referralMonths(db.kv.referrals, year), [db, year]);
   const cm = db.kv.careManagers;
-  const loads = useMemo(() => cm ? months.map(mk => mk <= month ? caseload(mk, db, cm) : null) : [], [db, year, month]);
+  const loads = useMemo(() => months.map(mk => mk <= month ? caseload(mk, db, cm) : null), [db, year, month]);
   const load = loads[mi];
   const auto = autoSuggest(month, db, T[mi], reasonDist(od), refM[mi], load);
   const saved = db.kv['suggest:' + month];
+  const [cmpOpen, setCmpOpen] = useState(false);
   const [txt, setTxt] = useState(null), [cmOpen, setCmOpen] = useState(false), [edit, setEdit] = useState(null), [refOpen, setRefOpen] = useState(false);
   useEffect(() => setTxt(null), [month]);
   const sugg = txt ?? (saved && saved.text) ?? auto;
@@ -4264,16 +4332,15 @@ function DashboardView({ db, month, user, refresh }) {
           ${T.map((t, i) => { const x = t[M.k]; return html`<td class=${(months[i] === month ? 'cur ' : '') + (x.n && x.rate < 0.9 ? 'bad' : '')} title=${x.src}>${x.n ? html`<b>${pctTxt(x.rate)}</b><div class="sub" style="font-size:10px">${x.ok}/${x.n}</div>` : html`<span class="sub">—</span>`}</td>`; })}
           <td class=${tot.n && tot.ok / tot.n < 0.9 ? 'bad' : ''}>${tot.n ? html`<b>${pctTxt(tot.ok / tot.n)}</b><div class="sub" style="font-size:10px">${tot.ok}/${tot.n}</div>` : '—'}</td></tr>`; })}</tbody></table></div>`}</div>
 
-    ${cm && html`<${CareStatus} db=${db} cm=${cm} user=${user} refresh=${refresh} />`}
     <div class="dgrid2">
-      <div class="card"><div class="bar"><h3 style="margin:0">4. 個管負荷量 <span class="sub">${rocMonth(month)}實際在案（已扣當月結案）</span></h3><span class="grow"></span>
-          ${careLinked() && html`<button class="btn light sm" onClick=${async () => { const r = await autoCareSync(db, user, true); if (r && r.error) toast('AA02 同步失敗：' + r.error, true); else { toast(r && r.added && r.added.length ? `已新增到 AA02：${r.added.join('、')}` : 'AA02 已是最新（個管已帶回）'); refresh(); } }}>立即同步 AA02</button>`}
-          <button class="btn light sm" onClick=${() => setCmOpen(true)}>${cm ? '重新連結' : '同步個管資料'}</button></div>
-        ${!cm ? html`<div class="sub" style="margin-top:8px">個管資料在「長照服務追蹤系統」。按「同步個管資料」，輸入那個系統的密碼，就會讀進每位個案的負責個管。</div>`
-        : html`<div class="sub" style="margin:4px 0 8px">上次同步：${new Date(cm.at).toLocaleString('zh-TW')}；平均每位個管 ${Math.round(load.avg)} 案${load.none ? `；${load.none} 案找不到負責個管` : ''}</div>
-          <${HBars} unit="案" items=${load.list.map(([m, n]) => ({ label: m, n, warn: n > load.avg * 1.2 }))} />`}</div>
+      <div class="card"><div class="bar"><h3 style="margin:0">4. 個管負荷量 <span class="sub">${rocMonth(month)}實際在案（已扣當月結案）</span></h3><span class="grow"></span><button class="btn light sm" onClick=${() => setCmpOpen(true)}>與 AA02 比對個管</button><span class="grow"></span>
+</div>
+        ${!load || !load.total ? html`<div class="sub" style="margin-top:8px">${rocMonth(month)}沒有在案個案</div>`
+        : html`<div class="sub" style="margin:4px 0 8px">依總表個案資料的「負責個管」計算；合計 ${load.list.reduce((a, [, n]) => a + n, 0) + load.none} 案＝實際在案 ${load.total} 案；平均每位個管 ${Math.round(load.avg)} 案</div>
+          <${HBars} unit="案" items=${[...load.list.map(([m, n]) => ({ label: m, n, warn: n > load.avg * 1.2 })), ...(load.none ? [{ label: '（未填個管）', n: load.none, warn: true }] : [])]} />
+          ${load.none > 0 && html`<div class="sub" style="margin-top:6px;color:var(--red)">有 ${load.none} 位在案個案還沒填負責個管，請到總表個案資料補填。</div>`}`}</div>
       <div class="card"><h3>5. 平均每月個管負荷 <span class="sub">每位個管平均負責案數</span></h3>
-        ${!cm ? html`<div class="sub">同步個管資料後顯示。</div>` : html`<${LineChart} area unit="案" items=${months.map((mk, i) => ({ label: mlabel(mk), v: loads[i] && loads[i].list.length ? loads[i].avg : null, sub: loads[i] && loads[i].list.length ? `${loads[i].list.length}位個管` : '' }))} />`}</div>
+        ${!(load && load.list.length) ? html`<div class="sub">有個管資料後顯示。</div>` : html`<${LineChart} area unit="案" items=${months.map((mk, i) => ({ label: mlabel(mk), v: loads[i] && loads[i].list.length ? loads[i].avg : null, sub: loads[i] && loads[i].list.length ? `${loads[i].list.length}位個管` : '' }))} />`}</div>
     </div>
 
     <div class="dgrid2">
@@ -4294,7 +4361,7 @@ function DashboardView({ db, month, user, refresh }) {
         <tbody>${od.map((x, i) => html`<tr key=${x.rpt + x.field + x.caseId}><td>${i + 1}</td><td>${REPORTS[x.rpt].title.replace(/時效.*|名單.*/, '')}</td><td>${x.label}</td><td>${x.caseNo}</td>
           <td><a href="#" class="namelink" onClick=${e => { e.preventDefault(); setEdit(x.caseId); }}>${x.name}</a></td><td><b style="color:var(--red)">${x.days}${typeof x.days === 'number' ? ' 天' : ''}</b></td>
           <td style="white-space:normal;min-width:180px">${x.reason || html`<span class="tag t-warn">未填原因</span>`}${x.follow ? html`<div class="sub">追蹤：${x.follow}</div>` : ''}</td></tr>`)}</tbody></table></div>`}</div>
-    ${cmOpen && html`<${CmSync} db=${db} user=${user} refresh=${refresh} onClose=${() => setCmOpen(false)} />`}
+    ${cmpOpen && html`<${CmCompare} db=${db} onClose=${() => setCmpOpen(false)} />`}
     ${edit && html`<${CaseEditor} key=${'dash' + edit} db=${db} month=${month} user=${user} id=${edit} onClose=${() => setEdit(null)} refresh=${refresh} />`}
   </div>`;
 }
@@ -5045,7 +5112,6 @@ function App() {
   })(); }, []);
   useEffect(() => { if (!authed) return; (async () => { await loadCache(); if (store.since.cases) setDb(buildDb()); await refresh(); })(); }, [authed]);
   // 有新案還沒進 AA02 系統 → 自動新增；AA02 的個管帶回來
-  useEffect(() => { if (!db) return; autoCareSync(db, user).then(r => { if (r && r.error) toast('自動新增到 AA02 失敗：' + r.error, true); else if (r && r.added && r.added.length) { toast(`已自動新增到 AA02 系統：${r.added.join('、')}`); refresh(); } else if (r && r.changed) refresh(); }); }, [db]);
   // 切回這個分頁時，抓別人剛改過的資料（只抓變動的部分）
   useEffect(() => {
     if (!authed) return;
