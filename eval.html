@@ -104,6 +104,7 @@
   .dspsec .dunit{margin:6px 0 0 4px;padding:4px 0 4px 10px;border-left:3px solid var(--line)}.dspsec .dunit.own{border-left-color:var(--green);background:#f6f9f3;border-radius:0 8px 8px 0}
   .dspsec .dunit .u{font-weight:600;margin-right:6px}.dspsec .dother{margin:6px 0 0 4px;font-size:13px;color:var(--sub)}.dspsec .dother b{color:var(--ink)}
   b.ck{color:var(--green);font-size:15px}
+  .tip-box{background:#f7f3ea;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--ink);line-height:1.7}
   /* 區域分配 */
   .rg-brush{display:flex;flex-wrap:wrap;gap:8px}
   .rg-brush button{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:6px 14px 6px 10px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer}
@@ -1824,7 +1825,9 @@ function dispatchStatMonth(month, db) {
       : home ? String(home).trim() : '';
     const cc = codeCounts(e.codes || latestCodes(db, c, month));
     // 11 月起：服務項目打勾（有用到就 ✓），不再寫代碼數
-    rows.push([i + 1, c.name || '', unit, ...CODE_COLS.map(k => mark ? (cc[k] ? '✓' : '') : cc[k] || '')]); unitBy.set(e.caseId, unit);
+    // 輔具打勾和下面「輔具」名單同一個判斷：輔具欄有數量、居家寫僅輔具，或核定有輔具碼
+    const hasAids = aidsQty(sv('aids')) > 0 || /輔具/.test(String(home || '')) || (cc.輔具 || 0) > 0;
+    rows.push([i + 1, c.name || '', unit, ...CODE_COLS.map(k => mark ? ((k === '輔具' ? hasAids : cc[k]) ? '✓' : '') : cc[k] || '')]); unitBy.set(e.caseId, unit);
     const mech = c.svcMech || {}, who = `${c.name || ''}(${RG_CH[regionOf(c.caseNo)] || ''})`;
     // 輔具：有申請輔具（輔具欄有數量、居家寫「僅輔具」或核定有輔具碼）一律列在「指定」欄的「輔具」（照原檔寫法）
     if (aidsQty(sv('aids')) > 0 || /輔具/.test(String(home || '')) || (codeCounts(e.codes || latestCodes(db, c, month)).輔具 || 0) > 0)
@@ -3394,6 +3397,10 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     else if (nt && !c.src) setC({ ...c, src: nt.includes('出備') ? '出備' : '初評' });
   };
   const unitNames = useMemo(() => [...new Set(db.units.filter(u => !u.statOnly).map(u => u.short || u.name).filter(Boolean))], [db]);
+  // 各服務類別的簡稱選單：這類別已知的單位（評鑑名單全名轉簡稱）＋設定裡的服務單位；打字時會跳出符合的選項
+  const unitByCat = useMemo(() => Object.fromEntries(CATS.map(cat => [cat.key, [...new Set([
+    ...(KNOWN_UNITS[cat.stat] || []).map(n => unitShort(n, cat.key, db.units)),
+    ...db.units.filter(u => !u.statOnly && (!(u.cats || []).length || u.cats.includes(cat.key))).map(u => u.short || u.name)].filter(Boolean))]])), [db]);
 
   const diff = (a, b) => { const out = {}; for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { if (k.startsWith('_') || k === 'caseId' || k === 'month' || k === 'caseNo') continue; if (JSON.stringify(a[k] ?? '') !== JSON.stringify(b[k] ?? '')) out[k] = b[k] ?? ''; } return out; };
   const save = async () => {
@@ -3562,11 +3569,16 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
           onInput=${e => setC({ ...c, services: { ...c.services, aids: e.target.value } })} />
           <span class="sub">單位：雲林縣輔助器具資源中心${legacy ? `（原本寫「${v}」，算 1 件）` : ''}</span>
           ${aidsQty(v) > 0 && html`<${Toggle} opts=${['指定']} value=${(c.svcMech || {}).aids || ''} onChange=${x => setC({ ...c, svcMech: { ...(c.svcMech || {}), aids: x } })} />`}</label>`; })()
-        : html`<label>${cat.label}<input class="inp" list="dl-units" value=${c.services[cat.key] || ''}
+        : html`<label>${cat.label}<input class="inp" list=${'dl-u-' + cat.key} placeholder="打字會跳出簡稱" value=${c.services[cat.key] || ''}
         onInput=${e => setC({ ...c, services: { ...c.services, [cat.key]: e.target.value } })} />
         ${isUnitName(c.services[cat.key]) && html`<${Toggle} opts=${MECH} value=${(c.svcMech || {})[cat.key] || ''} onChange=${v => setC({ ...c, svcMech: { ...(c.svcMech || {}), [cat.key]: v } })} />`}</label>`)}</div>
       <div class="sub" style="margin-top:6px">每個服務單位可選「指定」或「輪派」；派案時效名冊的「派案B單位機制」會自動帶入（先看居家，沒有居家就看第一個有選的項目）。</div>
-      <datalist id="dl-units">${unitNames.map(u => html`<option value=${u} />`)}</datalist>
+      <div class="tip-box" style="margin-top:8px"><b>服務單位請寫簡稱</b>（點欄位或打字會跳出選項，例如打「紅」就會出現紅十字的選項）：
+        <ul style="margin:4px 0 0 18px;padding:0">
+          <li>紅十字：<b>居家、居喘、短照</b>寫「紅十字」；<b>日照、日喘</b>依地點寫「東勢紅十字」或「台西紅會」</li>
+          <li>樂臨寫「樂臨」；其他單位寫平常用的簡稱（例：平安、康安、守護寧）</li>
+          <li>沒有服務、只用其他服務，寫「僅輔具」「僅交通」等</li></ul></div>
+      ${CATS.filter(cat => cat.key !== 'aids').map(cat => html`<datalist id=${'dl-u-' + cat.key}>${[...new Set([...(unitByCat[cat.key] || []), ...unitNames])].map(u => html`<option value=${u} />`)}</datalist>`)}
     </div>
     </div>`}
   </div></div>`;
