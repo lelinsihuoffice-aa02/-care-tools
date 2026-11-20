@@ -101,8 +101,8 @@
   .fstats button:hover{background:#FBF3E6}
   .fstats button.on{background:var(--green);border-color:var(--green)}.fstats button.on span,.fstats button.on b{color:#fff}
   .fpanel{position:fixed;right:16px;bottom:96px;z-index:900;width:min(760px,calc(100vw - 32px));background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.2)}
-  .dsec .dunit{margin:6px 0 0 4px;padding:4px 0 4px 10px;border-left:3px solid var(--line)}.dsec .dunit.own{border-left-color:var(--green);background:#f6f9f3;border-radius:0 8px 8px 0}
-  .dsec .dunit .u{font-weight:600;margin-right:6px}.dsec .dother{margin:6px 0 0 4px;font-size:13px;color:var(--sub)}.dsec .dother b{color:var(--ink)}
+  .dspsec .dunit{margin:6px 0 0 4px;padding:4px 0 4px 10px;border-left:3px solid var(--line)}.dspsec .dunit.own{border-left-color:var(--green);background:#f6f9f3;border-radius:0 8px 8px 0}
+  .dspsec .dunit .u{font-weight:600;margin-right:6px}.dspsec .dother{margin:6px 0 0 4px;font-size:13px;color:var(--sub)}.dspsec .dother b{color:var(--ink)}
   b.ck{color:var(--green);font-size:15px}
   /* 區域分配 */
   .rg-brush{display:flex;flex-wrap:wrap;gap:8px}
@@ -1834,12 +1834,15 @@ function dispatchStatMonth(month, db) {
     const secs = keys.map((k, i) => {
       const byU = g2[mm][k] || {}, units = Object.keys(byU).sort((a, b) => isOwnUnit(b) - isOwnUnit(a) || byU[b].length - byU[a].length || a.localeCompare(b, 'zh-Hant'));
       const ids = new Set(units.flatMap(u => byU[u].map(x => x.id))), other = new Set(units.filter(u => !isOwnUnit(u)).flatMap(u => byU[u].map(x => x.id)));
-      return { no: i + 1, label: catWord(k), total: ids.size, other: other.size, units: units.map(u => ({ unit: u, own: isOwnUnit(u), names: byU[u].map(x => x.who) })) };
+      const list = units.map(u => ({ unit: u, own: isOwnUnit(u), names: byU[u].map(x => x.who) }));
+      // 五大項就算沒人指定樂臨，也列「指定樂臨○○-0人」
+      if (DISPATCH_MAIN.includes(k) && !list.some(x => x.own)) list.unshift({ unit: '樂臨', own: true, names: [] });
+      return { no: i + 1, label: catWord(k), total: ids.size, other: other.size, units: list };
     });
     const all = new Set(Object.values(g2[mm]).flatMap(byU => Object.values(byU).flat().map(x => x.id)));
     if (mm === '指定' && aidsWho.length) { secs.push({ no: secs.length + 1, label: '輔具', total: aidsWho.length, other: 0, aids: true, units: [{ unit: '', own: false, names: aidsWho.map(x => x.who) }] }); aidsWho.forEach(x => all.add(x.id)); }
     // 每項：「居家總統計4人」→ 空一行 → 樂臨 → 空一行 →「友單位總計3人」＋其他單位接在同一行（照指定格式，不編號）
-    const one = (sc, x) => `${sc.aids ? '輔具' : mm + x.unit + sc.label}-${x.names.length}人(${x.names.join('、')})`;
+    const one = (sc, x) => `${sc.aids ? '輔具' : mm + x.unit + sc.label}-${x.names.length}人${x.names.length ? `(${x.names.join('、')})` : ''}`;
     const text = [`${mm}總計${all.size}人`, ...secs.map(sc => {
       const own = sc.units.filter(x => x.own || sc.aids), oth = sc.aids ? [] : sc.units.filter(x => !x.own), out = [`${sc.label}總統計${sc.total}人`];
       if (own.length) out.push('', ...own.map(x => one(sc, x)));
@@ -1848,7 +1851,9 @@ function dispatchStatMonth(month, db) {
     return { total: all.size, secs, text };
   };
   const D = mkSec('指定'), R = mkSec('輪派');
-  return { title: `${yy}年${m}月派案統計 : (總計人數${S.withClosed.length}人)`, head: ['編號', '姓名', '派案單位', ...CODE_COLS], rows, mark,
+  // 各服務使用人數（打勾的人數）
+  const useCnt = CODE_COLS.map((_, j) => rows.filter(r => r[3 + j]).length);
+  return { title: `${yy}年${m}月派案統計 : (總計人數${S.withClosed.length}人)`, head: ['編號', '姓名', '派案單位', ...CODE_COLS], rows, mark, useCnt,
     designated: D.text, rotation: R.text, desS: D, rotS: R, unitBy };
 }
 function latestCodes(db, c, upTo) { let best = '', v = ''; for (const e of db.events) if (e.caseId === c._id && e.codes && e.month <= upTo && e.month >= best) { best = e.month; v = e.codes; } return v; }
@@ -2398,7 +2403,7 @@ function fillDocTpl(docXml, blocks) {
 // 派案統計一個月 → 範本列（0 標題、1 表頭、2 個案、3 總計、4 指定/輪派、5 名單）
 function dispatchDocRows(d) {
   return [{ kind: 0, cells: [d.title] }, { kind: 1, cells: d.head }, ...d.rows.map(r => ({ kind: 2, cells: r })),
-    { kind: 3, cells: ['總計', d.rows.length] }, { kind: 4, cells: ['指定', '輪派'] }, { kind: 5, cells: [d.designated.join('\n\n'), d.rotation.join('\n\n')] }];
+    d.mark ? { kind: 2, cells: ['總計', `${d.rows.length}人`, '', ...d.useCnt.map(n => `${n}人`)] } : { kind: 3, cells: ['總計', d.rows.length] }, { kind: 4, cells: ['指定', '輪派'] }, { kind: 5, cells: [d.designated.join('\n\n'), d.rotation.join('\n\n')] }];
 }
 // 個案統計一個月（0 標題、1 表頭、2 資料、3 總計、4 說明）
 // 個案統計下方名單：「臺西-1人：」粗體一行、名字下一行；「新案：」「(初評-14位：」這種標題紅字底色（照原檔）
@@ -3981,7 +3986,7 @@ async function buildWord(blocks, fileName) {
 }
 const histRowsToBlock = rows => rows.map(r => r.map(t => ({ t })));
 function dispatchBlock(d) {
-  return [[{ t: d.title, span: 8, b: 1 }], d.head.map(t => ({ t, b: 1 })), ...d.rows.map(r => r.map(t => ({ t }))), [{ t: '總計', b: 1 }, { t: d.rows.length, span: 7 }],
+  return [[{ t: d.title, span: 8, b: 1 }], d.head.map(t => ({ t, b: 1 })), ...d.rows.map(r => r.map(t => ({ t }))), (d.mark ? [{ t: '總計', b: 1 }, { t: `${d.rows.length}人` }, { t: '' }, ...d.useCnt.map(n => ({ t: `${n}人` }))] : [{ t: '總計', b: 1 }, { t: d.rows.length, span: 7 }]),
     [{ t: '指定', span: 4, b: 1 }, { t: '輪派', span: 4, b: 1 }], [{ t: d.designated.join('\n\n'), span: 4 }, { t: d.rotation.join('\n\n'), span: 4 }]];
 }
 function caseBlock(d) {
@@ -4090,10 +4095,10 @@ function SmartTables({ aoa, hl }) {
 }
 // 派案統計（系統資料）
 function DispatchView({ d }) {
-  const sums = d.head.map((_, j) => j >= 3 && !d.mark ? d.rows.reduce((a, r) => a + (+r[j] || 0), 0) : '');
+  const sums = d.head.map((_, j) => j < 3 ? '' : d.mark ? `${d.useCnt[j - 3]} 人` : d.rows.reduce((a, r) => a + (+r[j] || 0), 0));
   // 11 月起：指定／輪派依服務分類（樂臨排最前面，其他單位一一列出＋友單位總計）
   const sec = (mm, S) => html`<div class="card mlist"><h3>${mm} <span class="tag t-ok" style="font-size:13px">總計 ${S.total} 人</span></h3>
-    ${S.secs.map(sc => html`<div class="mitem dsec">
+    ${S.secs.map(sc => html`<div class="mitem dspsec">
       <div style="display:flex;align-items:baseline;gap:8px"><b>${sc.label}總統計</b><span class=${'tag ' + (sc.total ? 't-ok' : 't-close')}>${sc.total} 人</span></div>
       ${sc.units.filter(x => x.own || sc.aids).map(x => html`<div class="dunit own"><span class="u">${sc.aids ? '輔具' : mm + x.unit + sc.label}</span><span class="tag">${x.names.length} 人</span><div class="sub">${x.names.join('、')}</div></div>`)}
       ${!sc.aids && sc.units.some(x => !x.own) && html`<div class="dother">友單位總計 <b>${sc.other}</b> 人</div>`}
