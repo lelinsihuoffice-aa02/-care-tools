@@ -689,14 +689,15 @@ const OPTS = {
 //   edit 為可在報表直接填寫的事件欄位（opts 下拉、type:'date' 日期、其他為文字）
 const cmsNum = c => parseInt(String(c || '').replace(/\D/g, ''), 10) || null;
 // 新案-出備：沒有督導審核，改用個管訪視日期（總表「訪視日期」），不分上下午
-const isDc = r => normTrigger(r.e.trigger) === '新案-出備';
+// 重開案-出備比照新案-出備
+const isDc = r => ['新案-出備', '新案-重開案-出備'].includes(normTrigger(r.e.trigger));
 const supDate = r => isDc(r) ? r.e.visit : r.e.supervisor;
 
 // ---- 時效的計算方式（可在報表上切換：日曆天／工作天／工作天＋上下午分界），存在共用設定 calcModes ----
 const CALC_MODES = { cal: '日曆天', work: '工作天', work1: '工作天（當日算第1天）', noon: '工作天（上下午分界）' };
 const CALC_METRICS = {
   'dispatch.plan': { label: '訪案及計畫擬定（督導審核→照專簽審）', def: 'noon', modes: ['noon', 'work', 'cal'] },
-  'dispatch.planDc': { label: '新案-出備計畫擬定（個管訪視→照專簽審）', def: 'work1', modes: ['work1', 'work', 'cal'] },
+  'dispatch.planDc': { label: '新案-出備、重開案-出備計畫擬定（個管訪視→照專簽審）', def: 'work1', modes: ['work1', 'work', 'cal'] },
   'dispatch.sa': { label: '送審至照專簽審', def: 'cal', modes: ['cal', 'work', 'work1'] },
   'dispatch.refA': { label: '照管中心評估後轉介至A（匯出用）', def: 'cal', modes: ['cal', 'work', 'work1'] },
   'dispatch.toB': { label: '個管照會B單位（照專簽審→照會B單位）', def: 'work1', modes: ['work1', 'work', 'cal'] },
@@ -725,7 +726,7 @@ const REPORTS = {
       { h: 'CMS', v: r => r.c.cms },
       { h: '照專評估日期', date: 1, v: r => r.e.assess },
       { h: '轉介A單位日期', date: 1, v: r => r.e.referA },
-      { h: '督導審核日期', date: 1, v: r => supDate(r), hint: '新案-出備顯示個管訪視日期' },
+      { h: '督導審核日期', date: 1, v: r => supDate(r), hint: '新案-出備、重開案-出備顯示個管訪視日期' },
       { h: '督導審核上/下午', edit: 'supervisorTime', opts: AMPM, width: 80, hide: isDc },
       { h: '個管照顧計畫送審日期', date: 1, v: r => r.e.submit },
       { h: '照專簽審日期', date: 1, v: r => r.e.approve },
