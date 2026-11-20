@@ -742,9 +742,9 @@ const REPORTS = {
       { h: '派案B單位機制', edit: 'dispatchMech', opts: OPTS.dispatchMech, fallback: r => mechToOpt(bMechOf(r.c)), hint: '沒填時帶入個案服務單位的指定／輪派' },
       { h: 'B單位第一次提供服務日期', noB: 1, bf: 1, edit: 'bFirst', type: 'date', fallback: r => r.bFirstAuto, hint: '沒填時帶入總表的「B單位第一次提供服務日期（居服進場）」' },
       { h: '服務連結時效(工作天)', mk: 'dispatch.link', num: 1, noB: 1, bf: 1, v: r => r.k.link, hint: '照會B單位→B單位首次服務', bad: r => r.k.link > 6 ? '逾期（超過3+3天）' : r.k.link < 0 ? '日期順序錯誤' : '' },
-      { h: 'B單位逾3+3天未提供服務原因', noB: 2, bf: 2, edit: 'bLate', opts: OPTS.bLate, need: r => r.k.link > 6 },
-      { h: '服務逾期追蹤日期', noB: 2, bf: 2, edit: 'followDate', type: 'date', need: r => r.k.link > 6 },
-      { h: '服務逾期追蹤結果', noB: 2, bf: 2, edit: 'followResult', need: r => r.k.link > 6 },
+      { h: 'B單位逾3+3天未提供服務原因', noB: 2, edit: 'bLate', opts: OPTS.bLate, need: r => r.k.link > 6 },
+      { h: '服務逾期追蹤日期', noB: 2, edit: 'followDate', type: 'date', need: r => r.k.link > 6 },
+      { h: '服務逾期追蹤結果', noB: 2, edit: 'followResult', need: r => r.k.link > 6 },
       { h: '照專派貴單位的機制', edit: 'assignMech', opts: OPTS.assignMech, fallback: r => mechToOpt(r.c.aMech), hint: '沒填時帶入個案的 A單位指定／輪派' },
     ],
     calc: (r, H, ctx) => ({
@@ -2271,7 +2271,7 @@ const DISPATCH_X = [
   ['訪案及計畫擬定3天內完成率', r => r.k.plan], ['逾3天未完成計畫擬定原因', r => r.e.planLate || ''],
   [null, r => r.k.refA], ['個管照會B單位(工作天)', r => r.noB || r.k.toB], ['逾3天未完成照會B單位原因', r => r.e.referBLate || ''],
   ['派案B單位機制', (r, R) => editVal(R.cols.find(c => c.edit === 'dispatchMech'), r)], ['B單位第一次提供服務日期', r => r.noB || r.noBF || dt(r.e.bFirst || r.bFirstAuto)],
-  ['服務連結時效(工作天)', r => r.noB || r.noBF || r.k.link], ['B單位逾3+3天未提供服務原因', r => r.noBF ? '' : r.e.bLate || ''], ['服務逾期追蹤日期', r => dt(r.e.followDate)],
+  ['服務連結時效(工作天)', r => r.noB || r.noBF || r.k.link], ['B單位逾3+3天未提供服務原因', r => r.e.bLate || ''], ['服務逾期追蹤日期', r => dt(r.e.followDate)],
   ['服務逾期追蹤結果', r => r.e.followResult || ''], ['照專派貴單位的機制', (r, R) => editVal(R.cols.find(c => c.edit === 'assignMech'), r)],
 ];
 const DISCHARGE_X = [
