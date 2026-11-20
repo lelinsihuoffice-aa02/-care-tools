@@ -3397,10 +3397,10 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     else if (nt && !c.src) setC({ ...c, src: nt.includes('出備') ? '出備' : '初評' });
   };
   const unitNames = useMemo(() => [...new Set(db.units.filter(u => !u.statOnly).map(u => u.short || u.name).filter(Boolean))], [db]);
-  // 各服務類別的簡稱選單：這類別已知的單位（評鑑名單全名轉簡稱）＋設定裡的服務單位；打字時會跳出符合的選項
+  // 各服務類別的簡稱選單：只列這類別的單位（評鑑名單全名轉簡稱）＋設定裡有勾這個類別的服務單位；打字時會跳出符合的選項
   const unitByCat = useMemo(() => Object.fromEntries(CATS.map(cat => [cat.key, [...new Set([
     ...(KNOWN_UNITS[cat.stat] || []).map(n => unitShort(n, cat.key, db.units)),
-    ...db.units.filter(u => !u.statOnly && (!(u.cats || []).length || u.cats.includes(cat.key))).map(u => u.short || u.name)].filter(Boolean))]])), [db]);
+    ...db.units.filter(u => !u.statOnly && (u.cats || []).includes(cat.key)).map(u => u.short || u.name)].filter(Boolean))]])), [db]);
 
   const diff = (a, b) => { const out = {}; for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { if (k.startsWith('_') || k === 'caseId' || k === 'month' || k === 'caseNo') continue; if (JSON.stringify(a[k] ?? '') !== JSON.stringify(b[k] ?? '')) out[k] = b[k] ?? ''; } return out; };
   const save = async () => {
@@ -3578,7 +3578,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
           <li>紅十字：<b>居家、居喘、短照</b>寫「紅十字」；<b>日照、日喘</b>依地點寫「東勢紅十字」或「台西紅會」</li>
           <li>樂臨寫「樂臨」；其他單位寫平常用的簡稱（例：平安、康安、守護寧）</li>
           <li>沒有服務、只用其他服務，寫「僅輔具」「僅交通」等</li></ul></div>
-      ${CATS.filter(cat => cat.key !== 'aids').map(cat => html`<datalist id=${'dl-u-' + cat.key}>${[...new Set([...(unitByCat[cat.key] || []), ...unitNames])].map(u => html`<option value=${u} />`)}</datalist>`)}
+      ${CATS.filter(cat => cat.key !== 'aids').map(cat => html`<datalist id=${'dl-u-' + cat.key}>${(unitByCat[cat.key] || []).map(u => html`<option value=${u} />`)}</datalist>`)}
     </div>
     </div>`}
   </div></div>`;
