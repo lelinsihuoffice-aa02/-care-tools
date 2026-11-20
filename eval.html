@@ -1846,7 +1846,7 @@ function dispatchStatMonth(month, db) {
     const text = [`${mm}總計${all.size}人`, ...secs.map(sc => {
       const own = sc.units.filter(x => x.own || sc.aids), oth = sc.aids ? [] : sc.units.filter(x => !x.own), out = [`${sc.label}總統計${sc.total}人`];
       if (own.length) out.push('', ...own.map(x => one(sc, x)));
-      if (oth.length) out.push('', `友單位總計${sc.other}人`, oth.map(x => one(sc, x)).join(' '));
+      if (oth.length) out.push('', `友單位總計${sc.other}人`, ...oth.map(x => one(sc, x)));
       return out.join('\n'); })];
     return { total: all.size, secs, text };
   };
