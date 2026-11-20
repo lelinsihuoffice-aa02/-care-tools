@@ -739,7 +739,7 @@ const REPORTS = {
       { h: '逾3天未完成計畫擬定原因', edit: 'planLate', opts: OPTS.planLate, need: r => r.k.plan > 3 },
       { h: '個管照會B單位(工作天)', mk: 'dispatch.toB', num: 1, noB: 1, v: r => r.k.toB, bad: r => r.k.toB > 3 ? '逾3天' : r.k.toB < 0 ? '日期順序錯誤' : '' },
       { h: '逾3天未完成照會B單位原因', noB: 2, edit: 'referBLate', opts: OPTS.referBLate, need: r => r.k.toB > 3 },
-      { h: '派案B單位機制', edit: 'dispatchMech', opts: OPTS.dispatchMech, fallback: r => mechToOpt(bMechOf(r.c)), hint: '沒填時帶入個案服務單位的指定／輪派' },
+      { h: '派案B單位機制', edit: 'dispatchMech', opts: OPTS.dispatchMech, fallback: r => r.noB === '僅輔具' ? '3.唯一提供單位' : mechToOpt(bMechOf(r.c)), hint: '沒填時帶入個案服務單位的指定／輪派；僅輔具帶入「3.唯一提供單位」' },
       { h: 'B單位第一次提供服務日期', noB: 1, bf: 1, edit: 'bFirst', type: 'date', fallback: r => r.bFirstAuto, hint: '沒填時帶入總表的「B單位第一次提供服務日期（居服進場）」' },
       { h: '服務連結時效(工作天)', mk: 'dispatch.link', num: 1, noB: 1, bf: 1, v: r => r.k.link, hint: '照會B單位→B單位首次服務', bad: r => r.k.link > 6 ? '逾期（超過3+3天）' : r.k.link < 0 ? '日期順序錯誤' : '' },
       { h: 'B單位逾3+3天未提供服務原因', noB: 2, edit: 'bLate', opts: OPTS.bLate, need: r => r.k.link > 6 },
