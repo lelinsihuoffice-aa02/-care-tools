@@ -740,11 +740,11 @@ const REPORTS = {
       { h: '個管照會B單位(工作天)', mk: 'dispatch.toB', num: 1, noB: 1, v: r => r.k.toB, bad: r => r.k.toB > 3 ? '逾3天' : r.k.toB < 0 ? '日期順序錯誤' : '' },
       { h: '逾3天未完成照會B單位原因', noB: 2, edit: 'referBLate', opts: OPTS.referBLate, need: r => r.k.toB > 3 },
       { h: '派案B單位機制', edit: 'dispatchMech', opts: OPTS.dispatchMech, fallback: r => mechToOpt(bMechOf(r.c)), hint: '沒填時帶入個案服務單位的指定／輪派' },
-      { h: 'B單位第一次提供服務日期', noB: 1, edit: 'bFirst', type: 'date', fallback: r => r.bFirstAuto, hint: '沒填時帶入總表的「B單位第一次提供服務日期（居服進場）」' },
-      { h: '服務連結時效(工作天)', mk: 'dispatch.link', num: 1, noB: 1, v: r => r.k.link, hint: '照會B單位→B單位首次服務', bad: r => r.k.link > 6 ? '逾期（超過3+3天）' : r.k.link < 0 ? '日期順序錯誤' : '' },
-      { h: 'B單位逾3+3天未提供服務原因', noB: 2, edit: 'bLate', opts: OPTS.bLate, need: r => r.k.link > 6 },
-      { h: '服務逾期追蹤日期', noB: 2, edit: 'followDate', type: 'date', need: r => r.k.link > 6 },
-      { h: '服務逾期追蹤結果', noB: 2, edit: 'followResult', need: r => r.k.link > 6 },
+      { h: 'B單位第一次提供服務日期', noB: 1, bf: 1, edit: 'bFirst', type: 'date', fallback: r => r.bFirstAuto, hint: '沒填時帶入總表的「B單位第一次提供服務日期（居服進場）」' },
+      { h: '服務連結時效(工作天)', mk: 'dispatch.link', num: 1, noB: 1, bf: 1, v: r => r.k.link, hint: '照會B單位→B單位首次服務', bad: r => r.k.link > 6 ? '逾期（超過3+3天）' : r.k.link < 0 ? '日期順序錯誤' : '' },
+      { h: 'B單位逾3+3天未提供服務原因', noB: 2, bf: 2, edit: 'bLate', opts: OPTS.bLate, need: r => r.k.link > 6 },
+      { h: '服務逾期追蹤日期', noB: 2, bf: 2, edit: 'followDate', type: 'date', need: r => r.k.link > 6 },
+      { h: '服務逾期追蹤結果', noB: 2, bf: 2, edit: 'followResult', need: r => r.k.link > 6 },
       { h: '照專派貴單位的機制', edit: 'assignMech', opts: OPTS.assignMech, fallback: r => mechToOpt(r.c.aMech), hint: '沒填時帶入個案的 A單位指定／輪派' },
     ],
     calc: (r, H, ctx) => ({
@@ -832,6 +832,16 @@ function rate(rows, f, ok) {
 // 事件 event = { _id, caseId, month, ...欄位 }；個案 case = { _id, caseNo, ...欄位 }
 // 需要追蹤 B 單位（照會、第一次提供服務）嗎？有 BA 碼（不含沐浴車 BA09）或 BB 碼才需要
 // 不需要時回傳要顯示的文字，例如「僅交通」「僅交通、輔具」
+// 居家只有陪同外出／就醫（BA13、BA14）：照會B單位照常，但不追蹤第一次提供服務，
+// 「B單位第一次提供服務日期」「服務連結時效」寫代碼（例如「BA13、BA14」）
+function noBFirstText(e, c, month, db) {
+  const codes = String(e.codes || latestCodes(db, c, month) || '').toUpperCase().split(/[,，、;；\s]+/).filter(Boolean);
+  const b = codes.filter(x => /^BA(?!09)/.test(x) || /^BB/.test(x));
+  if (!b.length || !b.every(x => /^BA1[34]/.test(x))) return '';
+  return [...new Set(b.map(x => x.slice(0, 4)))].sort().join('、');
+}
+// 這一格改寫文字、不追蹤嗎？回傳 [文字, 1＝顯示文字／2＝留白]；要正常顯示就回傳 null
+const skipB = (col, r) => col.noB && r.noB ? [r.noB, col.noB] : col.bf && r.noBF ? [r.noBF, col.bf] : null;
 function noBText(e, c, month, db) {
   const codes = String(e.codes || latestCodes(db, c, month) || '').toUpperCase().split(/[,，、;；\s]+/).filter(Boolean);
   const home = String(monthSvc(e, c)('home') || '').trim();
@@ -872,7 +882,10 @@ function buildReport(key, month, db) {
     // 只有 BA 碼（不含沐浴車 BA09）、BB 碼要照會 B 單位、追蹤第一次提供服務；其他（僅交通、僅輔具…）這幾欄填文字、不計算
     r.noB = R.bTrack ? noBText(e, c, month, db) : '';
     r.k = R.calc(r, db.holidays, ctx);
+    // 自己填了 B單位第一次提供服務日期，就恢復追蹤
+    r.noBF = R.bTrack && !r.noB && !r.e.bFirst ? noBFirstText(e, c, month, db) : '';
     if (r.noB) { r.k.toB = null; r.k.link = null; }
+    if (r.noBF) r.k.link = null;
     return r;
   });
   return { R, rows, summary: R.summary(rows, k => unitOf(calcMode(db, k))) };
@@ -891,7 +904,7 @@ function bMechOf(c) {
 const ekey = (col, r) => typeof col.edit === 'function' ? col.edit(r) : col.edit;
 const editVal = (col, r) => (r.e[ekey(col, r)] || (col.fallback ? col.fallback(r) : '') || '');
 function cellText(col, r) {
-  if (col.noB && r.noB) return col.noB === 1 ? r.noB : '';
+  const sk = skipB(col, r); if (sk) return sk[1] === 1 ? sk[0] : '';
   const val = col.edit ? editVal(col, r) : col.v(r);
   if (val === null || val === undefined) return '';
   if (col.date || col.type === 'date') return roc(val);
@@ -2257,8 +2270,8 @@ const DISPATCH_X = [
   ['個管照顧計畫送審日期', r => dt(r.e.submit)], ['照專簽審日期', r => dt(r.e.approve)], ['照會B單位日期', r => r.noB || dt(r.e.referB)],
   ['訪案及計畫擬定3天內完成率', r => r.k.plan], ['逾3天未完成計畫擬定原因', r => r.e.planLate || ''],
   [null, r => r.k.refA], ['個管照會B單位(工作天)', r => r.noB || r.k.toB], ['逾3天未完成照會B單位原因', r => r.e.referBLate || ''],
-  ['派案B單位機制', (r, R) => editVal(R.cols.find(c => c.edit === 'dispatchMech'), r)], ['B單位第一次提供服務日期', r => r.noB || dt(r.e.bFirst || r.bFirstAuto)],
-  ['服務連結時效(工作天)', r => r.noB || r.k.link], ['B單位逾3+3天未提供服務原因', r => r.e.bLate || ''], ['服務逾期追蹤日期', r => dt(r.e.followDate)],
+  ['派案B單位機制', (r, R) => editVal(R.cols.find(c => c.edit === 'dispatchMech'), r)], ['B單位第一次提供服務日期', r => r.noB || r.noBF || dt(r.e.bFirst || r.bFirstAuto)],
+  ['服務連結時效(工作天)', r => r.noB || r.noBF || r.k.link], ['B單位逾3+3天未提供服務原因', r => r.noBF ? '' : r.e.bLate || ''], ['服務逾期追蹤日期', r => dt(r.e.followDate)],
   ['服務逾期追蹤結果', r => r.e.followResult || ''], ['照專派貴單位的機制', (r, R) => editVal(R.cols.find(c => c.edit === 'assignMech'), r)],
 ];
 const DISCHARGE_X = [
@@ -2786,7 +2799,7 @@ function monthTimeliness(mk, db) {
     if (!useH && rep.rows.length) {
       src = '系統';
       for (const r of rep.rows) {
-        if (col.noB && r.noB) continue;
+        if (skipB(col, r)) continue;
         const v = col.v(r); if (v === null || v === undefined || v === '') continue;
         if (M.k === 'aa01') { n++; if (!r.k.over) ok++; continue; }
         if (typeof v !== 'number' || v < 0) continue;
@@ -2818,7 +2831,7 @@ function overdueRows(mk, db) {
   for (const [rpt, field, label, isLate] of DASH_REASONS) {
     const rep = reps[rpt] = reps[rpt] || buildReport(rpt, mk, db);
     for (const r of rep.rows) {
-      if ((rpt === 'dispatch' && (field === 'referBLate' || field === 'bLate') && r.noB) || !isLate(r)) continue;
+      if ((rpt === 'dispatch' && (field === 'referBLate' || field === 'bLate') && r.noB) || (field === 'bLate' && r.noBF) || !isLate(r)) continue;
       const days = field === 'planLate' ? r.k.plan : field === 'referBLate' ? r.k.toB : field === 'bLate' ? r.k.link : field === 'dcLate' ? r.k.dv : field === 'dcApproveLate' ? r.k.va : monthSpan(r.k.base, r.e.visit);
       list.push({ rpt, field, label, caseId: r.caseId, name: r.c.name, caseNo: r.c.caseNo, days, reason: String(r.e[field] || '').trim(), follow: field === 'bLate' ? (r.e.followResult || '') : '' });
     }
@@ -3739,7 +3752,7 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
   const CARD_COLS = key === 'dispatch' ? CMP_COLS : rep0.R.cols.filter(c => c.num).map(c => c.h);
   const missingReason = r => rep0.R.cols.some(c => c.need && c.need(r) && !r.e[ekey(c, r)]);
   const anyBad = r => rep0.R.cols.some(c => c.bad && c.bad(r));
-  const dateGap = r => !(isDc(r) ? r.e.visit : r.e.supervisor) || !r.e.approve || (key === 'dispatch' && !r.noB && (!r.e.referB || !(r.e.bFirst || r.bFirstAuto)));
+  const dateGap = r => !(isDc(r) ? r.e.visit : r.e.supervisor) || !r.e.approve || (key === 'dispatch' && !r.noB && (!r.e.referB || (!r.noBF && !(r.e.bFirst || r.bFirstAuto))));
   const filters = [['all', '全部', () => true], ['bad', '有逾期／異常', anyBad], ['need', '逾期未填原因／追蹤', missingReason], ...(key === 'dispatch' ? [['gap', '日期沒填齊', dateGap]] : [])];
   const [flt, setFlt] = useState('all'), pickFlt = k => setFlt(k);
   const rowsF = rep0.rows.filter((filters.find(f => f[0] === flt) || filters[0])[2]);
@@ -3757,7 +3770,9 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
   // 一格（可填或顯示）
   const cellInner = (col, r) => {
     if (col.edit && col.hide && col.hide(r)) return html`<span class="sub">—</span>`;
-    if (col.noB && r.noB) return html`<span class="sub">${col.noB === 1 ? r.noB : '—'}</span>`;
+    // 只有 BA13／BA14：先寫代碼，但可以改填日期（填了就恢復追蹤；清掉日期又變回代碼）
+    if (!r.noB && r.noBF && col.bf === 1 && col.edit) return html`<span class="tag t-close" title="居家只有陪同外出／就醫，預設不追蹤；要追蹤請直接填日期">${r.noBF}</span> <${DateInput} value="" onChange=${v => save(r, ekey(col, r), v)} />`;
+    { const sk = skipB(col, r); if (sk) return html`<span class="sub">${sk[1] === 1 ? sk[0] : '—'}</span>`; }
     if (col.edit) return col.type === 'date'
       ? html`<${DateInput} value=${editVal(col, r)} onChange=${v => save(r, ekey(col, r), v)} />${!r.e[ekey(col, r)] && col.fallback && col.fallback(r) ? html`<span class="tag t-close" style="margin-left:4px" title="從總表帶入">帶入</span>` : ''}`
       : col.opts === AMPM ? html`<${AmPm} value=${r.e[ekey(col, r)]} onChange=${v => save(r, ekey(col, r), v)} />`
@@ -3766,7 +3781,7 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
     return html`${cellText(col, r)}${msg && !col.num ? html` <span class="tag t-warn">${msg}</span>` : ''}${warn ? html` <span class="tag t-org">${warn}</span>` : ''}`;
   };
   const cell = (col, r) => {
-    if (col.noB && r.noB) return html`<td class="sub" title="沒有 BA（不含沐浴車）／BB 碼，不追蹤 B 單位">${col.noB === 1 ? r.noB : ''}</td>`;
+    { const sk = !r.noB && r.noBF && col.bf === 1 && col.edit ? null : skipB(col, r); if (sk) return html`<td class="sub" title=${r.noB ? '沒有 BA（不含沐浴車）／BB 碼，不追蹤 B 單位' : '居家只有陪同外出／就醫（BA13、BA14），不追蹤第一次提供服務'}>${sk[1] === 1 ? sk[0] : ''}</td>`; }
     const need = col.edit && col.need && col.need(r) && !r.e[ekey(col, r)], msg = !col.edit && col.bad ? col.bad(r) : '', warn = !col.edit && !msg && col.warn ? col.warn(r) : '';
     return html`<td class=${(need ? 'need ' : '') + (msg ? 'flag' : '')} title=${need ? '逾期，請填寫原因' : (msg || warn)}>${cellInner(col, r)}</td>`;
   };
@@ -3830,8 +3845,8 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
         // 手機：一人一張卡，三個時效天數做成小方塊；點卡片展開，所有欄位直接在卡片裡填
         return html`<div key=${r.caseId} class=${'rcard' + (isOpen ? ' open' : '') + (st.some(x => x[1] === 't-warn') ? ' warn' : '')}>
           <div class="rc-h" onClick=${() => setOpen(isOpen ? null : r.caseId)}><span class="no">${r.i}</span><b>${r.c.name}</b><span class="sub">CMS ${cellText(colBy('CMS'), r)}</span><span class="grow"></span><span class="ar">${isOpen ? '▴' : '▾'}</span></div>
-          <div class="rc-m" style=${`grid-template-columns:repeat(${Math.max(1, CARD_COLS.length)},1fr)`} onClick=${() => setOpen(isOpen ? null : r.caseId)}>${CARD_COLS.map(h => { const c = colBy(h), v = c.v(r), msg = c.bad ? c.bad(r) : '', nb = c.noB && r.noB;
-            return html`<div class=${'met' + (msg ? ' bad' : '') + (nb ? ' na' : '')}><span>${h.replace(/\((工作天|日曆天)\)/, '').replace('3天內完成率', '').replace('個管', '').replace('平均天數', '')}</span><b>${nb ? r.noB : v === null || v === undefined || v === '' ? '—' : v}${nb || v === null || v === undefined || v === '' ? '' : html`<small>天</small>`}</b></div>`; })}</div>
+          <div class="rc-m" style=${`grid-template-columns:repeat(${Math.max(1, CARD_COLS.length)},1fr)`} onClick=${() => setOpen(isOpen ? null : r.caseId)}>${CARD_COLS.map(h => { const c = colBy(h), v = c.v(r), msg = c.bad ? c.bad(r) : '', nb = skipB(c, r);
+            return html`<div class=${'met' + (msg ? ' bad' : '') + (nb ? ' na' : '')}><span>${h.replace(/\((工作天|日曆天)\)/, '').replace('3天內完成率', '').replace('個管', '').replace('平均天數', '')}</span><b>${nb ? nb[0] : v === null || v === undefined || v === '' ? '—' : v}${nb || v === null || v === undefined || v === '' ? '' : html`<small>天</small>`}</b></div>`; })}</div>
           <div class="rc-s">${st.length ? st.map(([t, cls]) => html`<span class=${'tag ' + cls}>${t}</span>`) : html`<span class="tag t-new">準時</span>`}</div>
           ${isOpen && html`<div class="rc-d">${detailGroups.map(([g, cols]) => html`<div class="rc-g"><div class="dsh">${g}</div>${cols.map(c => html`<div class="rc-f" key=${r.caseId + c.h}><span class="lb">${colHead(c)}</span><span class="vl">${cellInner(c, r)}</span></div>`)}</div>`)}
             <button class="btn light" style="width:100%;margin-top:8px" onClick=${() => setEdit(r.caseId)}>打開個案資料</button></div>`}</div>`; })}</div>`
