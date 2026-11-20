@@ -101,7 +101,30 @@
   .fstats button:hover{background:#FBF3E6}
   .fstats button.on{background:var(--green);border-color:var(--green)}.fstats button.on span,.fstats button.on b{color:#fff}
   .fpanel{position:fixed;right:16px;bottom:96px;z-index:900;width:min(760px,calc(100vw - 32px));background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.2)}
-  @media (max-width:700px){.fstats{gap:6px}.fstats button{width:56px;height:56px}.fstats button b{font-size:16px}.fstats button span{font-size:10px}}
+  /* 區域分配 */
+  .rg-brush{display:flex;flex-wrap:wrap;gap:8px}
+  .rg-brush button{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:6px 14px 6px 10px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer}
+  .rg-brush button i{width:12px;height:12px;border-radius:50%;background:var(--c)}
+  .rg-brush button small{font-weight:400;color:var(--sub);font-size:12px}
+  .rg-brush button.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 14%,#fff);box-shadow:0 0 0 2px color-mix(in srgb,var(--c) 35%,transparent)}
+  .rg-brush button.erase{border-style:dashed;color:var(--sub);font-weight:500}.rg-brush button.erase.on{border-color:var(--red);color:var(--red);box-shadow:none;background:#fdf1f0}
+  .rg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin-top:10px}
+  .rg-v{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:1.5px dashed var(--line);background:#fffdf9;border-radius:12px;padding:9px 11px;cursor:pointer;color:var(--ink);transition:transform .12s ease,box-shadow .18s ease}
+  .rg-v:hover{transform:translateY(-1px);box-shadow:0 3px 10px rgba(61,53,41,.08)}
+  .rg-v b{font-size:15px}.rg-v .n{font-size:12px;color:var(--sub)}
+  .rg-v .who{font-size:12px;color:var(--sub);margin-top:2px}
+  .rg-v.set{border:1.5px solid var(--c);background:color-mix(in srgb,var(--c) 11%,#fff)}
+  .rg-v.set .who{color:#fff;background:var(--c);border-radius:999px;padding:1px 8px;font-weight:600}
+  .rg-tbl tr{cursor:pointer}.rg-tbl tr.on td{background:#f6f9f3}
+  .rg-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px}
+  .rg-list button{display:grid;grid-template-columns:auto 1fr;gap:0 8px;text-align:left;border:1px solid var(--line);background:#fff;border-radius:10px;padding:7px 10px;cursor:pointer;color:var(--ink)}
+  .rg-list button span{color:var(--sub);font-size:12px;align-self:center}.rg-list button small{grid-column:1/-1;color:var(--sub);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rg-hint{display:block;margin-top:6px;border:1px dashed var(--green);background:#f4f8f1;color:var(--green);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer}
+  @media (max-width:700px){
+    .rg-grid{grid-template-columns:repeat(3,1fr);gap:6px}.rg-v{padding:8px 8px}.rg-v b{font-size:14px}
+    .rg-brush button{padding:6px 11px 6px 9px;font-size:13px}
+    .rg-list{grid-template-columns:1fr}
+.fstats{gap:6px}.fstats button{width:56px;height:56px}.fstats button b{font-size:16px}.fstats button span{font-size:10px}}
   .trigbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
   .trigbar button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font-size:13px;color:var(--ink)}
   .trigbar button b{margin-left:6px;color:var(--green)}
@@ -1852,6 +1875,32 @@ const HOLIDAYS_2026 = [
   ['2026-06-19', '端午節'], ['2026-09-25', '中秋節'], ['2026-09-28', '教師節'], ['2026-10-09', '國慶日補假'],
   ['2026-10-26', '光復節補假'], ['2026-12-25', '行憲紀念日'],
 ];
+// ---------- 區域分配：鄉／村（115 年村名，依中選會村里資料） ----------
+const VILLAGES = {
+  '台西鄉': ['台西', '海北', '海南', '海口', '溪頂', '牛厝', '泉州', '光華', '五榔', '山寮', '富琦', '永豐', '和豐', '蚊港', '五港'],
+  '四湖鄉': ['四湖', '湖西', '新庄', '鹿場', '蔡厝', '湖寮', '施湖', '羊調', '內湖', '飛東', '飛沙', '三姓', '崙北', '崙南', '廣溝', '萡子', '萡東', '林厝', '林東', '溪尾', '溪底'],
+  '東勢鄉': ['東南', '東北', '嘉隆', '復興', '月眉', '程海', '龍潭', '安南', '昌南', '同安', '新坤', '四美'],
+  '麥寮鄉': ['麥津', '麥豐', '瓦磘', '興華', '崙後', '後安', '海豐', '三盛', '橋頭', '新吉', '施厝', '雷厝', '中興'],
+};
+// 地址常見的異體字統一（臺/台、箔/萡、莊/庄、稠/調、窯/瑤/磘）
+const normAddr = s => String(s || '').replace(/臺/g, '台').replace(/箔/g, '萡').replace(/莊/g, '庄').replace(/稠/g, '調').replace(/[窯瑤]/g, '磘').replace(/\s+/g, '');
+// 從地址判斷鄉、村：先找「○○村」，地址有寫鄉就以那個鄉為主；沒寫「村」但「○○鄉」後面緊接村名也算
+function villageOf(addr) {
+  const a = normAddr(addr); if (!a) return null;
+  const tm = a.match(/(台西|四湖|東勢|麥寮)鄉/), townIn = tm ? tm[0] : '';
+  const towns = Object.keys(VILLAGES).sort((x, y) => (y === townIn) - (x === townIn));
+  let best = null;
+  for (const t of towns) {
+    for (const v of VILLAGES[t]) { const i = a.indexOf(v + '村'); if (i >= 0 && (!best || i < best.i)) best = { town: t, village: v, i }; }
+    if (best && (t === townIn || !townIn)) break;
+  }
+  if (best && townIn && best.town !== townIn) { const again = VILLAGES[townIn].find(v => a.includes(v + '村')); if (again) best = { town: townIn, village: again }; }
+  if (!best && townIn) { const rest = a.slice(a.indexOf(townIn) + townIn.length); const v = VILLAGES[townIn].find(x => rest.startsWith(x)); if (v) best = { town: townIn, village: v }; }
+  if (best) return { town: best.town, village: best.village, key: best.town + '/' + best.village };
+  return townIn ? { town: townIn, village: '', key: '' } : null;
+}
+// 依地址找區域分配的負責個管（kv regionAssign：{ map: { '台西鄉/五港': '王小明' } }）
+const regionCm = (db, addr) => { const loc = villageOf(addr); return loc && loc.key ? (((db.kv || {}).regionAssign || {}).map || {})[loc.key] || '' : ''; };
 // ---------- 月報 Excel（4.115年10月圓餅圖-台西區.xlsx）：三個工作表＋圖表，名稱照原檔 ----------
 const colL = c => { let s = ''; c++; while (c) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = (c - m - 1) / 26; } return s; };
 function monthlyBookSpec(month, db) {
@@ -3249,6 +3298,10 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
   const [c, setC] = useState(() => draft ? draft.c : ({ ...(orig || {}), services: { ...((orig || {}).services || {}) } }));
   // 居住地：依編號的地區自動帶入（台-05-… → 台西）
   useEffect(() => { const rg = regionOf(caseNo); if (rg && Object.values(REGIONS).includes(rg) && c.area !== rg && (!c.area || Object.values(REGIONS).includes(c.area))) setC(v => ({ ...v, area: rg })); }, [caseNo]);
+  // 區域分配：新案打地址 → 自動帶入那個村分配的負責個管（之後可以自己改；手動選過別人就不再蓋掉）
+  const autoCm = useRef('');
+  useEffect(() => { if (!isAdd) return; const s = regionCm(db, c.address); if (!s) return;
+    if (!c.careManager || c.careManager === autoCm.current) { autoCm.current = s; if (c.careManager !== s) setC(v => ({ ...v, careManager: s })); } }, [c.address]);
   const [em, setEm] = useState(draft ? draft.em : month);
   const evOrig = useMemo(() => db.events.find(e => e.caseId === curId && e.month === em) || null, [db, curId, em]);
   const [ev, setEv] = useState(() => draft && draft.ev ? draft.ev : ({ ...(evOrig || {}), services: { ...((evOrig || {}).services || {}) } }));
@@ -3349,7 +3402,8 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
         <option value="">（未填）</option>${[...t.select, ...(obj[k] && !t.select.includes(obj[k]) ? [obj[k]] : [])].map(o => html`<option value=${o}>${o}</option>`)}</select>`
     : t === 'date' ? html`<${DateInput} style="width:100%" value=${obj[k] || ''} onChange=${v => set({ ...obj, [k]: v })} />`
       : t === 'cm' ? html`<span class="trigbar" style="margin:2px 0 0">${[...cmNames, ...(obj[k] && !cmNames.includes(obj[k]) ? [obj[k]] : [])].map(o => html`<button type="button" class=${obj[k] === o ? 'on' : ''} onClick=${e => { e.preventDefault(); set({ ...obj, [k]: obj[k] === o ? '' : o }); }}>${o}</button>`)}
-        ${!cmNames.length && html`<span class="sub" style="font-size:11px">還沒有個管名單：到「設定 → 個管名單」新增</span>`}</span>`
+        ${!cmNames.length && html`<span class="sub" style="font-size:11px">還沒有個管名單：到「設定 → 個管名單」新增</span>`}
+        ${(() => { const s = regionCm(db, obj.address), l = villageOf(obj.address); return s && s !== obj[k] ? html`<button type="button" class="rg-hint" onClick=${e => { e.preventDefault(); set({ ...obj, [k]: s }); }}>依地址（${l.village}村）分配：${s}，點這裡帶入</button>` : ''; })()}</span>`
       : Array.isArray(t) ? html`<input class="inp" list=${'dl-' + k} value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} /><datalist id=${'dl-' + k}>${t.map(o => html`<option value=${o} />`)}</datalist>`
         : html`<input class="inp" value=${obj[k] || ''} onInput=${e => set({ ...obj, [k]: e.target.value })} />`}
     ${k === 'srcNote' && obj.src === '轉入' && html`<span class="trigbar" style="margin:4px 0 0">${TRANSFER_FROM.map(o => html`<button type="button" class=${obj.srcNote === o ? 'on' : ''} onClick=${e => { e.preventDefault(); set({ ...obj, srcNote: obj.srcNote === o ? '' : o }); }}>${o}</button>`)}</span>`}</label>`;
@@ -4095,12 +4149,15 @@ async function syncCareManagers(pw) {
   const rows = await post('cases:list', 'query', { all: true }, auth.tokens.token);
   const byId = {}, byName = {}, managers = new Set(), regions = new Set();
   for (const row of rows) { let d = {}; try { d = JSON.parse(row.data || '{}'); } catch { } const m = String(d.careManager || '').trim();
-    if (!m) { if (d.idNo) byId[String(d.idNo).trim().toUpperCase()] = ''; continue; }   // 還沒填個管的也記下來（代表 AA02 已有這位個案）
-    if (d.region) regions.add(String(d.region).trim()); managers.add(m); if (d.idNo) byId[String(d.idNo).trim().toUpperCase()] = m; if (d.name && !(d.name in byName)) byName[String(d.name).trim()] = m; }
+    if (!m) { if (d.idNo) byId[normId(d.idNo)] = ''; continue; }   // 還沒填個管的也記下來（代表 AA02 已有這位個案）
+    if (d.region) regions.add(String(d.region).trim()); managers.add(m); if (d.idNo) byId[normId(d.idNo)] = m; if (d.name && !(d.name in byName)) byName[String(d.name).trim()] = m; }
   return { at: Date.now(), byId, byName, managers: [...managers].sort(), regions: [...regions], n: rows.length };
 }
 // ---- 新增個案時一併建到 AA02 追蹤系統（長照服務追蹤系統）----
 const CARE_RT_KEY = 'evalCareAppRT';
+// 身分證比對用：全形轉半形、去掉空白和符號、轉大寫（AA02 有時是手打的，格式不一定一樣）
+const normId = v => String(v || '').normalize('NFKC').replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+const normPerson = v => String(v || '').normalize('NFKC').replace(/\s+/g, '');
 const careLinked = () => { try { return !!localStorage.getItem(CARE_RT_KEY); } catch { return false; } };
 async function carePost(path, kind, args, token) {
   const r = await fetch(`${CARE_APP_URL}/api/${kind}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: JSON.stringify({ path, args, format: 'json' }) });
@@ -4147,13 +4204,13 @@ async function autoCareSync(db, user, force, push) {
     const cm = cm0 ? { ...cm0, byId: { ...cm0.byId }, byName: { ...cm0.byName }, managers: [...(cm0.managers || [])], regions: [...(cm0.regions || [])] } : { byId: {}, byName: {}, managers: [], regions: [] };
     const rows = await carePost('cases:list', 'query', cm0 && cm0.at ? { since: Math.max(0, cm0.at - 3600000) } : { all: true }, token);
     let changed = !cm0;
-    for (const row of rows || []) { let d = {}; try { d = JSON.parse(row.data || '{}'); } catch { } const idNo = String(d.idNo || '').trim().toUpperCase(), m = String(d.careManager || '').trim();
+    for (const row of rows || []) { let d = {}; try { d = JSON.parse(row.data || '{}'); } catch { } const idNo = normId(d.idNo), m = String(d.careManager || '').trim();
       if (idNo && cm.byId[idNo] !== m) { cm.byId[idNo] = m; changed = true; }
       if (m && d.name && cm.byName[String(d.name).trim()] !== m) { cm.byName[String(d.name).trim()] = m; changed = true; }
       if (m && !cm.managers.includes(m)) { cm.managers.push(m); changed = true; } if (d.region && !cm.regions.includes(String(d.region).trim())) cm.regions.push(String(d.region).trim()); }
     const mk = todayMonth(), ids = push ? [...new Set([mk, shiftMonth(mk, -1)].flatMap(m => monthSets(m, db).newEvents.map(e => e.caseId)))] : [];
     const added = [];
-    for (const id of ids) { const c = db.cases.get(id); if (!c) continue; const idNo = String(c.idNo || '').trim().toUpperCase(); if (!idNo || idNo in cm.byId) continue;
+    for (const id of ids) { const c = db.cases.get(id); if (!c) continue; const idNo = normId(c.idNo); if (!idNo || idNo in cm.byId) continue;
       const r = await pushCaseToCareApp(c, String(c.careManager || '').trim(), cm, token); cm.byId[idNo] = String(c.careManager || '').trim(); changed = true; if (r === 'added') added.push(c.name); }
     if (changed) { cm.at = Date.now(); await call('m', 'data:saveKv', { key: 'careManagers', d: JSON.stringify(cm), by: user }); }
     try { localStorage.setItem('evalCareSyncAt', String(Date.now())); } catch { }
@@ -4163,12 +4220,12 @@ async function autoCareSync(db, user, force, push) {
 }
 // 回傳 'added' | 'exists'
 async function pushCaseToCareApp(c, careManager, cm, token0) {
-  const idNo = String(c.idNo || '').trim().toUpperCase();
+  const idNo = normId(c.idNo);
   if (!c.name || !idNo) throw new Error('要有姓名和身分證');
   const token = token0 || await careToken();
   // AA02 已有同一個身分證就不建（新增新案時才讀一次 AA02 名單）
   const recent = token0 ? [] : await careCases(token);
-  if ((recent || []).some(row => { try { return String(JSON.parse(row.data || '{}').idNo || '').trim().toUpperCase() === idNo; } catch { return false; } })) return 'exists';
+  if ((recent || []).some(row => { try { const d = JSON.parse(row.data || '{}'); return normId(d.idNo) === idNo || (!normId(d.idNo) && normPerson(d.name) === normPerson(c.name)); } catch { return false; } })) return 'exists';
   const now = Date.now(), d = new Date(), region = regionOf(c.caseNo);
   const data = { name: c.name, idNo, careManager: careManager || '', region: cm && cm.regions && cm.regions.includes(region) ? region : '', contactName: c.contact || '', contactPhone: c.phone || '',
     month: `${d.getFullYear()}-${pad(d.getMonth() + 1)}`, createdAt: now, services: [], aa05: [], aa06wound: '傷口-無', aa06tubes: ['管路-無'], aa06items: [], aa07: [], aa0809Items: [],
@@ -4185,15 +4242,21 @@ function CmCompare({ db, onClose }) {
     setSt('load'); setErr('');
     try {
       const token = await careToken(), list = await careCases(token), byId = new Map();
-      for (const r of list || []) { let d = {}; try { d = JSON.parse(r.data || '{}'); } catch { } const id = String(d.idNo || '').trim().toUpperCase(); if (id) byId.set(id, { r, d }); }
+      const byName = new Map();
+      for (const r of list || []) { let d = {}; try { d = JSON.parse(r.data || '{}'); } catch { } const id = normId(d.idNo), nm = normPerson(d.name);
+        if (id) byId.set(id, { r, d }); if (nm) byName.set(nm, [...(byName.get(nm) || []), { r, d }]); }
       const diff = [], none = [];
       for (const c of db.cases.values()) {
-        const mine = cmOf(c); if (!mine) continue; const id = String(c.idNo || '').trim().toUpperCase(); const x = id && byId.get(id);
-        if (!x) { none.push(c); continue; }
-        const theirs = String(x.d.careManager || '').trim(); if (theirs !== mine) diff.push({ c, mine, theirs, row: x.r, d: x.d });
+        const mine = cmOf(c); if (!mine) continue; const id = normId(c.idNo); let x = id && byId.get(id), note = '';
+        if (!x) {   // 身分證對不到 → 改用姓名找（AA02 只有一位同名才算），並標出身分證哪裡不同
+          const same = byName.get(normPerson(c.name)) || [];
+          if (same.length === 1) { x = same[0]; note = normId(x.d.idNo) ? `身分證不同：AA02「${x.d.idNo}」／總表「${c.idNo || '空白'}」` : `AA02 這位沒填身分證（用姓名對到）`; }
+          else { none.push({ c, why: !id ? '總表沒填身分證' : same.length > 1 ? `AA02 有 ${same.length} 位同名，身分證都對不上` : `AA02 沒有這個身分證（總表：${c.idNo}），也沒有同名的` }); continue; }
+        }
+        const theirs = String(x.d.careManager || '').trim(); if (theirs !== mine || note) diff.push({ c, mine, theirs, row: x.r, d: x.d, note });
       }
       diff.sort((a, b) => String(a.c.caseNo).localeCompare(String(b.c.caseNo), 'zh-Hant', { numeric: true }));
-      setRows(diff); setMiss(none); setPick(Object.fromEntries(diff.map(x => [x.row.caseId, true]))); setSt('show');
+      setRows(diff); setMiss(none); setPick(Object.fromEntries(diff.filter(x => x.theirs !== x.mine).map(x => [x.row.caseId, true]))); setSt('show');
     } catch (e) { setErr(e.message || String(e)); setSt('err'); }
   };
   useEffect(() => { load(); }, []);
@@ -4222,8 +4285,8 @@ function CmCompare({ db, onClose }) {
       ${!rows.length ? html`<div class="tag t-new">總表和 AA02 的個管都一樣，不用更新</div>` : html`
       <div class="bar" style="margin-bottom:6px"><button class="btn light sm" onClick=${() => setPick(Object.fromEntries(rows.map(x => [x.row.caseId, true])))}>全選</button><button class="btn light sm" onClick=${() => setPick({})}>全不選</button><span class="sub">已選 ${n}／${rows.length}</span></div>
       <div class="tw" style="max-height:50vh"><table class="grid"><thead><tr><th></th><th>編號</th><th>姓名</th><th>AA02 現在</th><th>改成（總表）</th></tr></thead>
-        <tbody>${rows.map(x => html`<tr key=${x.row.caseId}><td><input type="checkbox" checked=${!!pick[x.row.caseId]} onChange=${e => setPick({ ...pick, [x.row.caseId]: e.target.checked })} /></td><td>${x.c.caseNo}</td><td><b>${x.c.name}</b></td><td>${x.theirs || html`<span class="sub">（空白）</span>`}</td><td><b style="color:#4f6b45">${x.mine}</b></td></tr>`)}</tbody></table></div>`}
-      ${miss.length > 0 && html`<details style="margin-top:8px"><summary class="sub">AA02 找不到的 ${miss.length} 位</summary><div class="sub">${miss.map(c => `${c.name}（${c.caseNo}）`).join('、')}</div></details>`}`}
+        <tbody>${rows.map(x => html`<tr key=${x.row.caseId}><td><input type="checkbox" checked=${!!pick[x.row.caseId]} onChange=${e => setPick({ ...pick, [x.row.caseId]: e.target.checked })} /></td><td>${x.c.caseNo}</td><td><b>${x.c.name}</b>${x.note ? html`<div class="sub" style="color:#a86a1d">${x.note}</div>` : ''}</td><td>${x.theirs || html`<span class="sub">（空白）</span>`}</td><td><b style="color:#4f6b45">${x.mine}</b></td></tr>`)}</tbody></table></div>`}
+      ${miss.length > 0 && html`<details style="margin-top:8px"><summary class="sub">AA02 找不到的 ${miss.length} 位</summary><div class="sub">${miss.map(m => html`<div>${m.c.name}（${m.c.caseNo}）— ${m.why}</div>`)}</div></details>`}`}
     <div class="bar" style="margin-top:12px;justify-content:flex-end"><button class="btn light" onClick=${onClose}>${st === 'done' ? '關閉' : '取消'}</button>
       ${(st === 'show' || st === 'save') && rows.length > 0 && html`<button class="btn" disabled=${st === 'save' || !n} onClick=${apply}>${st === 'save' ? '更新中…' : `更新 ${n} 位到 AA02`}</button>`}</div>
   </div></div>`;
@@ -4293,7 +4356,7 @@ function RefPanel({ db, user, refresh, year }) {
 function CareStatus({ db, cm, user, refresh }) {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false);
   const mk = todayMonth(), ids = [...new Set([mk, shiftMonth(mk, -1)].flatMap(m => monthSets(m, db).newEvents.map(e => e.caseId)))];
-  const list = ids.map(id => db.cases.get(id)).filter(Boolean).map(c => { const idNo = String(c.idNo || '').trim().toUpperCase(); return { c, st: !idNo ? 'noid' : idNo in cm.byId ? 'in' : 'out', m: cmOf(c, cm) }; });
+  const list = ids.map(id => db.cases.get(id)).filter(Boolean).map(c => { const idNo = normId(c.idNo); return { c, st: !idNo ? 'noid' : idNo in cm.byId ? 'in' : 'out', m: cmOf(c, cm) }; });
   const out = list.filter(x => x.st === 'out').length, noid = list.filter(x => x.st === 'noid').length;
   const go = async () => { if (out && !confirm(`把 ${out} 位還沒進 AA02 的新案匯入 AA02？（會帶入這裡填的負責個管）`)) return; setBusy(true); const r = await autoCareSync(db, user, true, true); setBusy(false); if (r && r.error) toast('AA02 同步失敗：' + r.error, true); else { toast(r && r.added && r.added.length ? `已新增到 AA02：${r.added.join('、')}` : 'AA02 已是最新'); refresh(); } };
   return html`<div class="card"><div class="bar"><h3 style="margin:0">AA02 新案建檔 <span class="sub">${rocMonth(shiftMonth(mk, -1))}～${rocMonth(mk)}新案 ${list.length} 位</span></h3>
@@ -4975,6 +5038,86 @@ function FullToShort({ db, user, refresh }) {
 // ================= 設定：服務單位、假日 =================
 // 個管名單（設定頁）：總表「負責個管」的下拉選單從這裡選；可以手動新增，或從 AA02 讀一次名單
 const cmList = db => ((db.kv.careManagerList && db.kv.careManagerList.names) || []);
+// ---------- 區域分配：依鄉／村分配負責個管 ----------
+// 先點上面的個管（像拿一支筆），再點村格子就把那個村分給他；同一個人再點一次取消。
+// 分配存在 kv regionAssign（一筆資料），新案打地址會自動帶個管；現有在案個案在下面勾選後一次套用
+const REGION_COLORS = ['#7c9473', '#d9a05b', '#6f93b5', '#c7798c', '#9b86b8', '#5fa39a', '#b9a36b', '#c46b4e', '#4f7d8c', '#a3687f', '#6d8f4e', '#8c8071'];
+function RegionView({ db, month, user, refresh }) {
+  const names = cmList(db), saved = (db.kv.regionAssign || {}).map || {};
+  const [map, setMap] = useState(saved), [dirty, setDirty] = useState(false), [brush, setBrush] = useState(() => names[0] || '');
+  useEffect(() => { if (!dirty) setMap((db.kv.regionAssign || {}).map || {}); }, [db.kv.regionAssign]);
+  const [busy, setBusy] = useState(''), [pick, setPick] = useState(null), [edit, setEdit] = useState(null), [onlyOpen, setOnlyOpen] = useState(false);
+  const color = n => { const i = names.indexOf(n); return i < 0 ? '#8c8071' : REGION_COLORS[i % REGION_COLORS.length]; };
+  // 在案（實際在案，和儀表板個管負荷量同一群人）
+  const active = useMemo(() => monthSets(month, db).latest.map(id => db.cases.get(id)).filter(Boolean).sort(sortNo), [db, month]);
+  const loc = useMemo(() => new Map(active.map(c => [c._id, villageOf(c.address)])), [active]);
+  const per = useMemo(() => { const o = {}; for (const c of active) { const l = loc.get(c._id); if (l && l.key) o[l.key] = (o[l.key] || 0) + 1; } return o; }, [active, loc]);
+  const stat = useMemo(() => { const o = {}; for (const [k, n] of Object.entries(map)) { const x = o[n] = o[n] || { v: 0, p: 0 }; x.v++; x.p += per[k] || 0; } return o; }, [map, per]);
+  const set = (key, who) => { setMap(m => { const n = { ...m }; if (!who || n[key] === who) delete n[key]; else n[key] = who; return n; }); setDirty(true); };
+  const tap = key => set(key, brush);
+  const wholeTown = t => { setMap(m => { const n = { ...m }; for (const v of VILLAGES[t]) { const k = t + '/' + v; if (brush) n[k] = brush; else delete n[k]; } return n; }); setDirty(true); };
+  const saveMap = async () => { await call('m', 'data:saveKv', { key: 'regionAssign', d: JSON.stringify({ map, at: Date.now() }), by: user }); setDirty(false); await refresh(); };
+  const doSave = async () => { setBusy('save'); try { await saveMap(); toast('區域分配已儲存'); } catch (e) { toast('儲存失敗：' + e.message, true); } setBusy(''); };
+  // 要套用的：在案、地址判斷得出村、那個村有分配、而且跟現在的負責個管不同
+  const diffs = useMemo(() => active.map(c => { const l = loc.get(c._id), to = l && l.key ? map[l.key] || '' : ''; return { c, l, to, now: cmOf(c) }; }).filter(x => x.to && x.to !== x.now), [active, loc, map]);
+  const unknown = useMemo(() => active.filter(c => { const l = loc.get(c._id); return !l || !l.key; }), [active, loc]);
+  const noAssign = useMemo(() => active.filter(c => { const l = loc.get(c._id); return l && l.key && !map[l.key]; }), [active, loc, map]);
+  const sel = pick || new Set(diffs.filter(x => !x.now).map(x => x.c._id));
+  const toggle = id => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setPick(n); };
+  const apply = async () => {
+    const list = diffs.filter(x => sel.has(x.c._id)); if (!list.length) return toast('請先勾選要套用的個案', true);
+    if (list.some(x => x.now) && !confirm(`其中 ${list.filter(x => x.now).length} 位原本已有負責個管，會改成分配的個管。確定套用？`)) return;
+    setBusy('apply');
+    try {
+      if (dirty) await saveMap();
+      let k = 0; for (const { c, to } of list) { await call('m', 'data:saveCase', { id: c._id, caseNo: c.caseNo, d: JSON.stringify({ careManager: to }), by: user }); setBusy('apply:' + (++k) + '/' + list.length); }
+      await refresh(); setPick(null); toast(`已更新 ${list.length} 位個案的負責個管；要同步到 AA02 請到「儀表板 → 個管負荷量 → 與 AA02 比對個管」`);
+    } catch (e) { toast('套用失敗：' + e.message, true); await refresh(); }
+    setBusy('');
+  };
+  const total = Object.values(VILLAGES).reduce((a, v) => a + v.length, 0), done = Object.keys(map).filter(k => map[k]).length;
+  return html`<div class="page region">
+    <div class="card">
+      <div class="bar"><h3 style="margin:0">區域分配</h3><span class="sub">依個案地址的鄉、村分配負責個管 · 已分配 ${done}／${total} 村</span><span class="grow"></span>
+        ${dirty && html`<button class="btn light" onClick=${() => { setMap(saved); setDirty(false); }}>復原</button>`}
+        <button class="btn" disabled=${!dirty || !!busy} onClick=${doSave}>${busy === 'save' ? '儲存中…' : dirty ? '儲存分配' : '已儲存'}</button></div>
+      <div class="sub" style="margin:8px 0 6px">① 先點一位個管 ② 再點村 → 那個村就分給他（再點一次取消）。選「清除」可以把村清空。</div>
+      <div class="rg-brush">${names.map(n => html`<button class=${brush === n ? 'on' : ''} style=${'--c:' + color(n)} onClick=${() => setBrush(n)}><i></i>${n}<small>${(stat[n] || {}).v || 0} 村・${(stat[n] || {}).p || 0} 人</small></button>`)}
+        <button class=${'erase' + (brush === '' ? ' on' : '')} onClick=${() => setBrush('')}>清除</button>
+        ${!names.length && html`<span class="sub">還沒有個管名單：到「設定 → 個管名單」新增</span>`}</div>
+    </div>
+    ${Object.entries(VILLAGES).map(([t, vs]) => { const tp = vs.reduce((a, v) => a + (per[t + '/' + v] || 0), 0);
+      return html`<div class="card">
+        <div class="bar"><h3 style="margin:0">${t}</h3><span class="sub">${vs.length} 村・在案 ${tp} 人</span><span class="grow"></span>
+          <button class="btn light sm" onClick=${() => wholeTown(t)}>${brush ? `整鄉分給 ${brush}` : '整鄉清除'}</button></div>
+        <div class="rg-grid">${vs.map(v => { const k = t + '/' + v, who = map[k];
+          return html`<button class=${'rg-v' + (who ? ' set' : '')} style=${who ? '--c:' + color(who) : ''} onClick=${() => tap(k)} title=${who ? `${v}村：${who}` : `${v}村：未分配`}>
+            <b>${v}村</b><span class="n">${per[k] || 0} 人</span><span class="who">${who || '未分配'}</span></button>`; })}</div>
+      </div>`; })}
+    <div class="card">
+      <div class="bar"><h3 style="margin:0">套用到現有個案</h3><span class="sub">${rocMonth(month)}在案 ${active.length} 人中，有 ${diffs.length} 人和分配的個管不同</span><span class="grow"></span>
+        <label class="sub"><input type="checkbox" checked=${onlyOpen} onChange=${e => setOnlyOpen(e.target.checked)} /> 只看還沒填個管的</label></div>
+      ${diffs.length ? html`<div class="tw"><table class="grid rg-tbl"><thead><tr>
+          <th><input type="checkbox" checked=${diffs.every(x => sel.has(x.c._id))} onChange=${e => setPick(e.target.checked ? new Set(diffs.map(x => x.c._id)) : new Set())} /></th>
+          <th>編號</th><th>姓名</th><th>村</th><th>現在</th><th></th><th>分配</th></tr></thead>
+        <tbody>${diffs.filter(x => !onlyOpen || !x.now).map(x => html`<tr class=${sel.has(x.c._id) ? 'on' : ''} onClick=${() => toggle(x.c._id)}>
+          <td><input type="checkbox" checked=${sel.has(x.c._id)} onClick=${e => e.stopPropagation()} onChange=${() => toggle(x.c._id)} /></td>
+          <td>${x.c.caseNo}</td><td>${x.c.name}</td><td>${x.l.town.replace('鄉', '')} ${x.l.village}村</td>
+          <td class=${x.now ? '' : 'sub'}>${x.now || '（未填）'}</td><td class="sub">→</td><td><b style=${'color:' + color(x.to)}>${x.to}</b></td></tr>`)}</tbody></table></div>
+        <div class="bar" style="margin-top:10px"><span class="sub">已勾選 ${diffs.filter(x => sel.has(x.c._id)).length} 人（預設只勾還沒填個管的；原本已有個管的要改請自己勾）</span><span class="grow"></span>
+          <button class="btn" disabled=${!!busy} onClick=${apply}>${busy.startsWith('apply') ? '套用中 ' + (busy.split(':')[1] || '') : '套用勾選的個案'}</button></div>`
+      : html`<div class="sub" style="padding:8px 0">${done ? '在案個案的負責個管都和分配一致 👍' : '先在上面分配村，這裡會列出要更新的個案'}</div>`}
+    </div>
+    ${(unknown.length > 0 || noAssign.length > 0) && html`<div class="card">
+      ${unknown.length > 0 && html`<h3 style="margin:0 0 4px">地址判斷不出村（${unknown.length} 人）</h3>
+        <div class="sub" style="margin-bottom:6px">地址要寫到「○○村」才判斷得出來（例：雲林縣台西鄉五港村…），點名字可以直接修改地址</div>
+        <div class="rg-list">${unknown.map(c => html`<button onClick=${() => setEdit(c._id)}><b>${c.name}</b><span>${c.caseNo}</span><small>${c.address || '（沒有地址）'}</small></button>`)}</div>`}
+      ${noAssign.length > 0 && html`<h3 style="margin:14px 0 4px">村還沒分配個管（${noAssign.length} 人）</h3>
+        <div class="rg-list">${noAssign.map(c => { const l = loc.get(c._id); return html`<button onClick=${() => setEdit(c._id)}><b>${c.name}</b><span>${l.town.replace('鄉', '')} ${l.village}村</span><small>${cmOf(c) || '未填個管'}</small></button>`; })}</div>`}
+    </div>`}
+    ${edit && html`<${CaseEditor} key=${'rg' + edit} db=${db} month=${month} user=${user} id=${edit} onClose=${() => setEdit(null)} refresh=${refresh} />`}
+  </div>`;
+}
 function ManagersCard({ db, user, refresh }) {
   const names = cmList(db), [nm, setNm] = useState(''), [busy, setBusy] = useState(false), [link, setLink] = useState(false);
   const count = useMemo(() => { const o = {}; for (const c of db.cases.values()) { const m = cmOf(c); if (m) o[m] = (o[m] || 0) + 1; } return o; }, [db]);
@@ -5200,7 +5343,7 @@ function App() {
     <input id="nm" placeholder="請輸入你的名字" onKeyDown=${e => { if (e.key === 'Enter' && e.target.value.trim()) { localStorage.setItem('caUserName', e.target.value.trim()); setUser(e.target.value.trim()); } }} />
     <button class="btn" onClick=${() => { const v = document.getElementById('nm').value.trim(); if (v) { localStorage.setItem('caUserName', v); setUser(v); } }}>確定</button></div></div>`;
 
-  const TABS = [['summary', '總表'], ['dash', '儀表板'], ['report', '評鑑報表'], ['stats', '統計'], ['import', '匯入'], ['settings', '設定']];
+  const TABS = [['summary', '總表'], ['dash', '儀表板'], ['report', '評鑑報表'], ['stats', '統計'], ['import', '匯入'], ['region', '區域分配'], ['settings', '設定']];
   return html`<div>
     <div class="top">
       <span class="brand"><img src=${LOGO} alt="" />雲端資料庫<a class="homebtn" href=${PORTAL_URL} title="回到入口網站" aria-label="回到入口網站"><span class="ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg></span><span class="tx">回入口網站</span></a></span>
@@ -5217,6 +5360,7 @@ function App() {
       : tab === 'report' ? html`<${ReportView} db=${db} month=${month} user=${user} refresh=${refresh} />`
       : tab === 'stats' ? html`<${StatsView} db=${db} month=${month} />`
       : tab === 'import' ? html`<${ImportView} db=${db} month=${month} user=${user} refresh=${refresh} />`
+      : tab === 'region' ? html`<${RegionView} db=${db} month=${month} user=${user} refresh=${refresh} />`
       : html`<div class="page"><${ManagersCard} db=${db} user=${user} refresh=${refresh} /><${HolidaysCard} db=${db} user=${user} refresh=${refresh} /><${UnitsCard} db=${db} user=${user} refresh=${refresh} /></div>`}
     ${db && tab !== 'summary' && readDraft() && html`<div class="toast" style="background:var(--org,#c47a1c);cursor:pointer;bottom:90px" onClick=${() => setTab('summary')}>「${readDraft().name}」還有資料沒儲存，點這裡回去繼續填</div>`}
     ${db && html`<${FloatStats} db=${db} month=${month} />`}
