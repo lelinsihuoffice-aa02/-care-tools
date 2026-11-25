@@ -408,11 +408,13 @@ try{
     document.body.insertBefore(v, document.body.firstChild);
     document.body.classList.add('fest-on');
     if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {      // 系統設定減少動態時只顯示靜態圖
+      // 先顯示靜態圖，等影片下載到足以順順播完才開始播，避免第一次打開時卡卡的
+      v.preload = 'auto';
       v.src = file + '.mp4';
+      v.addEventListener('canplaythrough', () => v.play().catch(()=>{}), {once: true});
       // 影片播完淡出再從頭播，接縫比較不突兀
       v.addEventListener('timeupdate', () => { if (v.duration && v.duration - v.currentTime < .45) v.style.opacity = .15; });
       v.addEventListener('ended', () => { v.currentTime = 0; v.play().catch(()=>{}); setTimeout(() => v.style.opacity = '', 60); });
-      v.play().catch(()=>{});
     }
   }
 }
