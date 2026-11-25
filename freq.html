@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>服務頻率追蹤</title>
+<link rel="icon" type="image/png" id="appLogo" href="data:image/png;base64,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">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#faf6f0;--card:#fff;--line:#E4D5BE;--ink:#3d3529;--sub:#8C8071;--green:#7C9473;--soft:#E3EADD;
+    --red:#dc2626;--redbg:#fee2e2;--org:#b45309;--orgbg:#fef3c7;--yel:#854d0e;--yelbg:#fefce8;--blue:#1d4ed8;--bluebg:#dbeafe;--ok:#15803d;--okbg:#dcfce7}
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:'Noto Sans TC',system-ui,sans-serif;font-size:14px}
+  button{font-family:inherit;cursor:pointer}
+  .tw{margin-top:4px;font-size:12px;color:var(--sub);display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+  input,select,textarea{font-family:inherit;font-size:14px}
+  @media (hover:none) and (pointer:coarse){input,select,textarea{font-size:16px}}
+  .top{background:#efe6da;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .brand{font-weight:700;font-size:15px;margin-right:6px;display:inline-flex;align-items:center;gap:8px}
+  .brand .logo{width:30px;height:30px;object-fit:contain;flex:none}
+  .brand a{color:var(--sub);font-weight:400;font-size:12px;margin-left:8px;text-decoration:none}
+  .tabbtn{border:none;background:transparent;padding:8px 12px;border-radius:10px;color:#5a4a3a}
+  .tabbtn.on{background:rgba(124,148,115,.2);color:var(--green);font-weight:700}
+  .grow{flex:1}
+  .inp{padding:7px 10px;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .btn{background:var(--green);color:#fff;border:none;padding:8px 16px;border-radius:10px;font-weight:500;white-space:nowrap}
+  .btn.gray{background:#A69C8E}.btn.light{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .wrap{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;padding:14px;max-width:1500px;margin:0 auto}
+  .wrap>*{min-width:0}
+  @media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}.side{max-height:280px}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:12px}
+  .side{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:10px;height:calc((100vh - 90px) / var(--z, 1));overflow:auto;position:sticky;top:70px}
+  .crow{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;cursor:pointer}
+  .crow:hover{background:#FBF3E6}.crow.sel{background:var(--soft)}
+  .crow .nm{font-weight:600}.crow .meta{font-size:11px;color:var(--sub)}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:12px;font-weight:600;white-space:nowrap}
+  .t-none{background:#f1f5f9;color:#64748b}.t-pend{background:var(--orgbg);color:var(--org)}.t-anom{background:var(--redbg);color:var(--red)}.t-done{background:var(--okbg);color:var(--ok)}
+  h2{margin:0 0 4px;font-size:19px} h3{margin:0 0 10px;font-size:15px}
+  .sub{color:var(--sub);font-size:12px}
+  textarea.paste{width:100%;height:90px;border:2px dashed #C9B896;border-radius:14px;padding:10px;resize:vertical;background:#FDFBF6}
+  textarea.paste:focus{outline:none;border-color:var(--green);background:#fff}
+  .steps{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+  .num{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+  .cal{overflow-x:auto}
+  .cal table{border-collapse:separate;border-spacing:2px;font-size:11px}
+  .cal th{font-weight:500;color:var(--sub);min-width:22px;text-align:center}
+  .cal th.we{color:#c2410c}
+  .cal td{width:22px;height:24px;text-align:center;border-radius:6px;background:#f6f3ee}
+  .cal td.std{background:var(--soft)}
+  .cal td.hit{background:var(--green);color:#fff;font-weight:700}
+  .cal td.hit.off{background:#e8a33d}
+  .cal td.hit.self{background:#4a7a9e}
+  .cal td.flag{outline:2px solid var(--red);outline-offset:-2px}
+  .cal td.fut{opacity:.35}
+  .cal td.code{width:auto;background:none;text-align:left;padding-right:8px;white-space:nowrap}
+  .cal td.cnt{width:auto;background:none;white-space:nowrap;padding-left:8px;font-size:12px}
+  .wd{display:inline-flex;gap:2px;margin-top:3px}
+  .wd button{border:1px solid var(--line);background:#fff;border-radius:6px;font-size:11px;width:20px;height:20px;padding:0;color:var(--sub)}
+  .wd button.on{background:var(--green);border-color:var(--green);color:#fff}
+  .src{font-size:10px;color:var(--sub);margin-left:4px}
+  .item{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:12px;border:1px solid var(--line);margin-bottom:6px;flex-wrap:wrap}
+  .item.red{border-left:5px solid var(--red)}.item.orange{border-left:5px solid #f59e0b}.item.yellow{border-left:5px solid #facc15}.item.blue{border-left:5px solid var(--blue)}.item.info{border-left:5px solid #94a3b8}
+  .item .msg{flex:1;min-width:220px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{border:none;background:#fff;padding:5px 10px;font-size:12px;border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:none}
+  .seg button.on.pending{background:var(--orgbg);color:var(--org);font-weight:700}
+  .seg button.on.notified{background:var(--bluebg);color:var(--blue);font-weight:700}
+  .seg button.on.anomaly{background:var(--redbg);color:var(--red);font-weight:700}
+  .seg button.on.ok{background:var(--okbg);color:var(--ok);font-weight:700}
+  .note{width:100%;margin-top:6px;padding:6px 8px;border:1px solid var(--line);border-radius:10px}
+  .plan{display:flex;flex-wrap:wrap;gap:6px}
+  .pchip{background:#f6f3ee;border-radius:10px;padding:4px 10px;font-size:12px}
+  .pchip b{color:var(--green)}
+  .toast{position:fixed;right:20px;bottom:20px;color:#fff;padding:12px 18px;border-radius:14px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+  #app{zoom:var(--z, 1)}
+  .fz{position:fixed;left:16px;bottom:16px;z-index:1000;display:flex;align-items:center;background:#fff;border:1px solid var(--line);border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.15);overflow:hidden;font-family:'Noto Sans TC',system-ui,sans-serif}
+  .fz button{border:none;background:#fff;color:var(--green);font-weight:700;padding:8px 14px;font-size:16px;cursor:pointer}
+  .fz button:hover{background:var(--soft)}
+  .fz .lv{font-size:13px;color:var(--sub);min-width:46px;text-align:center;cursor:pointer}
+  .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:200}
+  .gate .box{background:#fff;border-radius:18px;padding:32px 36px;box-shadow:0 10px 40px rgba(0,0,0,.15);width:320px;text-align:center}
+  .gate input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #ddd;margin:12px 0}
+  .gate .btn{width:100%}
+  .empty{text-align:center;color:var(--sub);padding:50px 10px}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--sub);margin-top:8px}
+  .legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-2px;background:var(--c)}
+  details summary{cursor:pointer;color:var(--green);font-weight:500}
+  .grp{font-weight:700;color:var(--green);margin:14px 0 6px}
+  .rbox{border:1px solid var(--line);border-radius:14px;padding:10px;margin-top:10px}
+  .rbox-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .rbox-h b{color:var(--green)}
+  .rbox .item:last-child{margin-bottom:0}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="fz" title="調整字體大小">
+  <button id="fzDown" aria-label="縮小字體">A−</button>
+  <span class="lv" id="fzLv" title="恢復預設大小"></span>
+  <button id="fzUp" aria-label="放大字體">A＋</button>
+</div>
+<script>
+// 字體大小懸浮鈕：整個畫面一起縮放，設定記在這台電腦
+(function(){
+  var KEY = 'freqZoom', DEF = 1.15, MIN = 0.9, MAX = 1.8, STEP = 0.1;
+  var z = DEF;
+  try{ var v = parseFloat(localStorage.getItem(KEY)); if(v >= MIN && v <= MAX) z = v; }catch(e){}
+  function apply(){
+    z = Math.round(Math.min(MAX, Math.max(MIN, z)) * 100) / 100;
+    document.documentElement.style.setProperty('--z', z);
+    document.getElementById('fzLv').textContent = Math.round(z * 100) + '%';
+    try{ localStorage.setItem(KEY, z); }catch(e){}
+  }
+  document.getElementById('fzDown').onclick = function(){ z -= STEP; apply(); };
+  document.getElementById('fzUp').onclick = function(){ z += STEP; apply(); };
+  document.getElementById('fzLv').onclick = function(){ z = DEF; apply(); };
+  apply();
+})();
+</script>
+
+<script type="module">
+import { ConvexClient, ConvexHttpClient } from "https://esm.sh/convex@1.46.0/browser";
+import { html, render, useState, useEffect, useMemo, useRef } from "https://unpkg.com/htm@3.1.1/preact/standalone.module.js";
+
+// 原本服務追蹤系統的資料庫：這個頁面「只讀」個案、追蹤月份、設定，絕不寫入
+const SOURCE_URL = "https://robust-buzzard-570.convex.cloud";
+// 頻率追蹤專用的新資料庫：比對結果、標準排程都存這裡
+// 新專案 freq-backend 的網址（freq-backend 資料夾 .env.local 裡的 CONVEX_URL）
+const FREQ_URL = "https://avid-barracuda-174.convex.cloud";
+
+// ================= CORE-START（純邏輯：解析貼上內容、比對規則） =================
+const WD = ['日','一','二','三','四','五','六'];
+const WDMAP = {日:0,天:0,一:1,二:2,三:3,四:4,五:5,六:6};
+// 服務碼：BA01、BA05-1、BA09a、BA17d1…，後面接 [名稱]、［名稱］、【名稱】、(名稱)、-名稱、空白或 Tab 後接中文名稱
+const CODE_RE = /(?<![A-Za-z0-9])([A-Z]{2}\d{2}[a-z]?\d?(?:-\d+)?)(?![0-9])\s*(?=[\[［【(（\-－]|[\u4e00-\u9fff])/;
+// 日期：民國 115/10/5、西元 2026/10/05，也接受 - 或 . 分隔
+const ROC_DATE_RE = /(?<!\d)\d{2,4}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{1,2}(?!\d)/;
+// 時間區間：08:00~09:00、08:00:00 ~ 09:00:00、115/10/05 08:00 ~ 115/10/05 09:00
+const TIME_RE = /(?<!\d)(\d{1,2}):(\d{2})(?::\d{2})?\s*[~～\-－至到]\s*(?:\d{2,4}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{1,2}\s+)?(\d{1,2}):(\d{2})/;
+
+function rocToISO(s){
+  const m = String(s||'').match(/(\d{2,4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})/);
+  if(!m) return null;
+  let y = +m[1]; if(y < 1911) y += 1911;
+  return y+'-'+String(+m[2]).padStart(2,'0')+'-'+String(+m[3]).padStart(2,'0');
+}
+function firstNum(s){ const m = String(s==null?'':s).match(/\d+(?:\.\d+)?/); return m ? +m[0] : null; }
+function daysInMonth(mk){ const [y,m] = mk.split('-').map(Number); return new Date(y,m,0).getDate(); }
+function wdOf(iso){ const [y,m,d] = iso.split('-').map(Number); return new Date(y,m-1,d).getDay(); }
+function weekKey(iso){ const [y,m,d] = iso.split('-').map(Number); const dt = new Date(y,m-1,d); dt.setDate(dt.getDate()-((dt.getDay()+6)%7)); return dt.getFullYear()+'-'+(dt.getMonth()+1)+'-'+dt.getDate(); }
+function fmtMD(iso){ const [,m,d] = iso.split('-').map(Number); return m+'/'+d+'('+WD[wdOf(iso)]+')'; }
+function isoOf(mk, d){ return mk+'-'+String(d).padStart(2,'0'); }
+
+// 從剪貼簿的網頁表格取出「一列一行、欄位用 Tab 分隔」的文字（格子裡的換行改成空白，避免一筆被拆成多行）
+function tableFromClipboard(e){
+  try{
+    const h = e.clipboardData && e.clipboardData.getData('text/html');
+    if(!h || !/<tr[\s>]/i.test(h)) return null;
+    const doc = new DOMParser().parseFromString(h, 'text/html');
+    doc.querySelectorAll('br,div,p,span,li').forEach(el => { el.before(' '); el.after(' '); });
+    const lines = [...doc.querySelectorAll('tr')].map(tr => [...tr.children].filter(c => /^(TD|TH)$/.test(c.tagName))
+      .map(c => (c.innerText || c.textContent || '').replace(/\s+/g, ' ').trim()).join('\t')).filter(l => l.trim());
+    return lines.length ? lines.join('\n') : null;
+  }catch(err){ return null; }
+}
+// 服務紀錄頁：項次｜服務日期｜服務項目｜類型｜服務數量｜服務區間起訖
+// 複製網頁表格時，同一格裡的換行會把一筆紀錄拆成好幾行：先把被拆開的行接回去
+function mergeRecordLines(text){
+  const out = [];
+  String(text||'').split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach(t => {
+    const hasD = ROC_DATE_RE.test(t), hasC = CODE_RE.test(t), hasT = /\d{1,2}:\d{2}/.test(t);
+    const last = out.length ? out[out.length-1] : null;
+    const lastC = last != null && CODE_RE.test(last), lastT = last != null && TIME_RE.test(last), lastD = last != null && ROC_DATE_RE.test(last);
+    let join = false;
+    if(last != null && lastD && !(hasD && hasC)){
+      if(!lastC) join = !hasD || hasC || hasT;          // 上一行還沒有服務碼：碼別／名稱被拆到下一行
+      else if(!lastT) join = !hasC && (!hasD || hasT);  // 上一行有服務碼但沒有時間：時間被拆到下一行
+    }
+    if(join) out[out.length-1] = last + '\t' + t; else out.push(t);
+  });
+  return out;
+}
+// 類型欄：自費／補助。優先看服務項目的下一格；沒有分格時只看服務名稱之後、時間之前的文字
+function parsePayType(t, cm){
+  const cells = t.split(/\t+/).map(x => x.trim()), ci = cells.findIndex(c => c.includes(cm[0]));
+  const after = t.slice(t.indexOf(cm[0]) + cm[1].length).replace(/^\s*(?:\[[^\]]*\]|［[^］]*］|【[^】]*】|\([^)]*\)|（[^）]*）)/, ' ').split(/\d{1,2}:\d{2}/)[0];
+  const src = (ci >= 0 && /^(自費|補助)/.test(cells[ci+1] || '')) ? cells[ci+1] : after;
+  if(/自費/.test(src)) return 'self';
+  if(/補助/.test(src)) return 'subsidy';
+  return null;
+}
+function parseRecords(text){
+  const rows = [], skipped = [];
+  mergeRecordLines(text).forEach(t => {
+    if(/AA10申請狀態/.test(t) && !ROC_DATE_RE.test(t)) return;   // 表頭欄位名稱，不是紀錄
+    const dm = t.match(ROC_DATE_RE), cm = t.match(CODE_RE);
+    if(!dm || !cm){ if(/[A-Z]{2}\d{2}/.test(t) || (dm && /\d/.test(t.replace(dm[0], '')))) skipped.push(t); return; }
+    const date = rocToISO(dm[0]), code = cm[1];
+    let qty = null;
+    const cells = t.split(/\t+/).map(s => s.trim()).filter(Boolean);
+    const ci = cells.findIndex(c => CODE_RE.test(c));
+    if(cells.length >= 4 && ci >= 0){
+      for(let i = ci+1; i < cells.length; i++){ if(/^\d+(\.\d+)?$/.test(cells[i])){ qty = +cells[i]; break; } }
+    }
+    if(qty == null){
+      const after = t.slice(t.indexOf(cm[0]));
+      const m2 = after.match(/[\]］】)）]\S*\s+\S+\s+(\d+(?:\.\d+)?)\s+\d{1,2}:\d{2}/);
+      if(m2) qty = +m2[1];
+    }
+    if(qty == null) qty = 1;
+    const tm = t.match(TIME_RE); let start = null, end = null;
+    if(tm){ start = +tm[1]*60 + +tm[2]; end = +tm[3]*60 + +tm[4]; if(end < start) end += 1440; }
+    rows.push({date, code, qty, start, end, pay:parsePayType(t, cm)});
+  });
+  return {rows, skipped};
+}
+
+// 核定計畫頁：服務項目｜金額｜服務數量（可一次貼多個計畫頁面，同一服務取最大值）
+function parsePlan(text){
+  const items = {};
+  String(text||'').split(/\r?\n/).forEach(line => {
+    const t = line.trim(); const cm = t.match(CODE_RE);
+    // 有時間區間的是服務紀錄，不是核定項目；核定頁面若有起訖日期欄，先拿掉日期再找數量
+    if(!cm || TIME_RE.test(t)) return;
+    const u = t.replace(new RegExp(ROC_DATE_RE.source, 'g'), ' ').trim();
+    const cells = u.split(/\t+/).map(s => s.trim()).filter(Boolean);
+    let qty = null;
+    if(cells.length >= 2 && /^\d+(\.\d+)?$/.test(cells[cells.length-1])) qty = +cells[cells.length-1];
+    if(qty == null){ const m = u.match(/(\d+(?:\.\d+)?)\s*$/); if(m && !/元\s*$/.test(u)) qty = +m[1]; }
+    if(qty == null) return;
+    const code = cm[1];
+    const nm = t.slice(t.indexOf(cm[0]) + cm[0].length).match(/^[\[［【(（\-－]?\s*([^\]］】)）\t]+)/);
+    const name = nm ? nm[1].trim() : '';
+    const prev = items[code];
+    items[code] = {code, name, qty: prev ? Math.max(prev.qty, qty) : qty, pages: prev ? prev.pages+1 : 1};
+  });
+  return Object.keys(items).length ? items : null;
+}
+
+// 從「實際頻率」文字推出星期幾，例如「週一、三、五」「週一至週六」「每日」
+function parseWeekdays(text){
+  if(!text) return null;
+  let s = String(text);
+  if(/每[日天]|天天|週一[至到~～\-]週日|一週\s*7\s*[次天]|每週\s*7/.test(s)) return [0,1,2,3,4,5,6];
+  const set = new Set();
+  const P = '(?:週|星期|禮拜|周)', C = '[一二三四五六日天]';
+  const rangeRe = new RegExp(P+'\\s*('+C+')\\s*(?:至|到|~|～|-|－|—)\\s*'+P+'?\\s*('+C+')','g');
+  s = s.replace(rangeRe, (m,a,b) => { let x = WDMAP[a], y = WDMAP[b]; if(y < x || (y === 0 && x > 0)) y += 7; for(let d = x; d <= y; d++) set.add(d%7); return ' '; });
+  const listRe = new RegExp(P+'\\s*('+C+'(?![次回趟])(?:\\s*[、，,\\/及和與]\\s*'+P+'?\\s*'+C+'(?![次回趟]))*)','g');
+  s.replace(listRe, (m,grp) => { (grp.match(new RegExp(C,'g'))||[]).forEach(ch => set.add(WDMAP[ch])); return m; });
+  return set.size ? [...set].sort((a,b) => a-b) : null;
+}
+
+// ---------- 服務時間規則（只有下列幾項需要看時間） ----------
+// 1. BA01 與 BA07 不可同一天；BA01、BA07 各自也不可同一天重複使用
+// 2. BA01 或 BA07 與 BA02 同一天時，兩項服務要間隔 GAP_MIN_HOURS 小時以上
+// 3. BA09、BA09a 與 BA01、BA02、BA07 同一天時，兩項服務要間隔 GAP_MIN_HOURS 小時以上
+// 4. 不同服務碼別的服務時間不可重疊（DA01、BA13、BA14 除外；BB、BC 碼別與 BD01、BC 碼別與 BD02 重疊也可以）
+// 5. BA05-1 餐別（以開始時間判斷）：
+//    早午餐：上午 8:30 ~ 中午 12:00 之間開始；午餐：中午 12:00 前開始；晚餐：下午 1:00 之後開始
+const MEAL_CODES = ['BA05-1'];
+const GAP_MIN_HOURS = 3;         // 間隔規則的最短小時數
+const OVERLAP_OK = ['DA01','BA13','BA14'];   // 可以和其他服務時間重疊的碼別
+const NO_REPEAT_CODES = ['BA01','BA07'];     // 不可當日重複使用
+const MEAL_KEYS = ['brunch','lunch','dinner'];
+const MEAL_LABEL = {brunch:'早午餐', lunch:'午餐', dinner:'晚餐'};
+const MEAL_WIN = {brunch:[8*60+30, 12*60], lunch:[0, 12*60], dinner:[13*60, 1440]};   // 開始時間允許範圍（含端點）
+const MEAL_RULE = {brunch:'早午餐需在 08:30–12:00 開始', lunch:'午餐需在 12:00 前開始', dinner:'晚餐需在 13:00 後開始'};
+function fmtHM(m){ m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+// 從頻率文字判斷餐別：「備午餐」→ ['lunch']、「早午餐」→ ['brunch']、「午、晚餐」→ ['lunch','dinner']
+function parseMeals(text){
+  if(!text) return null;
+  const s = String(text), out = [];
+  if(/早午餐/.test(s)) out.push('brunch');
+  if(/(^|[^早])午餐|中餐|午[、，,／\/]?晚餐|中[、，,／\/]?晚餐/.test(s)) out.push('lunch');
+  if(/晚餐/.test(s)) out.push('dinner');
+  return out.length ? out : null;
+}
+// BB、BC 碼別與 BD01、BC 碼別與 BD02 可以重疊（只限這些組合，BB 與 BC 之間仍要檢查）
+function overlapAllowed(x, y){
+  const ok = (a, b) => (/^(BB|BC)/.test(a) && b === 'BD01') || (/^BC/.test(a) && b === 'BD02');
+  return ok(x, y) || ok(y, x);
+}
+// 舊的比對結果可能存有現在已允許的重疊項目，顯示前先濾掉
+function isStaleOverlap(it){
+  if(!it.id || !it.id.startsWith('rovl|')) return false;
+  const p = it.id.split('|');
+  return overlapAllowed(String(p[2]).split('@')[0], String(p[3]).split('@')[0]);
+}
+function overlaps(a, b){ return a.start != null && b.start != null && a.start < b.end && b.start < a.end; }
+function gapText(gap){ return gap < 0 ? '時間重疊' : Math.floor(gap/60)+' 小時 '+(gap%60)+' 分'; }
+function checkTimeRules(inMonth, ignore){
+  const items = [];
+  const on = c => !ignore.includes(c);
+  const byDate = {}; inMonth.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
+  // 兩組服務同日要間隔 GAP_MIN_HOURS 小時以上
+  const gapRule = (d, xs, ys, tag) => xs.forEach(x => ys.forEach(y => {
+    if(x === y || x.start == null || y.start == null) return;
+    const first = x.start <= y.start ? x : y, second = first === x ? y : x;
+    const gap = second.start - first.end;
+    if(gap < GAP_MIN_HOURS*60)
+      items.push({id:tag+'|'+d+'|'+x.code+'@'+x.start+'|'+y.code+'@'+y.start, code:x.code, kind:'rule', level:'orange', date:d,
+        msg:`${fmtMD(d)} ${x.code}（${fmtHM(x.start)}–${fmtHM(x.end)}）與 ${y.code}（${fmtHM(y.start)}–${fmtHM(y.end)}）間隔 ${gapText(gap)}，未達 ${GAP_MIN_HOURS} 小時`});
+  }));
+  Object.keys(byDate).sort().forEach(d => {
+    const list = byDate[d].filter(r => on(r.code));
+    const of = (...cs) => list.filter(r => cs.includes(r.code));
+    const a01 = of('BA01'), a07 = of('BA07'), a02 = of('BA02');
+    if(a01.length && a07.length)
+      items.push({id:'r0107|'+d, code:'BA01', kind:'rule', level:'red', date:d, msg:`${fmtMD(d)} BA01 與 BA07 同一天服務（不可同日）`});
+    if(a02.length) gapRule(d, [...a01, ...a07], a02, 'rgap');
+    const a09 = of('BA09','BA09a');
+    if(a09.length) gapRule(d, a09, of('BA01','BA02','BA07'), 'rgap09');
+    // 不同碼別時間重疊（DA01、BA13、BA14 除外）
+    const chk = list.filter(r => r.start != null && !OVERLAP_OK.includes(r.code)).sort((a,b) => a.start - b.start);
+    for(let i = 0; i < chk.length; i++) for(let j = i+1; j < chk.length; j++){
+      const a = chk[i], b = chk[j];
+      if(a.code === b.code || overlapAllowed(a.code, b.code) || !overlaps(a, b)) continue;
+      items.push({id:'rovl|'+d+'|'+a.code+'@'+a.start+'|'+b.code+'@'+b.start, code:a.code, kind:'rule', level:'red', date:d,
+        msg:`${fmtMD(d)} ${a.code}（${fmtHM(a.start)}–${fmtHM(a.end)}）與 ${b.code}（${fmtHM(b.start)}–${fmtHM(b.end)}）服務時間重疊`});
+    }
+  });
+  return items;
+}
+// 檢核結果分框：依項目 id 開頭分類（舊的儲存結果也適用）
+const RESULT_GROUPS = [
+  {key:'plan', title:'核定計畫差異', ids:['planNew','planQty','planGone']},
+  {key:'quota', title:'核定與使用量', ids:['unapproved','unused','over']},
+  {key:'off', title:'非排定時間服務', ids:['extra','resched','meal','tripTime']},
+  {key:'dated', title:'標記日期', ids:['missing','missDaily','oneway','units','dup']},
+  {key:'overlap', title:'服務時間重疊', ids:['rovl']},
+  {key:'gap', title:'服務間隔與同日規則', ids:['rgap','rgap09','r0107']},
+  {key:'usage', title:'本月使用紀錄', ids:['usage']},
+];
+function groupItems(items){
+  const out = RESULT_GROUPS.map(g => ({...g, items:[]})), other = {key:'other', title:'其他', items:[]};
+  items.forEach(it => { const pre = String(it.id).split('|')[0]; (out.find(g => g.ids.includes(pre)) || other).items.push(it); });
+  return [...out, other].filter(g => g.items.length);
+}
+function checkMeal(code, rs, meals){
+  meals = (meals || []).filter(k => MEAL_WIN[k]);
+  if(!meals.length) return null;
+  const fits = (r, k) => r.start >= MEAL_WIN[k][0] && r.start <= MEAL_WIN[k][1];
+  const timed = rs.filter(r => r.start != null);
+  const off = new Set();
+  // 每一筆的開始時間都要落在所選餐別的其中一個時段
+  timed.forEach(r => { if(!meals.some(k => fits(r, k))) off.add(r); });
+  // 同時有中午（早午餐／午餐）與晚餐：同一天兩筆以上時，要一筆在中午時段、一筆在晚餐時段
+  const mid = meals.filter(k => k !== 'dinner');
+  if(mid.length && meals.includes('dinner')){
+    const byD = {}; timed.forEach(r => (byD[r.date] = byD[r.date] || []).push(r));
+    Object.values(byD).forEach(l => {
+      if(l.length >= 2 && !(l.some(r => mid.some(k => fits(r, k))) && l.some(r => fits(r, 'dinner')))) l.forEach(r => off.add(r));
+    });
+  }
+  if(!off.size) return null;
+  const arr = [...off].sort((a,b) => a.date.localeCompare(b.date) || a.start - b.start);
+  const rule = meals.map(k => MEAL_RULE[k]).join('；');
+  return {id:'meal|'+code+'|'+arr.map(r => r.date+'@'+r.start).join(','), code, kind:'time', level:'orange', dates:[...new Set(arr.map(r => r.date))],
+    msg:`餐別時間異常（${rule}），共 ${arr.length} 次：${arr.map(r => fmtMD(r.date)+' '+fmtHM(r.start)).join('、')}`};
+}
+
+// 從頻率文字判斷每次使用幾單位：「每次使用2單位」「每次 2 單位」「2單位/次」「一次兩單位」
+const CNUM = {一:1,二:2,兩:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9,十:10};
+function parseUnitsPer(text){
+  if(!text) return null;
+  const s = String(text), N = '(\\d+(?:\\.\\d+)?|[一二兩三四五六七八九十])';
+  const m = s.match(new RegExp('(?:每|一)次\\s*(?:使用|服務|用)?\\s*' + N + '\\s*(?:個)?單位'))
+         || s.match(new RegExp(N + '\\s*(?:個)?單位\\s*[\\/／]\\s*(?:每)?次'));
+  if(!m) return null;
+  const v = CNUM[m[1]] != null ? CNUM[m[1]] : +m[1];
+  return v > 0 ? v : null;
+}
+
+// 從實際服務日期推測固定星期幾（只作為建議）
+function inferWeekdays(dates){
+  if(!dates || !dates.length) return null;
+  const cnt = [0,0,0,0,0,0,0]; dates.forEach(d => cnt[wdOf(d)]++);
+  const weeks = new Set(dates.map(weekKey)).size;
+  const thr = Math.max(2, Math.ceil(weeks*0.6));
+  const res = cnt.map((c,i) => c >= thr ? i : -1).filter(i => i >= 0);
+  return res.length ? res : null;
+}
+
+function effectivePlan(sysPlan, pasted){
+  if(!pasted) return sysPlan;
+  const out = {};
+  Object.values(sysPlan).forEach(p => { if(p.type === 'assistive' || p.type === 'envimprove') out[p.code] = p; });
+  Object.values(pasted).forEach(p => { const s = sysPlan[p.code] || {}; out[p.code] = {code:p.code, name:p.name || s.name || '', quota:p.qty, type:s.type || 'regular', freq:s.freq || ''}; });
+  return out;
+}
+
+function planDiff(sysPlan, pasted, ignore){
+  const items = [];
+  if(!pasted) return items;
+  Object.values(pasted).forEach(p => {
+    if(ignore.includes(p.code)) return;
+    const s = sysPlan[p.code];
+    if(!s) items.push({id:'planNew|'+p.code+'|'+p.qty, code:p.code, kind:'plan', level:'blue', msg:`衛福部核定有、本系統計畫沒有：${p.code} ${p.name}（${p.qty}）`});
+    else if(s.quota != null && s.type === 'regular' && s.quota !== p.qty) items.push({id:'planQty|'+p.code+'|'+s.quota+'|'+p.qty, code:p.code, kind:'plan', level:'blue', msg:`核定數量不同：系統 ${s.quota} → 衛福部 ${p.qty}`});
+  });
+  Object.values(sysPlan).forEach(s => {
+    if(ignore.includes(s.code) || s.type === 'assistive' || s.type === 'envimprove') return;
+    if(!pasted[s.code]) items.push({id:'planGone|'+s.code, code:s.code, kind:'plan', level:'blue', msg:`本系統計畫有、衛福部核定沒有：${s.code} ${s.name}`});
+  });
+  return items;
+}
+
+// ---------- 交通接送與「依實際狀況使用」 ----------
+const COMMUTE_CODES = ['BD03'];   // 社區式服務交通接送：日照來回一天兩趟
+const COMMUTE_NOON = 12*60;       // 社區式交通上午／下午分界
+const DA01 = 'DA01';              // 交通接送：只需記錄使用日期
+function md(iso){ const [,m,d] = iso.split('-').map(Number); return m+'/'+d; }
+function tripsByDate(rs){ const o = {}; rs.forEach(r => o[r.date] = (o[r.date] || 0) + (r.qty || 1)); return o; }
+// 備註文字，例如「8/17、8/19(1趟)使用」（DA01 單趟才標趟數；其他服務只列日期）
+function usageNote(rs, markSingleTrip){
+  const t = tripsByDate(rs);
+  return Object.keys(t).sort().map(d => md(d) + (markSingleTrip && t[d] === 1 ? '(1趟)' : '')).join('、') + '使用';
+}
+// 社區式交通是否為「一天來回兩趟」：頻率寫「來回」，或核定次數＝日照核定次數×2
+function isRoundTrip(plan, code, ftext){
+  if(/來回/.test(ftext)) return true;
+  const p = plan[code]; if(!p || p.quota == null) return false;
+  const bb = Object.values(plan).filter(x => /^BB/.test(x.code) && x.quota != null);
+  return bb.some(x => x.quota*2 === p.quota) || (bb.length > 1 && bb.reduce((a,x) => a + x.quota, 0)*2 === p.quota);
+}
+
+// 有自費紀錄的服務：BB01：補助18單位，自費2單位（10/2、10/15）
+function selfPaySummary(code, rs){
+  if(!rs.some(r => r.pay === 'self')) return null;
+  const units = pay => Math.round(rs.filter(r => r.pay === pay).reduce((a,r) => a + (r.qty || 0), 0) * 100) / 100;
+  const dates = [...new Set(rs.filter(r => r.pay === 'self').map(r => r.date))].sort().map(d => { const [,m,dd] = d.split('-').map(Number); return m+'/'+dd; });
+  const none = units(null);
+  return `${code}：補助${units('subsidy')}單位，自費${units('self')}單位（${dates.join('、')}）${none ? `，未標示${none}單位` : ''}`;
+}
+
+function runChecks({monthKey, rows, plan, standards, meals, freqText, ignore, todayISO}){
+  meals = meals || {}; freqText = freqText || {};
+  const items = [], stats = {};
+  const inMonth = rows.filter(r => r.date.startsWith(monthKey));
+  const outMonth = rows.length - inMonth.length;
+  const byCode = {}; inMonth.forEach(r => (byCode[r.code] = byCode[r.code] || []).push(r));
+  const dim = daysInMonth(monthKey);
+  const lastDay = (todayISO && todayISO.startsWith(monthKey)) ? Math.max(0, +todayISO.slice(8,10) - 1) : dim;
+  const codes = [...new Set([...Object.keys(plan), ...Object.keys(byCode)])].sort();
+  codes.forEach(code => {
+    if(ignore.includes(code)) return;
+    const p = plan[code], rs = byCode[code] || [];
+    const type = (p && p.type) || 'regular';
+    if(type === 'assistive' || type === 'envimprove') return;
+    const used = rs.reduce((a,r) => a + (r.qty || 0), 0);
+    const dates = [...new Set(rs.map(r => r.date))].sort();
+    stats[code] = {code, name:(p && p.name) || '', approved:p ? p.quota : null, used, days:dates.length, rows:rs.length};
+    if(!p){ items.push({id:'unapproved|'+code, code, kind:'unapproved', level:'red', msg:`不在核定計畫內的服務，本月 ${rs.length} 筆`}); return; }
+    const ftext = (freqText[code] || '') + ' ' + (p.freq || '');
+    const asNeeded = /依實際/.test(ftext), isDA01 = code === DA01;
+    const roundTrip = COMMUTE_CODES.includes(code) && isRoundTrip(plan, code, ftext);
+    if(!rs.length){
+      if(type === 'regular' && !asNeeded && !isDA01) items.push({id:'unused|'+code, code, kind:'unused', level:'orange', msg:`有核定但本月沒有任何服務紀錄`});
+      return;
+    }
+    // DA01、依實際狀況使用：列出使用日期，備註自動帶入，預設「無需處理」
+    if(isDA01 || asNeeded){
+      const note = usageNote(rs, isDA01);
+      items.push({id:'usage|'+code+'|'+note, code, kind:'usage', level:'info', msg:`本月使用：${note}`, defStatus:'ok', defNote:note});
+    }
+    // 社區式交通來回：只有單趟的日子標異常
+    if(roundTrip){
+      const t = tripsByDate(rs);
+      const single = Object.keys(t).sort().filter(d => t[d] === 1);
+      if(single.length) items.push({id:'oneway|'+code+'|'+single.join(','), code, kind:'oneway', level:'orange', dates:single,
+        msg:`核定來回（一天兩趟），但有 ${single.length} 天只有單趟：${single.map(fmtMD).join('、')}`});
+      // 兩趟應上午、下午各一趟（以中午 12 點分界）；兩趟都在上午或都在下午 → 時間異常
+      const bad = [];
+      Object.keys(t).sort().forEach(d => {
+        const l = rs.filter(r => r.date === d && r.start != null).sort((a,b) => a.start - b.start);
+        if(l.length !== 2) return;
+        const am = l.filter(r => r.start < COMMUTE_NOON).length;
+        if(am !== 1) bad.push({d, l, am});
+      });
+      if(bad.length) items.push({id:'tripTime|'+code+'|'+bad.map(b => b.d).join(','), code, kind:'time', level:'orange', dates:bad.map(b => b.d),
+        msg:`來回兩趟應上午、下午各一趟，有 ${bad.length} 天時間異常：${bad.map(b => `${fmtMD(b.d)} ${b.l.map(r => fmtHM(r.start)).join('、')}（都在${b.am === 2 ? '上午' : '下午'}）`).join('；')}`});
+    }
+    if(type === 'regular' && p.quota != null && used > p.quota) items.push({id:'over|'+code+'|'+used, code, kind:'over', level:'red', msg:`使用 ${used} 超過核定 ${p.quota}`});
+    // 頻率有寫「每次使用 N 單位」：每天的使用單位數要剛好 N
+    const unitsPer = (isDA01 || asNeeded || roundTrip) ? null : parseUnitsPer(ftext);
+    const dayQty = tripsByDate(rs);
+    if(unitsPer){
+      const badU = Object.keys(dayQty).sort().filter(d => Math.abs(dayQty[d] - unitsPer) > 1e-9);
+      if(badU.length) items.push({id:'units|'+code+'|'+unitsPer+'|'+badU.map(d => d+'='+dayQty[d]).join(','), code, kind:'units', level:'orange', dates:badU,
+        msg:`頻率為每次 ${unitsPer} 單位，有 ${badU.length} 天不符：${badU.map(d => fmtMD(d)+' 用 '+dayQty[d]+' 單位').join('、')}`});
+    }
+    const byDate = {}; rs.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
+    Object.entries(byDate).forEach(([d,list]) => {
+      if(list.length < 2) return;
+      // 交通接送一天兩趟是正常的，超過兩趟才提醒
+      if((isDA01 || roundTrip) && list.length <= 2) return;
+      if(unitsPer && unitsPer > 1 && !NO_REPEAT_CODES.includes(code) && Math.abs(dayQty[d] - unitsPer) < 1e-9 && !list.some((a,i) => list.some((b,j) => j > i && overlaps(a, b)))) return;
+      let overlap = false;
+      for(let i = 0; i < list.length; i++) for(let j = i+1; j < list.length; j++){
+        const a = list[i], b = list[j];
+        if(a.start != null && b.start != null && a.start < b.end && b.start < a.end) overlap = true;
+      }
+      const noRepeat = NO_REPEAT_CODES.includes(code);
+      items.push({id:'dup|'+code+'|'+d, code, kind:'dup', level:(overlap || noRepeat) ? 'red' : 'yellow', date:d,
+        msg: overlap ? `${fmtMD(d)} 同時段 ${list.length} 筆，疑似重複申報` : noRepeat ? `${fmtMD(d)} 同一天 ${list.length} 筆（${code} 不可當日重複使用）` : `${fmtMD(d)} 同一天 ${list.length} 筆，請確認`});
+    });
+    if(MEAL_CODES.includes(code)){ const it = checkMeal(code, rs, meals[code]); if(it) items.push(it); }
+    const S = standards[code];
+    if(S && S.length && type === 'regular'){
+      const sset = new Set(S);
+      const expected = [];
+      for(let d = 1; d <= lastDay; d++){ const iso = isoOf(monthKey,d); if(sset.has(wdOf(iso))) expected.push(iso); }
+      const dset = new Set(dates);
+      const missing = expected.filter(x => !dset.has(x));
+      const extra = dates.filter(x => !sset.has(wdOf(x)));
+      if(S.length === 7){
+        if(missing.length) items.push({id:'missDaily|'+code+'|'+missing.join(','), code, kind:'missing', level:'orange', dates:missing, msg:`排定每天，有 ${missing.length} 天沒有服務：${missing.map(fmtMD).join('、')}`});
+      } else {
+        const usedExtra = new Set();
+        missing.forEach(m => {
+          const wk = weekKey(m);
+          const e = extra.find(x => !usedExtra.has(x) && weekKey(x) === wk);
+          if(e){ usedExtra.add(e); items.push({id:'resched|'+code+'|'+m+'|'+e, code, kind:'resched', level:'orange', date:m, date2:e, msg:`疑似改期：${fmtMD(m)} → ${fmtMD(e)}`}); }
+          else items.push({id:'missing|'+code+'|'+m, code, kind:'missing', level:'orange', date:m, msg:`排定日沒有服務：${fmtMD(m)}`});
+        });
+        extra.filter(x => !usedExtra.has(x)).forEach(e => items.push({id:'extra|'+code+'|'+e, code, kind:'extra', level:'orange', date:e, msg:`不在排定星期的服務：${fmtMD(e)}`}));
+      }
+    }
+  });
+  items.push(...checkTimeRules(inMonth, ignore));
+  return {items, stats, outMonth, inMonthCount:inMonth.length};
+}
+// ================= CORE-END =================
+
+// ================= Convex 連線與登入 =================
+// 兩個資料庫各自一條連線、各自保存登入狀態（同一組團隊帳密）。
+//   source：原本服務追蹤系統的資料庫 → 只允許 query（讀取）
+//   freq  ：頻率追蹤專用資料庫       → 比對結果的讀寫都在這裡
+// logo：與網頁圖示共用同一張圖（在 <head> 的 appLogo）
+const LOGO = document.getElementById('appLogo').href;
+const SHARED_EMAIL = 'team@careapp-aa02.local';
+function makeConn(url, refreshKey){
+  const client = new ConvexClient(url), http = new ConvexHttpClient(url);
+  let token = null, inFlight = null, resolveReady;
+  const ready = new Promise(r => { resolveReady = r; });
+  async function fetchToken({forceRefreshToken}){
+    if(!forceRefreshToken && token) return token;
+    if(inFlight) return inFlight;
+    const rt = localStorage.getItem(refreshKey); if(!rt) return null;
+    inFlight = (async () => {
+      try{
+        const r = await http.action('auth:signIn', {refreshToken: rt});
+        if(r && r.tokens){ token = r.tokens.token; localStorage.setItem(refreshKey, r.tokens.refreshToken); resolveReady(); return token; }
+      }catch(e){ console.error('[換 token 失敗]', url, e); }
+      localStorage.removeItem(refreshKey); token = null; return null;
+    })().finally(() => { inFlight = null; });
+    return inFlight;
+  }
+  client.setAuth(fetchToken);
+  async function signIn(pw, flow){
+    const r = await http.action('auth:signIn', {provider:'password', params:{email:SHARED_EMAIL, password:pw, flow: flow || 'signIn'}});
+    if(!r || !r.tokens) throw new Error('登入失敗');
+    token = r.tokens.token; localStorage.setItem(refreshKey, r.tokens.refreshToken);
+    client.setAuth(fetchToken); resolveReady();
+  }
+  const hasSaved = () => !!localStorage.getItem(refreshKey);
+  return {client, ready, fetchToken, signIn, hasSaved};
+}
+const SRC = makeConn(SOURCE_URL, 'caFreqRefreshToken');
+const FRQ = makeConn(FREQ_URL, 'caFreqDbRefreshToken');
+const FREQ_CONFIGURED = !/請換成/.test(FREQ_URL);
+
+// 登入：同一組密碼先登入原資料庫（確認密碼正確），再登入新資料庫；
+// 新資料庫第一次使用還沒有帳號時，自動用同一組密碼建立。
+async function signIn(pw){
+  try{ await SRC.signIn(pw); }catch(e){ console.error(e); throw new Error('密碼錯誤，請再試一次'); }
+  try{ await FRQ.signIn(pw); }
+  catch(e1){
+    console.warn('[新資料庫登入失敗，嘗試第一次建立帳號]', e1);
+    try{ await FRQ.signIn(pw, 'signUp'); }
+    catch(e2){ console.error(e2); throw new Error('原系統登入成功，但頻率追蹤資料庫登入失敗。若曾改過團隊密碼，請聯絡管理者同步兩邊密碼。'); }
+  }
+}
+async function restoreSession(){
+  if(!SRC.hasSaved() || !FRQ.hasSaved()) return false;
+  const [a, b] = await Promise.all([SRC.fetchToken({forceRefreshToken:false}), FRQ.fetchToken({forceRefreshToken:false})]);
+  return !!(a && b);
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const isFreqFn = name => name.startsWith('freqChecks:');
+async function cq(name, args){
+  const conn = isFreqFn(name) ? FRQ : SRC;
+  await conn.ready;
+  for(let i = 0; ; i++){
+    try{ return await conn.client.query(name, args || {}); }
+    catch(e){ if(i < 5 && /未登入/.test(e.message || '')){ await sleep(1000); continue; } throw e; }
+  }
+}
+// 寫入只會送到頻率追蹤資料庫；任何想寫原資料庫的呼叫都直接擋下
+async function cm(name, args){
+  if(!isFreqFn(name)) throw new Error('安全限制：此系統不允許寫入原服務追蹤資料庫（'+name+'）');
+  await FRQ.ready; return FRQ.client.mutation(name, args);
+}
+const J = s => { try{ return JSON.parse(s || '{}'); }catch{ return {}; } };
+
+// ================= 畫面 =================
+const STATUS = [['pending','待確認'],['notified','有異動通知'],['anomaly','異常・交個管'],['ok','無需處理']];
+const defaultMonth = () => { const d = new Date(); const t = d.getDate() < 28 ? new Date(d.getFullYear(), d.getMonth()-1, 1) : d; return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0'); };
+const todayISO = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const prevMonth = mk => { const [y,m] = mk.split('-').map(Number); const d = new Date(y, m-2, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
+// 不比對的服務項目：預設全部都比對（以前預設排除 OT01，這裡會自動移除一次）
+const loadIgnore = () => {
+  try{
+    let v = JSON.parse(localStorage.getItem('freqIgnore'));
+    v = Array.isArray(v) ? v : [];
+    if(!localStorage.getItem('freqIgnoreV2')){
+      v = v.filter(c => c !== 'OT01');
+      localStorage.setItem('freqIgnore', JSON.stringify(v)); localStorage.setItem('freqIgnoreV2', '1');
+    }
+    return v;
+  }catch{ return []; }
+};
+
+function parseCase(row){
+  const d = J(row.data);
+  return {id:row.caseId, name:d.name || '', idNo:d.idNo || '', careManager:d.careManager || '', region:d.region || '',
+    contactName:d.contactName || '', contactPhone:d.contactPhone || '', services:d.services || []};
+}
+function sysPlanOf(c){
+  const p = {};
+  (c.services || []).forEach(s => { if(s.code) p[s.code] = {code:s.code, name:s.name || '', quota:firstNum(s.quota), type:s.type || 'regular', freq:s.freq || ''}; });
+  return p;
+}
+function badgeOf(check){
+  if(!check) return html`<span class="tag t-none">未比對</span>`;
+  const s = check.data.summary || {};
+  if(s.pending > 0) return html`<span class="tag t-pend">待確認 ${s.pending}</span>`;
+  if(s.anomaly > 0) return html`<span class="tag t-anom">異常 ${s.anomaly}</span>`;
+  return html`<span class="tag t-done">完成</span>`;
+}
+
+function Login({onDone}){
+  const [pw, setPw] = useState(''), [msg, setMsg] = useState('請輸入團隊共用密碼'), [busy, setBusy] = useState(false);
+  const go = async () => { if(!pw) return; setBusy(true); try{ await signIn(pw); onDone(); }catch(e){ console.error(e); setMsg(e.message || '登入失敗'); } setBusy(false); };
+  if(!FREQ_CONFIGURED) return html`<div class="gate"><div class="box">
+    <div style="font-size:18px;font-weight:700;color:var(--green)">服務頻率追蹤</div>
+    <div class="sub" style="margin-top:8px;line-height:1.7">尚未設定頻率追蹤專用資料庫。<br/>請在 freq.html 裡把 FREQ_URL 換成新 Convex 專案的網址。</div>
+  </div></div>`;
+  return html`<div class="gate"><div class="box">
+    <div style="font-size:18px;font-weight:700;color:var(--green)">服務頻率追蹤</div>
+    <div class="sub" style="margin-top:6px">${msg}</div>
+    <input type="password" value=${pw} onInput=${e => setPw(e.target.value)} onKeyDown=${e => e.key === 'Enter' && go()} placeholder="密碼" />
+    <button class="btn" disabled=${busy} onClick=${go}>${busy ? '登入中…' : '登入'}</button>
+  </div></div>`;
+}
+
+function WeekdayPicker({value, onChange}){
+  const v = new Set(value || []);
+  const order = [1,2,3,4,5,6,0];
+  return html`<span class="wd">${order.map(d => html`<button class=${v.has(d) ? 'on' : ''} title=${'週'+WD[d]}
+    onClick=${() => { const n = new Set(v); n.has(d) ? n.delete(d) : n.add(d); onChange([...n].sort((a,b) => a-b)); }}>${WD[d]}</button>`)}</span>`;
+}
+
+// 備餐的餐別（只有 MEAL_CODES 會顯示）
+function MealPicker({value, src, auto: autoVal, onChange, onReset}){
+  const v = new Set(value || []);
+  const auto = src === 'freq';
+  const tog = k => { const n = new Set(v); n.has(k) ? n.delete(k) : n.add(k); onChange(MEAL_KEYS.filter(x => n.has(x))); };
+  return html`<div class="tw">餐別：<span class="wd">${MEAL_KEYS.map(k => html`<button class=${v.has(k) ? 'on' : ''} style="width:auto;padding:0 6px" onClick=${() => tog(k)}>${MEAL_LABEL[k]}</button>`)}</span>
+    ${auto ? html`<span class="src">依實際頻率自動勾選</span>`
+      : autoVal ? html`<span class="src">手動調整（頻率為${autoVal.map(k => MEAL_LABEL[k]).join('、')}）</span> <button class="btn light" style="width:auto;padding:0 6px;font-size:12px" onClick=${onReset}>改回依頻率</button>`
+      : !v.size ? html`<span class="src">頻率未寫餐別，請手動勾選（未勾不檢查時間）</span>` : html`<span class="src">手動勾選</span>`}</div>`;
+}
+
+function Calendar({month, codes, plan, byCode, std, stdSrc, flagged, onStd, inferred, meals, mealSrc, mealAuto, onMeal, onMealReset, unitsPer}){
+  const dim = daysInMonth(month), today = todayISO();
+  const days = Array.from({length:dim}, (_,i) => i+1);
+  const payLines = codes.map(code => selfPaySummary(code, byCode[code] || [])).filter(Boolean);
+  return html`<div class="cal"><table>
+    <thead><tr><th></th>${days.map(d => { const w = wdOf(isoOf(month,d)); return html`<th class=${w === 0 || w === 6 ? 'we' : ''}>${d}<br/>${WD[w]}</th>`; })}<th></th></tr></thead>
+    <tbody>${codes.map(code => {
+      const p = plan[code], rs = byCode[code] || [], S = new Set(std[code] || []);
+      const qtyByDate = {}; rs.forEach(r => qtyByDate[r.date] = (qtyByDate[r.date] || 0) + (r.qty || 0));
+      const used = rs.reduce((a,r) => a + (r.qty || 0), 0);
+      const fl = flagged[code] || new Set();
+      const inf = inferred[code];
+      const srcLabel = {saved:'已存', freq:'由實際頻率帶入'}[stdSrc[code]] || '';
+      return html`<tr>
+        <td class="code"><b>${code}</b> ${p ? p.name : html`<span class="tag t-anom">未核定</span>`}<br/>
+          ${p && p.type === 'regular' ? html`<${WeekdayPicker} value=${std[code]} onChange=${v => onStd(code, v)} />
+            ${srcLabel && html`<span class="src">${srcLabel}</span>`}
+            ${unitsPer && unitsPer[code] && html`<span class="src">・每次 ${unitsPer[code]} 單位</span>`}
+            ${inf && JSON.stringify(inf) !== JSON.stringify(std[code] || []) && html`<button class="btn light" style="padding:1px 6px;font-size:11px;margin-left:4px"
+              onClick=${() => onStd(code, inf)}>推測：${inf.map(d => WD[d]).join('')}</button>`}` : html`<span class="src">${p ? '依實際狀況使用' : ''}</span>`}
+          ${p && MEAL_CODES.includes(code) && html`<${MealPicker} value=${meals[code]} src=${mealSrc[code]} auto=${mealAuto && mealAuto[code]} onChange=${v => onMeal(code, v)} onReset=${() => onMealReset(code)} />`}
+        </td>
+        ${days.map(d => { const iso = isoOf(month,d); const q = qtyByDate[iso];
+          const cls = [S.has(wdOf(iso)) ? 'std' : '', q ? 'hit' : '', q && S.size && !S.has(wdOf(iso)) ? 'off' : '', rs.some(r => r.date === iso && r.pay === 'self') ? 'self' : '', fl.has(iso) ? 'flag' : '', iso >= today ? 'fut' : ''].join(' ');
+          const tip = rs.filter(r => r.date === iso).map(r => (r.start != null ? fmtHM(r.start)+'–'+fmtHM(r.end) : '無時間')+(r.pay === 'self' ? '（自費）' : '')).join('\n');
+          return html`<td class=${cls} title=${tip}>${q ? (q === 1 ? '●' : q) : ''}</td>`; })}
+        <td class="cnt">${used}${p && p.quota != null ? ' / '+p.quota : ''}</td>
+      </tr>`; })}</tbody></table>
+    <div class="legend"><span style="--c:var(--soft)">排定星期</span><span style="--c:var(--green)">有服務</span><span style="--c:#e8a33d">非排定日服務</span><span style="--c:#4a7a9e">自費</span><span style="--c:#fff;outline:2px solid var(--red)">被標記的日期</span><span>數字＝當日數量</span><span>滑鼠移到格子上可看服務時間</span></div>
+    ${payLines.length ? html`<div style="margin-top:8px;font-size:13px">${payLines.map(l => html`<div>${l}</div>`)}</div>` : ''}
+  </div>`;
+}
+
+function CasePanel({c, month, check, ignore, userName, onSaved, onNext, toast}){
+  const sysPlan = useMemo(() => sysPlanOf(c), [c]);
+  const [recText, setRecText] = useState(''), [planText, setPlanText] = useState(''), [noRecords, setNoRecords] = useState(false);
+  const [std, setStd] = useState(null), [stdSrc, setStdSrc] = useState({}), [stdVer, setStdVer] = useState(0), [stdDirty, setStdDirty] = useState(false);
+  const [meals, setMeals] = useState({}), [mealSrc, setMealSrc] = useState({}), [mealAuto, setMealAuto] = useState({}), [freqText, setFreqText] = useState({});
+  const [marks, setMarks] = useState({}), [saving, setSaving] = useState(false);
+  const recRef = useRef();
+
+  useEffect(() => {
+    setRecText(''); setPlanText(''); setNoRecords(false); setStd(null); setStdDirty(false);
+    const m = {}; ((check && check.data.items) || []).forEach(it => m[it.id] = {status:it.status, note:it.note || ''}); setMarks(m);
+    let off = false;
+    (async () => {
+      try{
+        const [sd, tm, tmPrev] = await Promise.all([
+          cq('freqChecks:getStandard', {caseId:c.id}),
+          cq('trackingMonths:get', {caseId:c.id, monthKey:month}),
+          cq('trackingMonths:get', {caseId:c.id, monthKey:prevMonth(month)}),
+        ]);
+        if(off) return;
+        const freqText = {};
+        [tmPrev, tm].forEach(row => { if(!row) return; (J(row.data).services || []).forEach(s => { if(s.code && s.actualFreq) freqText[s.code] = s.actualFreq; }); });
+        setFreqText(freqText);
+        const s = {}, src = {};
+        Object.values(sysPlan).forEach(p => { const w = parseWeekdays(freqText[p.code] || p.freq); if(w){ s[p.code] = w; src[p.code] = 'freq'; } });
+        const sdData = sd ? J(sd.data) : {};
+        Object.entries(sdData.codes || {}).forEach(([k,v]) => { s[k] = v; src[k] = 'saved'; });
+        const ml = {}, msrc = {};
+        MEAL_CODES.forEach(code => { const p = sysPlan[code]; const w = parseMeals(freqText[code] || (p && p.freq)); if(w){ ml[code] = w; msrc[code] = 'freq'; } });
+        const auto = {...ml}; setMealAuto(auto);
+        // 舊版存的勾選：只用在頻率沒寫餐別的服務（避免舊設定蓋掉頻率）
+        if(!sdData.mealsManual) Object.entries(sdData.meals || {}).forEach(([k,v]) => { if(msrc[k] !== 'freq'){ ml[k] = v; msrc[k] = 'saved'; } });
+        // 手動改過的一律保留，優先於頻率
+        Object.entries(sdData.mealsManual || {}).forEach(([k,v]) => { ml[k] = v; msrc[k] = 'saved'; });
+        setStd(s); setStdSrc(src); setStdVer(sd ? sd.updatedAt : 0); setMeals(ml); setMealSrc(msrc);
+      }catch(e){ console.error(e); toast('讀取標準排程失敗：'+e.message, true); setStd({}); }
+    })();
+    setTimeout(() => recRef.current && recRef.current.focus(), 50);
+    return () => { off = true; };
+  }, [c.id, month]);
+
+  const parsed = useMemo(() => noRecords ? {rows:[], skipped:[]} : (recText.trim() ? parseRecords(recText) : null), [recText, noRecords]);
+  const pasted = useMemo(() => planText.trim() ? parsePlan(planText) : null, [planText]);
+  const plan = useMemo(() => effectivePlan(sysPlan, pasted), [sysPlan, pasted]);
+  const result = useMemo(() => parsed && std ? runChecks({monthKey:month, rows:parsed.rows, plan, standards:std, meals, freqText, ignore, todayISO:todayISO()}) : null, [parsed, plan, std, meals, freqText, ignore, month]);
+  const unitsPer = useMemo(() => { const o = {}; Object.values(plan).forEach(p => { const v = parseUnitsPer((freqText[p.code] || '') + ' ' + (p.freq || '')); if(v) o[p.code] = v; }); return o; }, [plan, freqText]);
+  const diff = useMemo(() => planDiff(sysPlan, pasted, ignore), [sysPlan, pasted, ignore]);
+  const savedItems = ((check && check.data.items) || []).filter(it => !isStaleOverlap(it) && it.kind !== 'selfpay');
+  const items = result ? [...diff, ...result.items] : pasted ? [...diff, ...savedItems.filter(i => i.kind !== 'plan')] : savedItems;
+
+  const byCode = useMemo(() => { const o = {}; (parsed ? parsed.rows : []).filter(r => r.date.startsWith(month)).forEach(r => (o[r.code] = o[r.code] || []).push(r)); return o; }, [parsed, month]);
+  const inferred = useMemo(() => { const o = {}; Object.entries(byCode).forEach(([k,rs]) => { o[k] = inferWeekdays([...new Set(rs.map(r => r.date))]); }); return o; }, [byCode]);
+  const calCodes = useMemo(() => [...new Set([...Object.keys(plan), ...Object.keys(byCode)])].filter(k => !ignore.includes(k) && !(plan[k] && (plan[k].type === 'assistive' || plan[k].type === 'envimprove'))).sort(), [plan, byCode, ignore]);
+  const flagged = useMemo(() => { const o = {}; items.forEach(it => { const s = (o[it.code] = o[it.code] || new Set()); [it.date, it.date2, ...(it.dates || [])].forEach(d => d && s.add(d)); }); return o; }, [items]);
+
+  // 每一項的狀態與備註：使用者沒改過時，用項目自帶的預設值（例如交通接送的使用日期備註）
+  const defMark = it => ({status: it.defStatus || 'pending', note: it.defNote || ''});
+  const markOf = it => marks[it.id] || defMark(it);
+  const setMark = (it, patch) => setMarks(m => ({...m, [it.id]: {...(m[it.id] || defMark(it)), ...patch}}));
+  const onStd = (code, v) => { setStd(s => ({...s, [code]: v})); setStdSrc(s => ({...s, [code]: 'saved'})); setStdDirty(true); };
+  const onMealReset = code => { setMeals(s => ({...s, [code]: mealAuto[code]})); setMealSrc(s => ({...s, [code]: 'freq'})); setStdDirty(true); };
+  const onMeal = (code, v) => { setMeals(s => ({...s, [code]: v})); setMealSrc(s => ({...s, [code]: 'saved'})); setStdDirty(true); };
+
+  const save = async (goNext) => {
+    if(!parsed && !check && !pasted){ toast('請先貼上服務紀錄（或勾選「本月無任何服務紀錄」）', true); return; }
+    setSaving(true);
+    try{
+      if(stdDirty){
+        const codes = {}; Object.entries(std).forEach(([k,v]) => { if(v && v.length) codes[k] = v; });
+        // 餐別：有改過或原本就存過的才存（空陣列代表「刻意不檢查」，也要存下來）
+        const msave = {}; Object.entries(meals).forEach(([k,v]) => { if(mealSrc[k] === 'saved') msave[k] = v || []; });
+        const r = await cm('freqChecks:upsertStandard', {caseId:c.id, data:JSON.stringify({codes, meals:msave, mealsManual:msave}), expectedUpdatedAt:stdVer});
+        setStdVer(r.updatedAt); setStdDirty(false);
+      }
+      const finalItems = items.map(it => ({id:it.id, code:it.code, kind:it.kind, level:it.level, msg:it.msg, date:it.date || null, date2:it.date2 || null,
+        status:markOf(it).status || 'pending', note:markOf(it).note || ''}));
+      const summary = {total:finalItems.length, pending:finalItems.filter(i => i.status === 'pending').length, anomaly:finalItems.filter(i => i.status === 'anomaly').length};
+      const data = {items:finalItems, stats:result ? result.stats : ((check && check.data.stats) || {}), summary, planPasted:!!pasted || !!(check && check.data.planPasted),
+        hasRecords:!!parsed || !!(check && check.data.hasRecords), checkedBy:userName, checkedAt:Date.now()};
+      const r = await cm('freqChecks:upsertCheck', {caseId:c.id, monthKey:month, data:JSON.stringify(data), expectedUpdatedAt:check ? check.updatedAt : 0});
+      onSaved(c.id, {caseId:c.id, monthKey:month, data, updatedAt:r.updatedAt});
+      toast(summary.pending ? `已儲存（還有 ${summary.pending} 項待確認）` : '已儲存');
+      if(goNext) onNext();
+    }catch(e){ console.error(e); toast('儲存失敗：'+e.message, true); }
+    setSaving(false);
+  };
+
+  const onPasteRec = e => { setNoRecords(false); const t = tableFromClipboard(e); if(t != null){ e.preventDefault(); setRecText(t); } };
+  const onPastePlan = e => { const t = tableFromClipboard(e); if(t != null){ e.preventDefault(); setPlanText(p => p.trim() ? p + '\n' + t : t); } };
+  const planChips = Object.values(sysPlan).filter(p => !ignore.includes(p.code));
+  const pendingCount = items.filter(it => markOf(it).status === 'pending').length;
+
+  return html`<div>
+    <div class="card" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+      <div><h2>${c.name}</h2><div class="sub">${c.idNo} · 個管：${c.careManager || '—'}${c.region ? ' · '+c.region : ''}${c.contactName ? ' · 聯絡人：'+c.contactName+' '+c.contactPhone : ''}</div>
+        ${check && html`<div class="sub" style="margin-top:4px">上次比對：${check.data.checkedBy || ''} ${new Date(check.data.checkedAt || check.updatedAt).toLocaleString('zh-TW')}</div>`}</div>
+      <div style="display:flex;gap:8px"><button class="btn light" disabled=${saving} onClick=${() => save(false)}>儲存</button><button class="btn" disabled=${saving} onClick=${() => save(true)}>儲存並下一位 →</button></div>
+    </div>
+
+    <div class="card">
+      <div class="steps"><span class="num">1</span><h3 style="margin:0">核定計畫</h3><span class="sub">預設使用本系統的核定項目；有計畫異動時，貼上衛福部核定頁面比對</span></div>
+      ${ignore.length ? html`<div class="sub" style="color:var(--org);margin-top:4px">目前設定不比對：${ignore.join('、')}（左側「不比對的服務項目」可修改）</div>` : ''}
+      <div class="plan">${planChips.length ? planChips.map(p => html`<span class="pchip"><b>${p.code}</b> ${p.name} ${p.quota != null ? '×'+p.quota : ''}</span>`) : html`<span class="sub">本系統尚未設定核定項目</span>`}</div>
+      <details style="margin-top:10px" open=${!!planText}>
+        <summary>貼上衛福部核定計畫頁面（選填，可一次貼多個計畫頁）</summary>
+        <textarea class="paste" style="margin-top:8px" placeholder="在衛福部系統的核定頁面全選表格 → 複製 → 貼在這裡" value=${planText} onPaste=${onPastePlan} onInput=${e => setPlanText(e.target.value)}></textarea>
+        ${planText.trim() && html`<div class="sub">${pasted ? `辨識到 ${Object.keys(pasted).length} 個服務項目，本月比對以衛福部核定為準（同一服務在多頁出現時取最大數量）` : '⚠️ 沒有辨識到服務項目，請確認是否貼到核定表格'}</div>`}
+      </details>
+    </div>
+
+    <div class="card">
+      <div class="steps"><span class="num">2</span><h3 style="margin:0">貼上 ${+month.split('-')[1]} 月服務紀錄</h3></div>
+      <textarea ref=${recRef} class="paste" placeholder="在衛福部系統查詢這位個案的服務紀錄 → 全選表格 → 複製 → 貼在這裡（Ctrl+V）"
+        value=${recText} onPaste=${onPasteRec} onInput=${e => setRecText(e.target.value)}></textarea>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:6px">
+        <label class="sub"><input type="checkbox" checked=${noRecords} onChange=${e => { setNoRecords(e.target.checked); if(e.target.checked) setRecText(''); }} /> 本月無任何服務紀錄</label>
+        ${parsed && !noRecords && html`<span class="sub">辨識 ${parsed.rows.length} 筆${result && result.outMonth ? `（其中 ${result.outMonth} 筆不是 ${month} 已略過）` : ''}${parsed.skipped.length ? `，⚠️ ${parsed.skipped.length} 行無法辨識` : ''}</span>`}
+        ${recText && html`<button class="btn light" style="padding:3px 10px;font-size:12px" onClick=${() => setRecText('')}>清除</button>`}
+      </div>
+      ${parsed && !noRecords && parsed.skipped.length ? html`<details style="margin-top:6px"><summary class="sub" style="cursor:pointer;color:var(--org)">查看無法辨識的 ${parsed.skipped.length} 行</summary>
+        <div class="sub" style="white-space:pre-wrap;font-size:12px;margin-top:4px;max-height:200px;overflow:auto">${parsed.skipped.join('\n')}</div></details>` : ''}
+      ${std && (parsed || calCodes.length) ? html`<div style="margin-top:12px"><${Calendar} month=${month} codes=${calCodes} plan=${plan} byCode=${byCode} std=${std} stdSrc=${stdSrc} flagged=${flagged} onStd=${onStd} inferred=${inferred} meals=${meals} mealSrc=${mealSrc} mealAuto=${mealAuto} onMeal=${onMeal} onMealReset=${onMealReset} unitsPer=${unitsPer} /></div>` : ''}
+      ${stdDirty && html`<div class="sub" style="margin-top:6px;color:var(--org)">標準排程已修改，儲存時會一併存下，之後每個月沿用</div>`}
+    </div>
+
+    <div class="card">
+      <div class="steps"><span class="num">3</span><h3 style="margin:0">檢核結果</h3>
+        <span class="sub">${items.length ? `共 ${items.length} 項，待確認 ${pendingCount} 項` : (parsed ? '✅ 沒有發現需要確認的項目' : (check ? '' : '貼上服務紀錄後自動比對'))}</span></div>
+      ${!result && check && savedItems.length ? html`<div class="sub" style="margin-bottom:8px">顯示的是上次儲存的結果；重新貼上服務紀錄會重新比對（已標記的狀態會保留）</div>` : ''}
+      ${groupItems(items).map(g => { const pend = g.items.filter(it => markOf(it).status === 'pending').length; return html`<section class="rbox" key=${g.key}>
+        <div class="rbox-h"><b>${g.title}</b><span class="sub">${g.items.length} 項${pend ? `，待確認 ${pend} 項` : ''}</span></div>
+      ${g.items.map(it => { const mk = markOf(it); return html`<div class=${'item '+it.level} key=${it.id}>
+        <div class="msg"><b>${it.code}</b> ${(plan[it.code] && plan[it.code].name) || ''}<br/>${it.msg}</div>
+        <span class="seg">${STATUS.map(([k,l]) => html`<button class=${mk.status === k ? 'on '+k : ''} onClick=${() => setMark(it, {status:k})}>${l}</button>`)}</span>
+        ${(mk.status !== 'pending' || mk.note) && html`<input class="note" placeholder="備註（例：已收到異動通知 10/12、個案住院…）" value=${mk.note} onInput=${e => setMark(it, {note:e.target.value})} />`}
+      </div>`; })}
+      </section>`; })}
+      ${items.length > 1 && html`<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn light" style="font-size:12px;padding:4px 10px" onClick=${() => items.forEach(it => { if(markOf(it).status === 'pending') setMark(it, {status:'ok'}); })}>其餘待確認全部設為「無需處理」</button></div>`}
+    </div>
+  </div>`;
+}
+
+function AnomalyView({cases, checks, month, cms}){
+  const [cmF, setCmF] = useState('全部'), [incPending, setIncPending] = useState(false);
+  const caseMap = useMemo(() => { const o = {}; cases.forEach(c => o[c.id] = c); return o; }, [cases]);
+  const rows = [];
+  Object.values(checks).forEach(ch => { const c = caseMap[ch.caseId]; if(!c) return; if(cmF !== '全部' && c.careManager !== cmF) return;
+    (ch.data.items || []).forEach(it => { if(isStaleOverlap(it)) return; if(it.status === 'anomaly' || (incPending && it.status === 'pending')) rows.push({c, it}); }); });
+  const groups = {}; rows.forEach(r => (groups[r.c.careManager || '未指派'] = groups[r.c.careManager || '未指派'] || []).push(r));
+  const copy = list => { const t = list.map(r => `${r.c.name}（${r.c.idNo}）${r.it.code} ${r.it.msg}${r.it.note ? '；'+r.it.note : ''}${r.it.status === 'pending' ? '【待確認】' : ''}`).join('\n'); navigator.clipboard.writeText(t); };
+  return html`<div style="max-width:1100px;margin:0 auto;padding:14px">
+    <div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <h3 style="margin:0">${month} 異常清單</h3>
+      <select class="inp" value=${cmF} onChange=${e => setCmF(e.target.value)}><option>全部</option>${cms.map(x => html`<option>${x}</option>`)}</select>
+      <label class="sub"><input type="checkbox" checked=${incPending} onChange=${e => setIncPending(e.target.checked)} /> 包含待確認</label>
+      <span class="sub">共 ${rows.length} 項</span>
+    </div>
+    ${!rows.length ? html`<div class="empty">目前沒有標記為「異常・交個管」的項目</div>` : Object.entries(groups).map(([g,list]) => html`<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center"><div class="grp" style="margin:0">${g}（${list.length}）</div>
+        <button class="btn light" style="font-size:12px;padding:4px 10px" onClick=${() => copy(list)}>複製文字給個管</button></div>
+      ${list.map(r => html`<div class=${'item '+r.it.level}><div class="msg"><b>${r.c.name}</b> <span class="sub">${r.c.idNo}</span><br/><b>${r.it.code}</b> ${r.it.msg}${r.it.note ? html`<div class="sub">備註：${r.it.note}</div>` : ''}</div>
+        <span class=${'tag '+(r.it.status === 'pending' ? 't-pend' : 't-anom')}>${r.it.status === 'pending' ? '待確認' : '異常'}</span></div>`)}
+    </div>`)}
+  </div>`;
+}
+
+function App(){
+  const [authed, setAuthed] = useState(false), [checking, setChecking] = useState(true);
+  const [userName, setUserName] = useState(localStorage.getItem('caUserName') || '');
+  const [cases, setCases] = useState([]), [checks, setChecks] = useState({}), [cms, setCms] = useState([]);
+  const [month, setMonth] = useState(defaultMonth()), [cmF, setCmF] = useState('全部'), [search, setSearch] = useState(''), [stF, setStF] = useState('全部');
+  const [selId, setSelId] = useState(null), [tab, setTab] = useState('check'), [loading, setLoading] = useState(false);
+  const [toastMsg, setToastMsg] = useState(null), [ignore, setIgnore] = useState(loadIgnore());
+
+  const toast = (msg, err) => { setToastMsg({msg, err}); setTimeout(() => setToastMsg(null), 3000); };
+
+  useEffect(() => { (async () => { if(FREQ_CONFIGURED && await restoreSession()) setAuthed(true); setChecking(false); })(); }, []);
+
+  const loadCases = async () => {
+    setLoading(true);
+    try{
+      const [rows, cfg] = await Promise.all([cq('cases:list', {}), cq('config:getMeta', {})]);
+      const list = rows.map(parseCase).sort((a,b) => (a.careManager || '').localeCompare(b.careManager || '', 'zh-Hant') || a.name.localeCompare(b.name, 'zh-Hant'));
+      setCases(list); setCms((cfg ? J(cfg.data).cms : null) || [...new Set(list.map(c => c.careManager).filter(Boolean))]);
+    }catch(e){ console.error(e); toast('載入個案失敗：'+e.message, true); }
+    setLoading(false);
+  };
+  const loadChecks = async mk => {
+    try{ const rows = await cq('freqChecks:listByMonth', {monthKey:mk}); const o = {}; rows.forEach(r => o[r.caseId] = {...r, data:J(r.data)}); setChecks(o); }
+    catch(e){ console.error(e); toast('載入比對結果失敗：'+e.message, true); }
+  };
+  useEffect(() => { if(authed) loadCases(); }, [authed]);
+  useEffect(() => { if(authed) loadChecks(month); }, [authed, month]);
+
+  const filtered = cases.filter(c => (cmF === '全部' || c.careManager === cmF) && (!search || c.name.includes(search) || c.idNo.includes(search))
+    && (stF === '全部' || (stF === '未比對' ? !checks[c.id] : stF === '待確認' ? (checks[c.id] && checks[c.id].data.summary.pending > 0) : (checks[c.id] && !checks[c.id].data.summary.pending))));
+  const doneCount = cases.filter(c => (cmF === '全部' || c.careManager === cmF) && checks[c.id] && !checks[c.id].data.summary.pending).length;
+  const totalCount = cases.filter(c => cmF === '全部' || c.careManager === cmF).length;
+  const sel = cases.find(c => c.id === selId);
+  const goNext = () => { const i = filtered.findIndex(c => c.id === selId); const n = filtered[i+1]; if(n){ setSelId(n.id); document.getElementById('row-'+n.id)?.scrollIntoView({block:'nearest'}); } else toast('已經是清單最後一位'); };
+
+  if(checking) return html`<div class="empty">載入中…</div>`;
+  if(!authed) return html`<${Login} onDone=${() => setAuthed(true)} />`;
+  if(!userName) return html`<div class="gate"><div class="box"><div style="font-weight:700;color:var(--green)">你是哪一位？</div>
+    <div class="sub" style="margin-top:6px">比對紀錄會顯示這個名字</div>
+    <input id="nm" placeholder="請輸入你的名字" onKeyDown=${e => { if(e.key === 'Enter' && e.target.value.trim()){ localStorage.setItem('caUserName', e.target.value.trim()); setUserName(e.target.value.trim()); } }} />
+    <button class="btn" onClick=${() => { const v = document.getElementById('nm').value.trim(); if(v){ localStorage.setItem('caUserName', v); setUserName(v); } }}>確定</button></div></div>`;
+
+  return html`<div>
+    <div class="top">
+      <span class="brand"><img class="logo" src=${LOGO} alt="" />服務頻率追蹤<a href="https://lelinsihuoffice-aa02.github.io/-care-tools/">← 回入口</a></span>
+      <button class=${'tabbtn'+(tab === 'check' ? ' on' : '')} onClick=${() => setTab('check')}>逐案比對</button>
+      <button class=${'tabbtn'+(tab === 'anomaly' ? ' on' : '')} onClick=${() => setTab('anomaly')}>異常清單</button>
+      <span class="grow"></span>
+      <label class="sub">追蹤月份 <input class="inp" type="month" value=${month} onChange=${e => setMonth(e.target.value)} /></label>
+      <select class="inp" value=${cmF} onChange=${e => setCmF(e.target.value)}><option>全部</option>${cms.map(x => html`<option>${x}</option>`)}</select>
+      <span class="tag t-done">已完成 ${doneCount} / ${totalCount}</span>
+      <button class="btn light" disabled=${loading} onClick=${() => { loadCases(); loadChecks(month); }}>${loading ? '載入中…' : '重新整理'}</button>
+      <span class="sub">${userName}</span>
+    </div>
+    ${tab === 'anomaly' ? html`<${AnomalyView} cases=${cases} checks=${checks} month=${month} cms=${cms} />` : html`<div class="wrap">
+      <div class="side">
+        <input class="inp" style="width:100%;margin-bottom:6px" placeholder="搜尋姓名或身分證" value=${search} onInput=${e => setSearch(e.target.value)} />
+        <select class="inp" style="width:100%;margin-bottom:8px" value=${stF} onChange=${e => setStF(e.target.value)}>${['全部','未比對','待確認','完成'].map(x => html`<option>${x}</option>`)}</select>
+        ${filtered.map(c => html`<div id=${'row-'+c.id} class=${'crow'+(c.id === selId ? ' sel' : '')} onClick=${() => setSelId(c.id)}>
+          <div class="grow"><div class="nm">${c.name}</div><div class="meta">${c.careManager}${c.region ? ' · '+c.region : ''}</div></div>${badgeOf(checks[c.id])}</div>`)}
+        ${!filtered.length && html`<div class="empty">沒有符合條件的個案</div>`}
+        <details style="margin-top:12px;font-size:12px"><summary>不比對的服務項目</summary>
+          <input class="inp" style="width:100%;margin-top:6px" value=${ignore.join(', ')} onChange=${e => { const v = e.target.value.split(/[,，\s]+/).filter(Boolean); setIgnore(v); localStorage.setItem('freqIgnore', JSON.stringify(v)); }} />
+          <div class="sub">用逗號分隔，例：BA20（只存在這台電腦）；留空＝全部都比對</div></details>
+      </div>
+      <div>${sel ? html`<${CasePanel} key=${sel.id+month} c=${sel} month=${month} check=${checks[sel.id]} ignore=${ignore} userName=${userName}
+          onSaved=${(id, ch) => setChecks(o => ({...o, [id]: ch}))} onNext=${goNext} toast=${toast} />`
+        : html`<div class="card empty">從左邊選一位個案開始。<br/><br/>流程：在衛福部系統查詢服務紀錄 → 全選複製 → 貼上 → 確認標記的項目 → 儲存並下一位</div>`}</div>
+    </div>`}
+    ${toastMsg && html`<div class="toast" style=${{background: toastMsg.err ? 'var(--red)' : 'var(--ok)'}}>${toastMsg.msg}</div>`}
+  </div>`;
+}
+
+render(html`<${App} />`, document.getElementById('app'));
+</script>
+</body>
+</html>
