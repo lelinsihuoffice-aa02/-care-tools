@@ -67,6 +67,16 @@
   .card .go{margin-top:auto;font-size:15px;font-weight:500;color:var(--pink-text);}
   .card.wide .go{margin-top:0;}
 
+  /* ===== 節慶背景影片（依日期自動出現）===== */
+  .fest{align-self:flex-start;font-size:14px;font-weight:700;padding:6px 14px;border-radius:999px;letter-spacing:1px;background:#FDE2E2;color:#A1121F;}
+  .fest[hidden]{display:none;}
+  #festBg{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;transition:opacity .45s ease;}
+  body.fest-on{background:#2a1c22;}
+  body.fest-on .wrap{position:relative;z-index:1;}
+  body.fest-on .hero, body.fest-on a.card{background:rgba(255,255,255,.9);border-color:rgba(255,255,255,.7);box-shadow:0 10px 40px rgba(20,14,40,.28);}
+  body.fest-on .group h2{align-self:flex-start;color:#fff;background:rgba(30,20,40,.55);padding:6px 14px;border-radius:999px;}
+  body.fest-on footer{color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7);}
+
   footer{text-align:center;font-size:13px;color:#8A7A80;margin:0;}
 
   @media (max-width:640px){
@@ -108,6 +118,7 @@ try{
     </div>
     <div class="hello">
       <span class="date" id="date" data-in></span>
+      <span class="fest" id="fest" hidden data-in style="--d:.04s"></span>
       <h1 id="greet" data-in style="--d:.08s">您好</h1>
       <div class="poem" data-in style="--d:.16s">
         <p class="quote" id="quote"></p>
@@ -344,6 +355,67 @@ try{
     setTimeout(function(){ document.documentElement.classList.remove('intro'); }, 2100);
   }
 })();
+</script>
+
+<script>
+// ===== 節慶背景影片：依日期自動切換（影片放在 festival 資料夾）=====
+// 網址加 ?fest=名稱 可以隨時預覽，例如 ?fest=xmas
+{
+  const FESTS = {
+    newyear: {pill:'新年快樂', bg:'#FCE4EF', c:'#9C2F63', poem:['千門萬戶曈曈日，總把新桃換舊符。','王安石〈元日〉']},
+    xiaonian:{file:'d01-xiaonian', pill:'大掃除・迎新春'},
+    chuxi:   {file:'d02-chuxi', pill:'除夕快樂・團圓圍爐'},
+    chu1:    {file:'d03-chu1', pill:'新春快樂・恭喜發財', poem:['爆竹聲中一歲除，春風送暖入屠蘇。','王安石〈元日〉']},
+    chu2:    {file:'d04-chu2', pill:'初二回娘家'},
+    chu3:    {file:'d05-chu3', pill:'大年初三・睡到自然醒'},
+    chu4:    {file:'d06-chu4', pill:'初四迎神・招財進寶'},
+    chu5:    {file:'d07-chu5', pill:'初五開市・財源廣進'},
+    chu6:    {file:'d08-chu6', pill:'初六開工大吉'},
+    dragon:  {pill:'端午安康', bg:'#E2F2EA', c:'#24624A', poem:['彩線輕纏紅玉臂，小符斜掛綠雲鬟。','蘇軾〈浣溪沙．端午〉']},
+    moon:    {pill:'中秋節快樂', bg:'#FDEBD8', c:'#8A4A0E', poem:['但願人長久，千里共嬋娟。','蘇軾〈水調歌頭〉']},
+    xmas:    {pill:'聖誕快樂', bg:'#E8F1EA', c:'#B3261E'}
+  };
+  // 農曆節日的國曆日期：[除夕, 端午, 中秋]，已算到 2035 年
+  const LUNAR = {
+    2026:['02-16','06-19','09-25'], 2027:['02-05','06-09','09-15'], 2028:['01-25','05-28','10-03'],
+    2029:['02-12','06-16','09-22'], 2030:['02-02','06-05','09-12'], 2031:['01-22','06-24','10-01'],
+    2032:['02-10','06-12','09-19'], 2033:['01-30','06-01','09-08'], 2034:['02-18','06-20','09-27'],
+    2035:['02-07','06-10','09-16']
+  };
+  function dayDiff(now, y, md){ const [m,d] = md.split('-').map(Number); const a = new Date(now.getFullYear(), now.getMonth(), now.getDate()); return Math.round((a - new Date(y, m-1, d)) / 86400000); }
+  function pick(now){
+    const md = (now.getMonth()+1)*100 + now.getDate(), y = now.getFullYear(), L = LUNAR[y];
+    if (md === 1224 || md === 1225) return 'xmas';
+    if (md === 1231 || md === 101) return 'newyear';
+    if (!L) return null;
+    const e = dayDiff(now, y, L[0]);                        // 0 = 除夕當天
+    if (e === -1) return 'xiaonian';                         // 小年夜：整天大掃除
+    if (e === 0) return now.getHours() < 17 ? 'xiaonian' : 'chuxi';   // 除夕：17 點前大掃除、之後圍爐
+    if (e >= 1 && e <= 6) return 'chu' + e;
+    const g = dayDiff(now, y, L[1]); if (g === -1 || g === 0) return 'dragon';   // 端午前一天～當天
+    const m = dayDiff(now, y, L[2]); if (m === -1 || m === 0) return 'moon';     // 中秋前一天～當天
+    return null;
+  }
+  const forced = (location.search.match(/[?&]fest=(\w+)/) || [])[1];
+  const key = FESTS[forced] ? forced : pick(new Date());
+  if (key) {
+    const F = FESTS[key], file = 'festival/' + (F.file || key);
+    const pill = document.getElementById('fest');
+    pill.textContent = F.pill; pill.style.background = F.bg || ''; pill.style.color = F.c || ''; pill.hidden = false;
+    if (F.poem) { document.getElementById('quote').textContent = F.poem[0]; document.getElementById('src').textContent = '—— ' + F.poem[1]; }
+    const v = document.createElement('video'); v.id = 'festBg';
+    v.poster = file + '.jpg'; v.muted = true; v.playsInline = true; v.setAttribute('playsinline',''); v.setAttribute('aria-hidden','true');
+    document.body.insertBefore(v, document.body.firstChild);
+    document.body.classList.add('fest-on');
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {      // 系統設定減少動態時只顯示靜態圖
+      v.src = file + '.mp4';
+      // 影片播完淡出再從頭播，接縫比較不突兀
+      v.addEventListener('timeupdate', () => { if (v.duration && v.duration - v.currentTime < .45) v.style.opacity = .15; });
+      v.addEventListener('ended', () => { v.currentTime = 0; v.play().catch(()=>{}); setTimeout(() => v.style.opacity = '', 60); });
+      v.play().catch(()=>{});
+    }
+  }
+}
 </script>
 
 </body>
