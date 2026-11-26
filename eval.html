@@ -537,6 +537,8 @@ function normTrigger(t) {
 }
 // 新案＝觸發開頭是「新案」；單純「出轉初」不算新案（要算新案請選「新案-轉入-出轉初」）
 const isNewTrigger = t => normTrigger(t).startsWith('新案');
+// 當月新案、當月就結案：觸發改成「結案-」，原本的新案觸發記在 e.newTrigger，新案統計照算
+const newTrigOf = e => !e ? '' : isNewTrigger(e.trigger) || /^\d{1,2}月新案/.test(normTrigger(e.trigger)) ? e.trigger : e.newTrigger && isNewTrigger(e.newTrigger) ? e.newTrigger : e.trigger;
 // 結案觸發：
 //   「結案-」「結案400-」＝本月結案
 //   「10月結案」「10月結案-」（有沒有 - 都一樣）＝10 月已結案、本月只是還留在總表
@@ -714,7 +716,7 @@ const OPTS = {
 const cmsNum = c => parseInt(String(c || '').replace(/\D/g, ''), 10) || null;
 // 新案-出備：沒有督導審核，改用個管訪視日期（總表「訪視日期」），不分上下午
 // 重開案-出備比照新案-出備
-const isDc = r => ['新案-出備', '新案-重開案-出備'].includes(normTrigger(r.e.trigger));
+const isDc = r => ['新案-出備', '新案-重開案-出備'].includes(normTrigger(newTrigOf(r.e)));
 const supDate = r => isDc(r) ? r.e.visit : r.e.supervisor;
 
 // ---- 時效的計算方式（可在報表上切換：日曆天／工作天／工作天＋上下午分界），存在共用設定 calcModes ----
@@ -742,7 +744,7 @@ function daysBy(mode, a, b, H, aT, bT) {
 const REPORTS = {
   dispatch: {
     title: '個管員派案時效及品質名冊', note: '當月新案（觸發開頭是「新案」；單純出轉初不列）', bTrack: true,
-    filter: e => isNewTrigger(e.trigger),
+    filter: e => isNewTrigger(newTrigOf(e)),
     cols: [
       { h: '序號', v: r => r.i },
       { h: '姓名', v: r => r.c.name },
@@ -791,7 +793,7 @@ const REPORTS = {
   },
   discharge: {
     title: '出院準備服務銜接時效性', note: '當月「新案-出備」，排除出轉初與重開案',
-    filter: e => normTrigger(e.trigger) === '新案-出備',
+    filter: e => normTrigger(newTrigOf(e)) === '新案-出備',
     cols: [
       { h: '序號', v: r => r.i },
       { h: '姓名', v: r => r.c.name },
@@ -1068,7 +1070,7 @@ function unitStats(kind, month, db) {
   return out;
 }
 
-const unitStatFilter = kind => kind === 'new' ? (e => normTrigger(e.trigger).startsWith('新案')) : (e => normTrigger(e.trigger) === '複評');
+const unitStatFilter = kind => kind === 'new' ? (e => isNewTrigger(newTrigOf(e))) : (e => normTrigger(e.trigger) === '複評');
 const UNIT_SHEETS = {
   new: ['B單位', 'C碼', '交通', '社區交通', '日喘', '居喘', '日照', '小規機', '機喘', '家托', '餐飲(OT)', '沐浴車', '輔具', '短照'],
   reassess: ['B單位', 'C碼', '交通', '居喘', '日照', '日喘', '短照', '機喘', '餐飲(OT)', '家托', '沐浴車', '輔具'],
@@ -1150,7 +1152,7 @@ function caseMonths(db) {
       // 新案觸發：第一次開案，或結案後又重開 → 新的一段
       // 「6月新案-重開案-複評-1700」這種補報的：代表 6 月開案（6 月的總表沒匯入也一樣）
       const nm = normTrigger(e.trigger).match(/^(\d{1,2})月新案/);
-      const newAt = isNewTrigger(e.trigger) ? e.month : nm ? (() => { const n = +nm[1], [y, em] = e.month.split('-').map(Number); return n >= 1 && n <= 12 ? `${n > em ? y - 1 : y}-${pad(n)}` : ''; })() : '';
+      const newAt = isNewTrigger(newTrigOf(e)) ? e.month : nm ? (() => { const n = +nm[1], [y, em] = e.month.split('-').map(Number); return n >= 1 && n <= 12 ? `${n > em ? y - 1 : y}-${pad(n)}` : ''; })() : '';
       if (newAt && (!cur.openEv || (cur.close && cur.close < newAt)) && !(nm && cur.openEv && cur.open === newAt)) {
         if (cur.openEv || cur.close) eps.push(cur);
         cur = { open: newAt, openEv: true, close: '' };
@@ -1558,7 +1560,7 @@ function monthSets(month, db) {
   const get = id => db.cases.get(id);
   const isOut = id => /轉外縣市/.test(normReason((get(id) || {}).closeReason));
   const closedAll = ms.ids.closed, out = closedAll.filter(isOut), closed = closedAll.filter(id => !isOut(id));
-  const newEvents = db.events.filter(e => e.month === month && db.cases.has(e.caseId) && newKind(e.trigger));
+  const newEvents = db.events.filter(e => e.month === month && db.cases.has(e.caseId) && newKind(newTrigOf(e)));
   const withClosed = [...new Set([...ms.ids.latest, ...closedAll])];
   return { ms, inCase: ms.ids.inCase, latest: ms.ids.latest, closed, out, withClosed, newEvents, hasData: db.events.some(e => e.month === month) };
 }
@@ -1658,7 +1660,7 @@ function monthlyReport(month, db) {
   const S = monthSets(month, db), mm = +month.slice(5), rg = c => regionOf(c.caseNo);
   const newById = new Map(S.newEvents.map(e => [e.caseId, e]));
   const kinds = ['初評', '出備', '重開案', '轉入'];
-  const nk = countBy2([...newById.keys()], db, rg, (c, id) => newKind(newById.get(id).trigger));
+  const nk = countBy2([...newById.keys()], db, rg, (c, id) => newKind(newTrigOf(newById.get(id))));
   const inC = countBy(S.inCase, db, rg), cl = countBy(S.closed, db, rg), out = countBy(S.out, db, rg);
   const REF = [['居家', 'home'], ['交通', 'traffic'], ['沐浴車', 'bath'], ['居喘', 'resp']];
   const ref = {}; for (const [lab, k] of REF) ref[lab] = countBy([...newById.keys()].filter(id => { const c = db.cases.get(id), e = newById.get(id); return isOwnUnit(caseUnits(e, c, db.resolveUnit)[k]); }), db, rg);
@@ -1673,7 +1675,7 @@ function monthlyReport(month, db) {
   stat.push(['AA01', c('1700'), 1700, c('1700') * 1700], ['AA02', c('400'), 400, c('400') * 400], ['AA02-360', c('360'), 360, c('360') * 360], ['吃不到錢', c('none'), 0, 0], ['總計', c('1700') + c('400') + c('360') + c('none'), '', b.total.amt]);
   // 分析
   const pct = (n, d) => d ? n / d : 0; // 數字（匯出時格式 0.00%），跟原本月報一樣是 人數÷總人數
-  const nkAll = {}; for (const e of newById.values()) { const k = newKind(e.trigger); nkAll[k] = (nkAll[k] || 0) + 1; }
+  const nkAll = {}; for (const e of newById.values()) { const k = newKind(newTrigOf(e)); nkAll[k] = (nkAll[k] || 0) + 1; }
   const A = [['個案狀態', '人數', '比例']];
   const st = [['新案', (nkAll.初評 || 0) + (nkAll.出備 || 0)], ['重開案', nkAll.重開案 || 0], ['轉入', nkAll.轉入 || 0], ['舊案', S.inCase.length], ['結案', S.closed.length], ['轉外縣市', S.out.length]];
   for (const [k, n] of st) A.push([k, n, pct(n, total)]); A.push(['總人數', total, st.slice(0, 4).reduce((a, [, n]) => a + pct(n, total), 0)], []);
@@ -1692,7 +1694,7 @@ function monthlyReport(month, db) {
 function publishRows(month, db) {
   const S = monthSets(month, db), rg = c => regionOf(c.caseNo), L = S.latest, rows = [];
   const add = (cat, items) => { for (const [k, v] of items) rows.push([cat, k, v]); };
-  const nk = {}; for (const e of new Map(S.newEvents.map(e => [e.caseId, e])).values()) { const k = newKind(e.trigger); nk[k] = (nk[k] || 0) + 1; }
+  const nk = {}; for (const e of new Map(S.newEvents.map(e => [e.caseId, e])).values()) { const k = newKind(newTrigOf(e)); nk[k] = (nk[k] || 0) + 1; }
   add('案量', [['在案', S.inCase.length], ['新案', Object.values(nk).reduce((a, b) => a + b, 0)], ['結案', S.closed.length], ['轉外縣市', S.out.length], ['總人數', L.length]]);
   add('個案狀態', [['新案', (nk.初評 || 0) + (nk.出備 || 0)], ['重開案', nk.重開案 || 0], ['轉入', nk.轉入 || 0], ['舊案', S.inCase.length], ['結案', S.closed.length], ['轉外縣市', S.out.length]]);
   add('新案來源', ['初評', '出備', '重開案', '轉入'].map(k => [k, nk[k] || 0]));
@@ -1728,7 +1730,7 @@ const ANNUAL_CATS = {
 function annualMonth(month, db) {
   const S = monthSets(month, db), nids = [...new Set(S.newEvents.map(e => e.caseId))];
   const isDc = id => srcGroup((db.cases.get(id) || {}).src) === '出備';
-  const trans = nids.filter(id => newKind((S.newEvents.find(e => e.caseId === id) || {}).trigger) === '轉入');
+  const trans = nids.filter(id => newKind(newTrigOf(S.newEvents.find(e => e.caseId === id))) === '轉入');
   const g = ids => { const o = countBy(ids, db, genderOf); return { 男: o.男 || 0, 女: o.女 || 0 }; };
   const d = {
     newGender: g(nids),
@@ -1952,7 +1954,7 @@ function caseStatMonth(month, db) {
   const evs = [...new Map(S.newEvents.map(e => [e.caseId, e])).values()];
   text.push(`新案：${evs.length}位`);
   for (const k of ['初評', '出備', '重開案', '轉入']) {
-    const list = evs.filter(e => newKind(e.trigger) === k); if (!list.length) continue;
+    const list = evs.filter(e => newKind(newTrigOf(e)) === k); if (!list.length) continue;
     text.push('', `(${k}-${list.length}位：`);
     for (const r of RG4) {
       const inR = list.filter(e => rg(db.cases.get(e.caseId)) === r); if (!inR.length) continue;
@@ -3411,6 +3413,7 @@ function SummaryView({ db, month, user, refresh }) {
   const auto = useMemo(() => autoTriggers(month, db), [db, month]);
   // 本月觸發：自己打的優先，沒有就用系統自動帶入的（11月結案、11月新案-初評…）
   const trigOf = c => { const e = evOf.get(c._id); return (e && normTrigger(e.trigger)) || auto.get(c._id) || ''; };
+  const isNewC = c => isNewTrigger(trigOf(c)) || isNewTrigger(newTrigOf(evOf.get(c._id)));
   const match = c => (reg === '全部' || regionOf(c.caseNo) === reg) &&
     (!q || String(c.name || '').includes(q) || String(c.idNo || '').includes(q) || String(c.caseNo).includes(q));
   const base = useMemo(() => [...db.cases.values()].filter(c => inSummaryList(c, db.info.get(c._id) || {}, month) && match(c)).sort(sortNo), [db, month, q, reg]);
@@ -3438,12 +3441,12 @@ function SummaryView({ db, month, user, refresh }) {
   const feeGrp = c => { const k = billK.get(c._id); return !k ? '' : K1700.includes(k) ? '1700' : k === 'AA02' ? '400' : k === 'AA02-360' ? '360' : k === '吃不到錢' ? 'none' : ''; };
   // 「沒吃到錢」＝本月核銷選吃不到錢的人；觸發是結案的不算（billKinds 會先把結案歸成結案）
   const list0 = trig === '' ? base : trig === '__any' ? base.filter(c => trigOf(c)) : trig === '__none' ? base.filter(c => !trigOf(c))
-    : trig === '__new' ? base.filter(c => isNewTrigger(trigOf(c))) : base.filter(c => trigOf(c) === trig);
+    : trig === '__new' ? base.filter(isNewC) : base.filter(c => trigOf(c) === trig);
   const list1 = (feeF ? list0.filter(c => feeGrp(c) === feeF) : list0).filter(c => !cmF || (cmOf(c) || '（未填）') === cmF);
   const list = markF === 'on' ? list1.filter(marked) : markF === 'off' ? list1.filter(c => missOf.has(c._id) && offIds[c._id])
     : markF ? list1.filter(c => marked(c) && markKindOf(trigOf(c)) === markF) : list1;
-  const nNewTrig = base.filter(c => isNewTrigger(trigOf(c))).length;
-  const nNew = list.filter(c => isNewTrigger((evOf.get(c._id) || {}).trigger)).length;
+  const nNewTrig = base.filter(isNewC).length;
+  const nNew = list.filter(c => isNewTrigger(newTrigOf(evOf.get(c._id)))).length;
   const feeCell = c => {
     const e = evOf.get(c._id), t = trigOf(c), x = epAt(db.info.get(c._id) || {}, month);
     if (x.close && x.close < month) return '';                       // 之前已結案，不核銷
@@ -3677,7 +3680,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     ${linkOpen && html`<${CareLink} onClose=${ok => { setLinkOpen(false); if (ok) { setToCare(true); setCloseCare(true); } }} />`}
     <div class="bar"><h2 style="margin:0">${!isAdd ? `${(orig || c).name || ''}　${(orig || {}).caseNo || caseNo}` : '新增個案'}</h2>${!isAdd && cmOf(orig || c, cmData) && html`<span class="tag t-ev" title="從 AA02 系統帶入">個管：${cmOf(orig || c, cmData)}</span>`}<span class="grow"></span>
       ${id && html`<${ConfirmBtn} label="刪除個案" onYes=${del} />`}
-      ${!isAdd && html`<button class="btn light" title="把本月觸發設為「結案-」，再填 A結束服務日期和系統結案日期" onClick=${() => { setEm(month); setEvDirty(v => ({ ...v, trigger: '結案-' })); setTimeout(() => { const el = document.getElementById('closeDates'); if (el) el.scrollIntoView({ block: 'center' }); }, 50); }}>辦理結案</button>`}
+      ${!isAdd && html`<button class="btn light" title="把本月觸發設為「結案-」，再填 A結束服務日期和系統結案日期" onClick=${() => { setEm(month); setEvDirty(v => ({ ...v, trigger: '結案-', newTrigger: isNewTrigger(v.trigger) ? normTrigger(v.trigger) : (v.newTrigger || '') })); setTimeout(() => { const el = document.getElementById('closeDates'); if (el) el.scrollIntoView({ block: 'center' }); }, 50); }}>辦理結案</button>`}
       <button class="btn light" onClick=${tryClose}>關閉</button><button class="btn" disabled=${busy || (isAdd && (!kind || (kind === 'new' && !reopen)))} onClick=${save}>${busy ? '儲存中…' : '儲存'}</button></div>
     ${isAdd && html`<div class="card">
       <div class="sect" style="margin-top:0">新增方式</div>
@@ -3713,6 +3716,8 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
         <div class="form"><label>A結束服務日期<${DateInput} style="width:100%" value=${c.aEnd || ''} onChange=${v => setC({ ...c, aEnd: v })} /></label>
           <label>系統結案日期<${DateInput} style="width:100%" value=${c.sysClose || ''} onChange=${v => setC({ ...c, sysClose: v })} /></label></div>
         <div class="sub" style="margin-top:10px">結案原因</div><${ReasonPick} value=${c.closeReason || ''} onChange=${v => setC({ ...c, closeReason: v })} />
+        ${/^結案/.test(normTrigger(ev.trigger)) && html`<div class="sub" style="margin-top:10px">本月也是新案嗎？（當月開案、當月結案的，選原本的新案觸發，新案統計、派案時效才會算進去）</div>
+          <div class="trigbar" style="margin:4px 0 0"><button class=${!ev.newTrigger ? 'on' : ''} onClick=${() => setEvDirty({ ...ev, newTrigger: '' })}>不是新案</button>${NEW_TRIGGERS.map(t => html`<button class=${normTrigger(ev.newTrigger || '') === t ? 'on' : ''} onClick=${() => setEvDirty({ ...ev, newTrigger: t })}>${t}</button>`)}</div>`}
         <div class="care-link" style="margin-top:10px">${careLinked()
           ? html`<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" checked=${closeCare} onChange=${e => setCloseCare(e.target.checked)} /><b>儲存時 AA02 追蹤系統也一起結案</b></label>
             <div class="sub" style="margin-top:4px">依身分證找到 AA02 的同一位個案，把它設為結案（AA02 的其他資料不會動）。之前已經辦好結案的，也可以直接按
