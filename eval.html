@@ -124,6 +124,7 @@
   .trigbar button.arch-todo.on{background:#d9a05b;border-color:#d9a05b;color:#fff}
   .archbar{position:sticky;top:calc(var(--toph, 0px) + 4px);z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#fff;border:1.5px solid var(--green);border-radius:12px;padding:8px 12px;margin:6px 0 10px;box-shadow:0 4px 14px rgba(61,53,41,.1)}
   tr.selrow td{background:#f3f8ef}
+  td.wrapcell{white-space:normal !important;word-break:break-word;line-height:1.5}
   /* 區域分配 */
   .rg-brush{display:flex;flex-wrap:wrap;gap:8px}
   .rg-brush button{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:6px 14px 6px 10px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer}
@@ -3333,8 +3334,8 @@ function bFirstPending(db, c, e, month) {
   const x = epAt(db.info.get(c._id) || {}, month);
   if (!x.openEv || !x.open || x.open < '2026-01' || c.sysClose || c.aEnd) return false;
   if (noBText(e || {}, c, month, db) || noBFirstText(e || {}, c, month, db)) return false;
-  const hs = parseDate(c.homeStart) && c.homeStart.slice(0, 7) >= x.open ? c.homeStart : '';   // 居服進場時間要是這次開案之後的才算
-  return !parseDate(latestOf(db, c, 'bFirst', month) || hs);
+  // 有填日期就算（B單位第一次提供服務日期，或總表的居服進場時間，不管早晚）；寫「尚未提供服務」這類文字還是算沒填
+  return !parseDate(bFirstVal(db, c, month));
 }
 // ---------- 匯出總表（和原本 Excel 總表一樣的欄位，後面多加系統才有的欄位） ----------
 const SUMMARY_HEAD = ['編號', '觸發', '申請來源', '申請來源備註', 'A結束服務日期', '系統結案日期', '姓名', '性別', '身分證號', '出生日期', '年齡', 'CMS', '身分別', '居住', '失智', '身障', '身障等級',
@@ -3795,8 +3796,8 @@ function BFirstPendingView({ db, month, list, evOf, openCase }) {
     ${!rows.length ? html`<div class="tag t-new">都填好了 👍</div>` : html`<div class="tw"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>個管</th><th>開案</th><th>服務代碼</th><th>居服單位</th><th>照會B單位</th><th>照會後幾天</th><th>目前填的</th></tr></thead>
       <tbody>${rows.map(c => { const e = evOf.get(c._id) || {}, x = epAt(db.info.get(c._id) || {}, month), rb = latestOf(db, c, 'referB', month), v = bFirstVal(db, c, month), d = rb ? Math.round((Date.parse(today) - Date.parse(rb)) / 864e5) : null;
         return html`<tr class="click" onClick=${() => openCase(c._id)}><td>${c.caseNo}</td><td><b>${c.name}</b></td><td class=${cmOf(c) ? '' : 'sub'}>${cmOf(c) || '未填'}</td><td>${rocMonth(x.open)}</td>
-          <td style="max-width:240px">${e.codes || latestCodes(db, c, month) || ''}</td><td>${(c.services || {}).home || ''}</td><td>${roc(rb)}</td>
-          <td class=${d !== null && d > 6 ? 'flag' : ''}>${d === null ? '' : d + ' 天'}</td><td class="sub">${v || ''}</td></tr>`; })}</tbody></table></div>`}
+          <td class="wrapcell" style="min-width:180px;max-width:280px">${String(e.codes || latestCodes(db, c, month) || '').split(/[,，、]\s*/).filter(Boolean).join('、')}</td><td class="wrapcell" style="min-width:90px;max-width:160px">${(c.services || {}).home || ''}</td><td style="white-space:nowrap">${roc(rb)}</td>
+          <td class=${d !== null && d > 6 ? 'flag' : ''} style="white-space:nowrap">${d === null ? '' : d + ' 天'}</td><td class="sub" style="white-space:nowrap">${v ? (parseDate(v) ? roc(v) : v) : ''}</td></tr>`; })}</tbody></table></div>`}
   </div>`;
 }
 function ClosedView({ db, user, refresh, openCase, month }) {
