@@ -1764,7 +1764,7 @@ function parseAnnualBook(sheets, year) {
   }
   for (const [name, def] of Object.entries(ANNUAL_CATS)) {
     const aoa = sh(name) || [];
-    for (const off of [0, 8]) {
+    for (const off of [0, 7, 8]) {   // 右半邊（七～十二月）：CMS 工作表少一欄，從第 8 欄開始；其他工作表從第 9 欄
       let cur = {}, label = '';
       for (const r of aoa) {
         const lab = mkOfLabel(r[off]); if (lab) label = lab;
