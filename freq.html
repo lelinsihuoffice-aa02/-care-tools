@@ -263,6 +263,34 @@ function parseWeekdays(text){
 // 4. 不同服務碼別的服務時間不可重疊（DA01、BA13、BA14 除外；BB、BC 碼別與 BD01、BC 碼別與 BD02 重疊也可以）
 // 5. BA05-1 餐別（以開始時間判斷）：
 //    早午餐：上午 8:30 ~ 中午 12:00 之間開始；午餐：中午 12:00 前開始；晚餐：下午 1:00 之後開始
+// 6. 日照（BB）、家托（BC）每天的服務時數下限（同一天同碼別多筆時合計，重疊時段不重複計算）：
+//    BB01、03、05、07、09、11、13 滿 8 小時；BB02、04、06、08、10、12、14 滿 4 小時
+//    BC01、03、05、07、09、11、13 滿 10 小時；BC02、04、06、08、10、12、14 滿 5 小時
+const MIN_HOURS = {BB:{odd:8, even:4}, BC:{odd:10, even:5}};
+function minHoursOf(code){
+  const m = String(code).match(/^(BB|BC)(\d{2})$/);
+  if(!m) return null;
+  const n = +m[2]; if(n < 1 || n > 14) return null;
+  return MIN_HOURS[m[1]][n % 2 ? 'odd' : 'even'];
+}
+// 一天內幾筆服務的實際分鐘數（重疊的時段只算一次）
+function coveredMinutes(list){
+  const iv = list.filter(r => r.start != null).map(r => [r.start, r.end]).sort((a,b) => a[0] - b[0]);
+  let total = 0, cs = null, ce = null;
+  iv.forEach(([s,e]) => { if(ce == null || s > ce){ if(ce != null) total += ce - cs; cs = s; ce = e; } else ce = Math.max(ce, e); });
+  if(ce != null) total += ce - cs;
+  return total;
+}
+function fmtDur(m){ const h = Math.floor(m/60), mm = m % 60; return h + ' 小時' + (mm ? ' ' + mm + ' 分' : ''); }
+function checkHours(code, rs){
+  const need = minHoursOf(code);
+  if(!need) return null;
+  const byD = {}; rs.filter(r => r.start != null).forEach(r => (byD[r.date] = byD[r.date] || []).push(r));
+  const bad = Object.keys(byD).sort().map(d => ({d, mins:coveredMinutes(byD[d]), l:byD[d]})).filter(x => x.mins < need*60);
+  if(!bad.length) return null;
+  return {id:'hours|'+code+'|'+bad.map(b => b.d+'='+b.mins).join(','), code, kind:'time', level:'orange', dates:bad.map(b => b.d),
+    msg:`服務時間需滿 ${need} 小時，有 ${bad.length} 天不足：${bad.map(b => `${fmtMD(b.d)} ${b.l.map(r => fmtHM(r.start)+'–'+fmtHM(r.end)).join('、')}（${fmtDur(b.mins)}）`).join('；')}`};
+}
 const MEAL_CODES = ['BA05-1'];
 const GAP_MIN_HOURS = 3;         // 間隔規則的最短小時數
 const OVERLAP_OK = ['DA01','BA13','BA14'];   // 可以和其他服務時間重疊的碼別
@@ -333,6 +361,7 @@ const RESULT_GROUPS = [
   {key:'quota', title:'核定與使用量', ids:['unapproved','unused','over']},
   {key:'off', title:'非排定時間服務', ids:['extra','resched','meal','tripTime']},
   {key:'dated', title:'標記日期', ids:['missing','missDaily','oneway','units','dup']},
+  {key:'hours', title:'服務時數不足', ids:['hours']},
   {key:'overlap', title:'服務時間重疊', ids:['rovl']},
   {key:'gap', title:'服務間隔與同日規則', ids:['rgap','rgap09','r0107']},
   {key:'usage', title:'本月使用紀錄', ids:['usage']},
@@ -511,6 +540,7 @@ function runChecks({monthKey, rows, plan, standards, meals, freqText, ignore, to
         msg: overlap ? `${fmtMD(d)} 同時段 ${list.length} 筆，疑似重複申報` : noRepeat ? `${fmtMD(d)} 同一天 ${list.length} 筆（${code} 不可當日重複使用）` : `${fmtMD(d)} 同一天 ${list.length} 筆，請確認`});
     });
     if(MEAL_CODES.includes(code)){ const it = checkMeal(code, rs, meals[code]); if(it) items.push(it); }
+    { const it = checkHours(code, rs); if(it) items.push(it); }
     const S = standards[code];
     if(S && S.length && type === 'regular'){
       const sset = new Set(S);
