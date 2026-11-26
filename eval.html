@@ -2467,7 +2467,7 @@ function summaryTplSpec(aoa, month, db) {
   const isNewRow = r => /^新案/.test(String(r[1] || ''));
   aoa = [aoa[0], ...aoa.slice(1).filter(r => !isNewRow(r)), ...aoa.slice(1).filter(isNewRow)];
   const n = aoa.length - 1, m = +month.slice(5), rows = [{ r: 1, tr: 1, vals: [] }];
-  const dash = new Set([1, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 14]);   // 原檔空白寫「-」的欄
+  const dash = new Set([1, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 14, 23]);   // 原檔空白寫「-」的欄（23＝督導簽審日期，沒填寫「-」）
   for (let i = 1; i <= n; i++) {
     const v = aoa[i].slice(0, SUMMARY_X).map((x, j) => (x === '' || x == null) && dash.has(j) ? '-' : x);
     // 出生日期寫成民國年文字（例如 27/04/10），跟原檔看起來一樣、不會被 Excel 當成西元
