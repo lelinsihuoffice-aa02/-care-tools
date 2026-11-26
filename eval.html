@@ -3320,6 +3320,22 @@ const latestOf = (db, c, k, upTo) => {
   for (const e of db.events) if (e.caseId === c._id && e[k] && e.month >= best.m && (!upTo || e.month <= upTo)) best = { m: e.month, v: e[k] };
   return best.v;
 };
+// 總表「B單位第一次服務日期」：有填就寫日期（或填的字，例：尚未提供服務）；
+// 只有 BA（BA09、BA09a 沐浴車不算）、BB 碼要追蹤，其他沒填的寫居服欄的「僅…」（例：僅家托、交通），只有 BA13/BA14 寫代碼
+const bFirstVal = (db, c, month) => latestOf(db, c, 'bFirst', month) || c.homeStart || '';
+function bFirstCell(db, c, e, month) {
+  const v = bFirstVal(db, c, month);
+  if (v) return parseDate(v) ? roc(v) : String(v);
+  return noBText(e || {}, c, month, db) || noBFirstText(e || {}, c, month, db) || '';
+}
+// 該追蹤但還沒填 B單位第一次服務日期：115 年起開案（新案觸發）、還沒結案、要追蹤的碼，日期沒填（寫「尚未提供服務」也算還沒）
+function bFirstPending(db, c, e, month) {
+  const x = epAt(db.info.get(c._id) || {}, month);
+  if (!x.openEv || !x.open || x.open < '2026-01' || c.sysClose || c.aEnd) return false;
+  if (noBText(e || {}, c, month, db) || noBFirstText(e || {}, c, month, db)) return false;
+  const hs = parseDate(c.homeStart) && c.homeStart.slice(0, 7) >= x.open ? c.homeStart : '';   // 居服進場時間要是這次開案之後的才算
+  return !parseDate(latestOf(db, c, 'bFirst', month) || hs);
+}
 // ---------- 匯出總表（和原本 Excel 總表一樣的欄位，後面多加系統才有的欄位） ----------
 const SUMMARY_HEAD = ['編號', '觸發', '申請來源', '申請來源備註', 'A結束服務日期', '系統結案日期', '姓名', '性別', '身分證號', '出生日期', '年齡', 'CMS', '身分別', '居住', '失智', '身障', '身障等級',
   '申請日期', '開案日期', '指派A單位日期', '照專評估日期\n(最新)', '訪視日期\n(最新)', '送審日期\n(最新)', '督導簽審日期\n(最新)', '審核日期\n(最新)', '照會B單位\n(最新)',
@@ -3338,7 +3354,7 @@ function summaryAoa(db, month) {
     const fk = bill.get(c._id);
     return [c.caseNo, normTrigger(e.trigger) || auto.get(c._id) || '-', c.src, c.srcNote, roc(c.aEnd), roc(c.sysClose), c.name, c.gender, c.idNo, roc(c.birth), age(c.birth), c.cms,
       c.identity, c.living, c.dementia, c.disability, c.disLevel, roc(c.applyDate), roc(c.openDate), L('referA'), L('assess'), L('visit'), L('submit'), L('supervisor'), L('approve'), L('referB'),
-      svc('home'), roc(c.homeStart), e.codes || latestOf(db, c, 'codes', month), ...SVC_COLS.map(svc),
+      svc('home'), bFirstCell(db, c, e, month), e.codes || latestOf(db, c, 'codes', month), ...SVC_COLS.map(svc),   /* 居服進場時間＝B單位第一次服務日期 */
       [svc('home'), ...SVC_COLS.map(svc)].filter(isUnitName).length || '', c.area, c.address, c.contact, c.phone,
       fk && FEE[fk] ? FEE[fk].label : fk === 'unset' ? '未選' : '', roc(e.discharge), roc(e.bFirst), c.closeReason || ''];
   });
@@ -3405,6 +3421,7 @@ function SummaryView({ db, month, user, refresh }) {
     return [...m.entries()].filter(([t]) => t).sort((a, b) => order(a[0]) - order(b[0]) || a[0].localeCompare(b[0], 'zh-Hant'));
   }, [base, evOf, auto]);
   const nAny = base.filter(c => trigOf(c)).length;
+  const pendB = useMemo(() => [...db.cases.values()].filter(c => inSummaryList(c, db.info.get(c._id) || {}, month) && bFirstPending(db, c, evOf.get(c._id), month)).sort(sortNo), [db, month, evOf]);
   // 待更新標記
   const offIds = ((db.kv['markOff:' + month] || {}).ids) || {};
   const missOf = useMemo(() => { const m = new Map(); for (const c of base) { const x = markMissing(c, trigOf(c), evOf.get(c._id), db, month); if (x.length) m.set(c._id, x); } return m; }, [base, evOf, auto]);
@@ -3438,7 +3455,8 @@ function SummaryView({ db, month, user, refresh }) {
     <div class="bar sumtool">
       <span class="ampm" style="margin-right:4px">
         <button class=${view === 'list' ? 'on' : ''} onClick=${() => setView('list')}>總表 ${base.length}</button>
-        <button class=${view === 'closed' ? 'on' : ''} onClick=${() => setView('closed')}>結案表 ${nClosed}</button></span>
+        <button class=${view === 'closed' ? 'on' : ''} onClick=${() => setView('closed')}>結案表 ${nClosed}</button>
+        <button class=${view === 'bfirst' ? 'on' : ''} onClick=${() => setView('bfirst')} title="該追蹤 B單位第一次服務、但日期還沒填的個案">待填B單位 ${pendB.length}</button></span>
       <span class="grow"></span>
       ${view === 'list' && html`<span class="sub cnt">共 ${list.length} 案，本月新案 ${nNew}</span>`}
       ${view === 'list' && html`<button class="btn light" onClick=${() => exportSummary(db, month, true)} title="和原本 Excel 總表一樣的欄位，一個月一張工作表">匯出${+month.slice(0, 4) - 1911}年總表</button>
@@ -3449,7 +3467,8 @@ function SummaryView({ db, month, user, refresh }) {
       <select class="inp" value=${reg} onChange=${e => setReg(e.target.value)}>${['全部', ...Object.values(REGIONS)].map(r => html`<option value=${r}>${r}</option>`)}</select>
       <select class="inp" value=${cmF} onChange=${e => setCmF(e.target.value)} title="依負責個管篩選">${[['', `個管：全部（${base.length}）`], ...cmNamesS.map(([n, k]) => [n, `${n}（${k}）`])].map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select>
       ${q && html`<button class="btn sm gray" onClick=${() => setQ('')}>清除</button>`}</div>`}
-    ${view === 'closed' ? html`<${ClosedView} db=${db} month=${month} user=${user} refresh=${refresh} openCase=${id => openEdit({ id })} />`
+    ${view === 'bfirst' ? html`<${BFirstPendingView} db=${db} month=${month} list=${pendB} evOf=${evOf} openCase=${id => openEdit({ id })} />`
+    : view === 'closed' ? html`<${ClosedView} db=${db} month=${month} user=${user} refresh=${refresh} openCase=${id => openEdit({ id })} />`
     : html`
     ${db.cases.size > 0 && (() => {
       const chips = [['', '全部', base.length], ['__any', '有觸發', nAny], ['__new', '全部新案', nNewTrig], ...trigCounts.map(([t, n]) => [t, t, n]), ['__none', '無觸發', base.length - nAny]];
@@ -3729,7 +3748,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
         ${CASE_DATES.map(([k, label]) => html`<label>${label}<${DateInput} style="width:100%" value=${c[k] || ''} onChange=${v => setC({ ...c, [k]: v })} /></label>`)}
         ${EVENT_DATES.map(([k, label]) => html`<label>${k === 'bFirst' ? 'B單位第一次提供服務日期（居服進場）' : label}${k === 'supervisor' || k === 'approve'
           ? html`<span style="display:flex;gap:4px"><${DateInput} style="flex:1;min-width:0" value=${ev[k] || ''} onChange=${v => setEvDirty({ ...ev, [k]: v })} /><${AmPm} value=${ev[k + 'Time']} onChange=${v => setEvDirty({ ...ev, [k + 'Time']: v })} /></span>`
-          : k === 'bFirst' ? html`<${DateInput} style="width:100%" value=${ev.bFirst || (!evOrig || !evOrig.bFirst ? c.homeStart || '' : '')} onChange=${v => { setEvDirty({ ...ev, bFirst: v }); setC({ ...c, homeStart: v }); }} />`
+          : k === 'bFirst' ? html`<${DateInput} allowText=${1} ph="年/月/日 或「尚未提供服務」" style="width:100%" value=${ev.bFirst || (!evOrig || !evOrig.bFirst ? c.homeStart || '' : '')} onChange=${v => { setEvDirty({ ...ev, bFirst: v }); setC({ ...c, homeStart: v }); }} />`
           : html`<${DateInput} style="width:100%" value=${ev[k] || ''} onChange=${v => setEvDirty({ ...ev, [k]: v })} />`}</label>`)}
         <label style="grid-column:1/-1">服務代碼<textarea class="inp codes" rows=${Math.max(1, Math.ceil(String(ev.codes || '').length / 90))} value=${ev.codes || ''} onInput=${e => setEvDirty({ ...ev, codes: e.target.value })}></textarea></label>
       </div>
@@ -3764,6 +3783,22 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
 }
 
 // ================= 結案表 =================
+// 待填 B單位第一次服務日期：點一列打開個案資料，在「B單位第一次提供服務日期」填日期（或「尚未提供服務」）
+function BFirstPendingView({ db, month, list, evOf, openCase }) {
+  const [cm, setCm] = useState(''), today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const cms = [...list.reduce((m, c) => m.set(cmOf(c) || '（未填）', (m.get(cmOf(c) || '（未填）') || 0) + 1), new Map()).entries()].sort((a, b) => b[1] - a[1]);
+  const rows = cm ? list.filter(c => (cmOf(c) || '（未填）') === cm) : list;
+  return html`<div class="card">
+    <h3 style="margin-top:0">待填 B單位第一次服務日期 <span class="tag t-close">${list.length} 人</span></h3>
+    <div class="sub" style="margin-bottom:8px">115 年起開案、還沒結案，服務代碼有居家 BA（沐浴車 BA09 不算）或日照 BB，但「B單位第一次提供服務日期」還沒填日期的人。只有陪同 BA13／BA14、僅交通、僅輔具等不用追蹤，不會列在這裡。點名字打開個案資料就能填，填好日期就會從清單消失。</div>
+    ${cms.length > 1 && html`<div class="trigbar" style="margin-bottom:8px"><span class="sub">個管：</span>${[['', '全部', list.length], ...cms.map(([n, k]) => [n, n, k])].map(([k, l, n]) => html`<button class=${cm === k ? 'on' : ''} onClick=${() => setCm(cm === k ? '' : k)}>${l}<b>${n}</b></button>`)}</div>`}
+    ${!rows.length ? html`<div class="tag t-new">都填好了 👍</div>` : html`<div class="tw"><table class="grid"><thead><tr><th>編號</th><th>姓名</th><th>個管</th><th>開案</th><th>服務代碼</th><th>居服單位</th><th>照會B單位</th><th>照會後幾天</th><th>目前填的</th></tr></thead>
+      <tbody>${rows.map(c => { const e = evOf.get(c._id) || {}, x = epAt(db.info.get(c._id) || {}, month), rb = latestOf(db, c, 'referB', month), v = bFirstVal(db, c, month), d = rb ? Math.round((Date.parse(today) - Date.parse(rb)) / 864e5) : null;
+        return html`<tr class="click" onClick=${() => openCase(c._id)}><td>${c.caseNo}</td><td><b>${c.name}</b></td><td class=${cmOf(c) ? '' : 'sub'}>${cmOf(c) || '未填'}</td><td>${rocMonth(x.open)}</td>
+          <td style="max-width:240px">${e.codes || latestCodes(db, c, month) || ''}</td><td>${(c.services || {}).home || ''}</td><td>${roc(rb)}</td>
+          <td class=${d !== null && d > 6 ? 'flag' : ''}>${d === null ? '' : d + ' 天'}</td><td class="sub">${v || ''}</td></tr>`; })}</tbody></table></div>`}
+  </div>`;
+}
 function ClosedView({ db, user, refresh, openCase, month }) {
   const all = useMemo(() => closureList(db), [db]);
   const years = useMemo(() => [...new Set(all.map(x => (x.sysClose || '').slice(0, 4)).filter(Boolean))].sort().reverse(), [all]);
