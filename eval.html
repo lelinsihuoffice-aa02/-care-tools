@@ -537,8 +537,15 @@ function normTrigger(t) {
 }
 // 新案＝觸發開頭是「新案」；單純「出轉初」不算新案（要算新案請選「新案-轉入-出轉初」）
 const isNewTrigger = t => normTrigger(t).startsWith('新案');
-// 當月新案、當月就結案：觸發改成「結案-」，原本的新案觸發記在 e.newTrigger，新案統計照算
-const newTrigOf = e => !e ? '' : isNewTrigger(e.trigger) || /^\d{1,2}月新案/.test(normTrigger(e.trigger)) ? e.trigger : e.newTrigger && isNewTrigger(e.newTrigger) ? e.newTrigger : e.trigger;
+// 當月新案、當月就結案：觸發寫成「新案-初評/結案-」，前半段當新案算（新案統計、派案時效都照算），後半段當結案
+// （舊版存成 trigger「結案-」＋ newTrigger 的也照算）
+const newTrigOf = e => {
+  if (!e) return '';
+  const p = normTrigger(e.trigger).split('/')[0];
+  if (isNewTrigger(p) || /^\d{1,2}月新案/.test(p)) return p;
+  return e.newTrigger && isNewTrigger(e.newTrigger) ? normTrigger(e.newTrigger) : e.trigger;
+};
+const closeCombo = nt => normTrigger(nt) ? normTrigger(nt).split('/')[0] + '/結案-' : '結案-';
 // 結案觸發：
 //   「結案-」「結案400-」＝本月結案
 //   「10月結案」「10月結案-」（有沒有 - 都一樣）＝10 月已結案、本月只是還留在總表
@@ -556,7 +563,7 @@ function closeMonthOf(t, evMonth) {
   if (/\/\s*結案/.test(t)) return evMonth;   // 「複評-1700/結案-」這種：同一個月複評又結案
   return '';
 }
-const isCloseTrigger = t => /^((\d{1,2}月)|上月)?結案/.test(normTrigger(t));
+const isCloseTrigger = t => /^((\d{1,2}月)|上月)?結案/.test(normTrigger(t)) || /\/結案/.test(normTrigger(t));
 
 // ---------- 地區 ----------
 const REGIONS = { '04': '四湖', '05': '台西', '06': '麥寮', '07': '東勢' };
@@ -1293,7 +1300,7 @@ function defaultFee(t) {
   t = normTrigger(t);
   if (!t) return DEFAULT_FEE_NO_TRIGGER;
   if (/^結案400/.test(t)) return '400';
-  if (/^結案/.test(t)) return 'none';
+  if (/^結案/.test(t) || /\/結案/.test(t)) return 'none';
   return 'unset';
 }
 function billing(month, db) {
@@ -1525,6 +1532,7 @@ function newKind(t) {
 // 個案統計的來源（只看本月自己打的觸發）
 function sourceKind(t) {
   t = normTrigger(t);
+  if (/^新案.*\/結案/.test(t)) t = t.split('/')[0];   // 新案-XX/結案-：照新案的來源算
   if (!t || /^(\d{1,2}月|上月)/.test(t) || /結案/.test(t)) return '';
   if (/出轉初$/.test(t)) return '出→初';
   if (/AA02/.test(t)) return 'AA02';   // 觸發裡有 AA02 的（新案-轉入-AA02、新案-重開案-AA02…）；「-」不算
@@ -3630,7 +3638,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
       if (isAdd && kind === 'new' && toCare) {
         try { const r = await pushCaseToCareApp(c, String(c.careManager || '').trim(), cmData); toast(r === 'added' ? `已儲存，也已匯入 AA02 系統${c.careManager ? `（個管：${c.careManager}）` : ''}` : '已儲存；AA02 系統已經有這位個案，沒有重複新增'); }
         catch (e) { toast('已儲存，但新增到 AA02 系統失敗：' + (e.message || e), true); }
-      } else if (!isAdd && closeCare && careLinked() && orig && (/^結案/.test(normTrigger(ev.trigger || '')) || c.sysClose || c.aEnd)) {
+      } else if (!isAdd && closeCare && careLinked() && orig && (isCloseTrigger(ev.trigger || '') || c.sysClose || c.aEnd)) {
         // 辦理結案 → AA02 也一起結案（只改結案狀態，其他資料不動）
         try { const r = await closeCaseInCareApp(c); toast(r === 'closed' ? '已儲存，AA02 系統也已結案' : r === 'already' ? '已儲存；AA02 系統本來就是結案' : '已儲存；AA02 系統找不到這位個案（身分證對不到），沒有結案', r === 'none'); }
         catch (e) { toast('已儲存，但 AA02 結案失敗：' + (e.message || e), true); }
@@ -3680,7 +3688,7 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     ${linkOpen && html`<${CareLink} onClose=${ok => { setLinkOpen(false); if (ok) { setToCare(true); setCloseCare(true); } }} />`}
     <div class="bar"><h2 style="margin:0">${!isAdd ? `${(orig || c).name || ''}　${(orig || {}).caseNo || caseNo}` : '新增個案'}</h2>${!isAdd && cmOf(orig || c, cmData) && html`<span class="tag t-ev" title="從 AA02 系統帶入">個管：${cmOf(orig || c, cmData)}</span>`}<span class="grow"></span>
       ${id && html`<${ConfirmBtn} label="刪除個案" onYes=${del} />`}
-      ${!isAdd && html`<button class="btn light" title="把本月觸發設為「結案-」，再填 A結束服務日期和系統結案日期" onClick=${() => { setEm(month); setEvDirty(v => ({ ...v, trigger: '結案-', newTrigger: isNewTrigger(v.trigger) ? normTrigger(v.trigger) : (v.newTrigger || '') })); setTimeout(() => { const el = document.getElementById('closeDates'); if (el) el.scrollIntoView({ block: 'center' }); }, 50); }}>辦理結案</button>`}
+      ${!isAdd && html`<button class="btn light" title="把本月觸發設為「結案-」（本月是新案的會變成「新案-XX/結案-」），再填 A結束服務日期和系統結案日期" onClick=${() => { setEm(month); setEvDirty(v => ({ ...v, trigger: isNewTrigger(newTrigOf(v)) ? closeCombo(newTrigOf(v)) : isCloseTrigger(v.trigger) ? v.trigger : '結案-', newTrigger: '' })); setTimeout(() => { const el = document.getElementById('closeDates'); if (el) el.scrollIntoView({ block: 'center' }); }, 50); }}>辦理結案</button>`}
       <button class="btn light" onClick=${tryClose}>關閉</button><button class="btn" disabled=${busy || (isAdd && (!kind || (kind === 'new' && !reopen)))} onClick=${save}>${busy ? '儲存中…' : '儲存'}</button></div>
     ${isAdd && html`<div class="card">
       <div class="sect" style="margin-top:0">新增方式</div>
@@ -3711,13 +3719,13 @@ function CaseEditor({ db, month, user, id, onClose, refresh, draft }) {
     ${(!isAdd || kind === 'other' || (kind === 'new' && reopen)) && html`<div>
     <div class="card">
       <div class="sect" style="margin-top:0">基本資料</div>
-      ${!isAdd && (/^結案/.test(normTrigger(ev.trigger)) || (orig && (orig.aEnd || orig.sysClose || orig.closeReason))) && html`<div id="closeDates" class="card" style="background:#FDFBF6;margin-bottom:10px">
+      ${!isAdd && (isCloseTrigger(ev.trigger) || (orig && (orig.aEnd || orig.sysClose || orig.closeReason))) && html`<div id="closeDates" class="card" style="background:#FDFBF6;margin-bottom:10px">
         <b>辦理結案</b><div class="sub" style="margin:4px 0 8px">兩個日期都填好後，下個月起這個個案會自動移到「結案表」，不再出現在總表。</div>
         <div class="form"><label>A結束服務日期<${DateInput} style="width:100%" value=${c.aEnd || ''} onChange=${v => setC({ ...c, aEnd: v })} /></label>
           <label>系統結案日期<${DateInput} style="width:100%" value=${c.sysClose || ''} onChange=${v => setC({ ...c, sysClose: v })} /></label></div>
         <div class="sub" style="margin-top:10px">結案原因</div><${ReasonPick} value=${c.closeReason || ''} onChange=${v => setC({ ...c, closeReason: v })} />
-        ${/^結案/.test(normTrigger(ev.trigger)) && html`<div class="sub" style="margin-top:10px">本月也是新案嗎？（當月開案、當月結案的，選原本的新案觸發，新案統計、派案時效才會算進去）</div>
-          <div class="trigbar" style="margin:4px 0 0"><button class=${!ev.newTrigger ? 'on' : ''} onClick=${() => setEvDirty({ ...ev, newTrigger: '' })}>不是新案</button>${NEW_TRIGGERS.map(t => html`<button class=${normTrigger(ev.newTrigger || '') === t ? 'on' : ''} onClick=${() => setEvDirty({ ...ev, newTrigger: t })}>${t}</button>`)}</div>`}
+        ${isCloseTrigger(ev.trigger) && html`<div class="sub" style="margin-top:10px">本月也是新案嗎？（當月開案、當月結案的選原本的新案觸發，觸發會變成「新案-XX/結案-」，新案統計、派案時效都會算進去）</div>
+          <div class="trigbar" style="margin:4px 0 0"><button class=${!isNewTrigger(newTrigOf(ev)) ? 'on' : ''} onClick=${() => setEvDirty({ ...ev, trigger: '結案-', newTrigger: '' })}>不是新案</button>${NEW_TRIGGERS.map(t => html`<button class=${normTrigger(newTrigOf(ev)) === t ? 'on' : ''} onClick=${() => setEvDirty({ ...ev, trigger: closeCombo(t), newTrigger: '' })}>${t}</button>`)}</div>`}
         <div class="care-link" style="margin-top:10px">${careLinked()
           ? html`<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" checked=${closeCare} onChange=${e => setCloseCare(e.target.checked)} /><b>儲存時 AA02 追蹤系統也一起結案</b></label>
             <div class="sub" style="margin-top:4px">依身分證找到 AA02 的同一位個案，把它設為結案（AA02 的其他資料不會動）。之前已經辦好結案的，也可以直接按
@@ -4579,7 +4587,7 @@ function CloseCompare({ db, month, onClose }) {
       const token = await careToken(), list = await careCases(token), byId = new Map();
       for (const r of list || []) { if (r.closed) continue; let d = {}; try { d = JSON.parse(r.data || '{}'); } catch { } const id = normId(d.idNo); if (id) byId.set(id, [...(byId.get(id) || []), { r, d }]); }
       const trigNow = new Map(db.events.filter(e => e.month === month).map(e => [e.caseId, normTrigger(e.trigger)]));
-      const isClosed = c => !!(c.sysClose || c.aEnd || /^結案/.test(trigNow.get(c._id) || ''));
+      const isClosed = c => !!(c.sysClose || c.aEnd || isCloseTrigger(trigNow.get(c._id) || ''));
       const openIds = new Set([...db.cases.values()].filter(c => !isClosed(c)).map(c => normId(c.idNo)).filter(Boolean));
       const out = [];
       for (const c of db.cases.values()) { const id = normId(c.idNo); if (!id || !isClosed(c) || openIds.has(id)) continue;
