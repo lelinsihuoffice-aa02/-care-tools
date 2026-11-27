@@ -401,6 +401,17 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
 .qheat td{text-align:center;padding:8px 4px;border-radius:7px;font-weight:600;min-width:38px;font-size:13px}
 .qheat td.pk{cursor:pointer}.qheat td.pk:hover{outline:2px solid #3d3a35;outline-offset:-2px}.qheat td.na{background:repeating-linear-gradient(45deg,#f6f2ea,#f6f2ea 4px,#fff 4px,#fff 8px)!important}
 .qheat td.tot,.qheat tr.sum td{background:#f3eee5!important;color:#3d3a35!important}
+.qdet td.on{background:#dff0e8;color:#17604b;font-weight:700}.qdet td{font-size:13px}
+.qnd{margin-top:12px;border:1px solid var(--line,#eadfcf);border-radius:16px;background:#fff;padding:14px 16px}
+.qnd-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px}.qnd-bar .sub{font-size:12px;flex:1 1 260px}
+.qnd-m{margin-top:8px}.qnd-mh{font-weight:700;color:#3d3a35;padding:6px 2px;border-bottom:1px solid #f0e8db;margin-bottom:4px}.qnd-mh span{font-weight:400;color:var(--sub);font-size:12px;margin-left:8px}
+.qnd-r{display:flex;align-items:center;gap:14px;padding:8px 6px;border-radius:10px}.qnd-r:hover{background:#faf7f1}.qnd-r.none .qnd-who a{color:#8a8072}
+.qnd-who{display:flex;align-items:baseline;gap:8px;min-width:250px}.qnd-who a{font-weight:700}.qnd-who span{font-size:12px;color:var(--sub)}.qnd-who em{font-style:normal;font-size:12px;color:#a0662a;background:#fbf3e6;border-radius:6px;padding:1px 6px}
+.qnd-tags{display:flex;flex-wrap:wrap;gap:6px}
+.qtag{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px 3px 4px;font-size:13px;background:#f3f0ea;color:#6b655c}
+.qtag i{font-style:normal;font-size:11px;background:#fff;border-radius:999px;padding:1px 7px;color:#8a8072}
+.qtag.on{background:#dff0e8;color:#17604b;font-weight:600}.qtag.on i{color:#1f8a70}
+@media(max-width:700px){.qnd-r{flex-direction:column;align-items:flex-start;gap:6px}.qnd-who{min-width:0}}
 </style>
 </head>
 <body>
@@ -3182,6 +3193,8 @@ const Q_ALIAS = { 祥賀: '平安', 紅十字: '紅十字會' };
 const qUnit = u => Q_ALIAS[u] || u;
 const qMerge = o => { if (!o) return o; const r = {}; for (const [k, v] of Object.entries(o)) { const u = qUnit(k); r[u] = (r[u] || 0) + (+v || 0); } return r; };
 const qShortUnits = (e, c, db) => caseUnits(e, c, (raw, k) => unitShort(db.resolveUnit(raw), k, db.units));
+// 新案的服務：當月總表寫的為主，當月沒寫的服務改看個案資料（總表最新）上的（很多新案開案當月單位還沒填，之後才補）
+const qNewUnits = (e, c, db, sh = true) => { const f = sh ? (x, y) => qShortUnits(x, y, db) : (x, y) => caseUnits(x, y, raw => db.resolveUnit(raw)); const cur = f(null, c), m = f(e, c); for (const k of Object.keys(m)) if (m[k] === '（未填單位）' && cur[k] && cur[k] !== '（未填單位）') delete m[k]; return { ...cur, ...m }; };
 const qDeptOf = us => Object.fromEntries(QDEPTS.map(([n, ks]) => [n, ks.some(k => isLelin(us[k])) ? 1 : 0]));
 // 一個月（系統算）：只算當月新案；轉介樂臨各部門＝新案用到樂臨那個部門；轉介友單位＝新案的居家服務單位
 function quarterMonth(mk, db) {
@@ -3189,7 +3202,7 @@ function quarterMonth(mk, db) {
   for (const e of S.newEvents) {
     if (seen.has(e.caseId)) continue; seen.add(e.caseId);
     const c = db.cases.get(e.caseId); if (!c) continue;
-    const us = qShortUnits(e, c, db), d = qDeptOf(us);
+    const us = qNewUnits(e, c, db), d = qDeptOf(us);
     for (const k in d) dept[k] += d[k];
     const h = qUnit(us.home); if (h && h !== '（未填單位）') home[h] = (home[h] || 0) + 1;
   }
@@ -3202,6 +3215,13 @@ function quarterSnap(mk, db) {
   for (const id of S.latest) { const c = db.cases.get(id); if (!c) continue; const d = qDeptOf(qShortUnits(evOf.get(id), c, db)); for (const k in d) out[k] += d[k]; }
   return out;
 }
+// 逐筆對照：當月每位新案、各部門對應的服務寫了什麼單位（找沒被算到的原因）
+function quarterNewDetail(mk, db) {
+  const S = monthSets(mk, db), seen = new Set(), out = [];
+  for (const e of S.newEvents) { if (seen.has(e.caseId)) continue; seen.add(e.caseId); const c = db.cases.get(e.caseId); if (!c) continue;
+    const us = qNewUnits(e, c, db); out.push({ id: c._id, mk, trig: normTrigger(newTrigOf(e)), units: Object.fromEntries(QDEPTS.map(([n, ks]) => [n, ks.map(k => us[k]).filter(Boolean).join('、')])), dept: qDeptOf(us) }); }
+  return out;
+}
 // 點進去看是哪些個案：{ 部門: [{ id, unit 那個部門用的單位全名 }] }；kind＝'snap'（總表在案）或 'new'（當月新案）
 function quarterDeptCases(mk, db, kind) {
   const S = monthSets(mk, db), out = Object.fromEntries(QDEPTS.map(([n]) => [n, []])), evOf = new Map();
@@ -3209,7 +3229,7 @@ function quarterDeptCases(mk, db, kind) {
   const ids = kind === 'new' ? [...new Set(S.newEvents.map(e => e.caseId))] : S.latest;
   for (const id of ids) {
     const c = db.cases.get(id); if (!c) continue;
-    const e = evOf.get(id), sh = qShortUnits(e, c, db), full = caseUnits(e, c, raw => db.resolveUnit(raw));
+    const e = evOf.get(id), sh = kind === 'new' ? qNewUnits(e, c, db) : qShortUnits(e, c, db), full = kind === 'new' ? qNewUnits(e, c, db, false) : caseUnits(e, c, raw => db.resolveUnit(raw));
     for (const [n, ks] of QDEPTS) { const k = ks.find(k => isLelin(sh[k])); if (k) out[n].push({ id, unit: full[k] || sh[k], cat: (CAT[k] || {}).label || k }); }
   }
   return out;
@@ -5069,11 +5089,29 @@ function QHeat({ title, rows, cols, val, onPick, hint }) {
       ${rows.map(r => { const tot = cols.reduce((a, c) => a + (+val(r, c) || 0), 0); return html`<tr><th>${r}</th>${cols.map(c => { const v = val(r, c); return html`<td style=${`background:${bg(+v || 0)};color:${(+v || 0) / max > 0.55 ? '#fff' : '#3d3a35'}`} class=${v === null || v === undefined ? 'na' : onPick && +v ? 'pk' : ''} title=${`${r} ${c.label}：${v ?? '—'}`} onClick=${() => onPick && +v && onPick(r, c)}>${v === null || v === undefined ? '' : v || ''}</td>`; })}<td class="tot">${tot}</td></tr>`; })}
       <tr class="sum"><th>合計</th>${cols.map(c => { const has = rows.some(r => val(r, c) !== null && val(r, c) !== undefined); return html`<td>${has ? rows.reduce((a, r) => a + (+val(r, c) || 0), 0) : ''}</td>`; })}<td class="tot">${rows.reduce((a, r) => a + cols.reduce((b, c) => b + (+val(r, c) || 0), 0), 0)}</td></tr></tbody></table></div></div>`;
 }
+// 逐筆對照：每位新案一列，樂臨的部門是綠色標籤、別家單位是灰色標籤；可以搜尋姓名、只看沒算到樂臨的
+function QNewDetail({ db, D, list, onOpen }) {
+  const [f, setF] = useState('全部'), [q, setQ] = useState('');
+  const has = x => D.some(d => x.dept[d]);
+  const F = { 全部: () => true, 有算到樂臨: has, 沒有樂臨: x => !has(x) };
+  const shown = list.filter(x => F[f](x) && (!q || ((db.cases.get(x.id) || {}).name || '').includes(q.trim()) || ((db.cases.get(x.id) || {}).caseNo || '').includes(q.trim())));
+  const months = [...new Set(shown.map(x => x.mk))];
+  return html`<div class="qnd">
+    <div class="qnd-bar"><div class="trigbar" style="margin:0">${Object.keys(F).map(k => html`<button class=${f === k ? 'on' : ''} onClick=${() => setF(k)}>${k}<b>${list.filter(F[k]).length}</b></button>`)}</div>
+      <input class="inp" style="width:180px" placeholder="搜尋姓名或個案編號" value=${q} onInput=${e => setQ(e.target.value)} />
+      <span class="sub">綠色＝算進樂臨那個部門；灰色＝有填單位但不是樂臨。開案當月總表沒寫的服務，改看個案資料目前填的。</span></div>
+    ${!shown.length && html`<div class="sub" style="padding:12px 4px">沒有符合的新案</div>`}
+    ${months.map(mk => html`<div class="qnd-m"><div class="qnd-mh">${+mk.slice(5)}月<span>${shown.filter(x => x.mk === mk).length} 位新案</span></div>
+      ${shown.filter(x => x.mk === mk).map(x => { const c = db.cases.get(x.id) || {}; return html`<div class=${'qnd-r' + (has(x) ? '' : ' none')}>
+        <div class="qnd-who"><a class="numlink" onClick=${() => onOpen(x.id)}>${c.name}</a><span>${c.caseNo}</span><em>${x.trig}</em></div>
+        <div class="qnd-tags">${D.filter(d => x.units[d]).map(d => html`<span class=${'qtag' + (x.dept[d] ? ' on' : '')}><i>${d}</i>${x.units[d]}</span>`)}${!D.some(d => x.units[d]) && html`<span class="sub" style="font-size:12px">這些服務都沒有填單位</span>`}</div></div>`; })}</div>`)}
+  </div>`;
+}
 function QuarterView({ db, month, user, refresh, picker }) {
   const [year, setYear] = useState(Math.max(BILL_YEAR_FROM, +month.slice(0, 4))), yy = year - 1911;
   const [tab, setTab] = useState(() => { try { return localStorage.getItem('qTab') || Q_TABS[0]; } catch { return Q_TABS[0]; } });
   const pickTab = t => { setTab(t); setPick(null); try { localStorage.setItem('qTab', t); } catch { } };
-  const [pick, setPick] = useState(null), [edit, setEdit] = useState(null);
+  const [pick, setPick] = useState(null), [edit, setEdit] = useState(null), [detail, setDetail] = useState(false);
   const Q = useMemo(() => quarterCalc(year, db), [db, year]);
   const [rg, setRg] = useState(null), m1 = rg ? rg[0] : 1, m2 = rg ? rg[1] : Math.max(1, Q.lastM || 12), [busy, setBusy] = useState(false);
   const importOld = async file => {
@@ -5112,7 +5150,9 @@ function QuarterView({ db, month, user, refresh, picker }) {
       <div class="sub" style="margin-top:6px">每月在案人數（含當月結案），跟「5.數據統計」的男女性別比例（含結案）同一份數字。</div>`;
   } else if (tab === '轉介樂臨各部門') {
     body = html`<table class="grid qtab"><thead><tr><th>月份</th>${D.map(d => html`<th class="num">${d}</th>`)}</tr></thead><tbody>${qRows((i, d) => Q.rows[i] && Q.rows[i].dept ? Q.rows[i].dept[d] || 0 : '', D)}</tbody></table>
-      <div class="sub" style="margin-top:6px">每個月都用系統算（點得出個案名單）；只算當月新案。居家服務、交通、沐浴車（BA09、BA09a）、居家喘息、專業服務、日間照顧、日間照顧喘息（分開算），單位是樂臨的才算。</div>`;
+      <div class="sub" style="margin-top:6px">每個月都用系統算（點得出個案名單）；只算當月新案。居家服務、交通、沐浴車（BA09、BA09a）、居家喘息、專業服務、日間照顧、日間照顧喘息（分開算），單位是樂臨的才算。</div>
+      <div style="margin-top:10px"><button class="btn light sm" onClick=${() => setDetail(!detail)}>${detail ? '收起逐筆對照' : `逐筆對照 ${m1}-${m2} 月每位新案的服務單位`}</button></div>
+      ${detail && html`<${QNewDetail} db=${db} D=${D} list=${Array.from({ length: m2 - m1 + 1 }, (_, k) => m1 - 1 + k).flatMap(i => Q.rows[i] ? quarterNewDetail(`${year}-${pad(i + 1)}`, db) : [])} onOpen=${id => setEdit(id)} />`}`;
   } else if (tab === '樂臨各部門個案統計') {
     body = html`${Q.snap ? html`<table class="grid qtab"><thead><tr><th>地區</th>${D.map(d => html`<th class="num">${d}</th>`)}</tr></thead><tbody><tr><td>總計</td>${D.map(d => html`<td class="num"><b>${Q.snap.v[d] || 0}</b></td>`)}</tr></tbody></table>` : html`<div class="sub">還沒有資料</div>`}
       <div class="sub" style="margin-top:6px">${Q.snap ? (Q.snap.src === '舊檔' ? '數字來自帶入的舊檔。' : Q.snap.mk.endsWith('-12') ? `${yy}年 12 月總表（12/31）` : `還沒到年底，先用 ${rocMonth(Q.snap.mk)} 的總表`) : ''}：總表裡（不含當月結案）有用樂臨各部門的人數。</div>`;
