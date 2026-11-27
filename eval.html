@@ -387,6 +387,7 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
 .qtabs{margin:0 0 10px}
 .qtab td,.qtab th{white-space:nowrap}.qtab tr.qsum td{background:#f7f2ea;font-weight:600}.qtab tr.cur td{background:#fbf8f2}
 .qratio{display:flex;flex-wrap:wrap;gap:16px;align-items:baseline;margin-bottom:10px}.qratio b{font-size:20px}
+.qrange{display:inline-flex;align-items:center;gap:6px;font-size:14px}.qrange select{width:auto}
 </style>
 </head>
 <body>
@@ -3162,6 +3163,10 @@ const billAmtOf = o => o ? (o.a1 || 0) * 1700 + (o.a400 || 0) * 400 + (o.a360 ||
 const QDEPTS = [['居家服務', ['home']], ['樂臨交通', ['traffic', 'ctraffic']], ['到宅沐浴車', ['bath']], ['居家喘息', ['resp']], ['居家護理所', ['prof']], ['日照', ['day']], ['日喘', ['dayresp']]];
 const QUNITS0 = ['樂臨', '康安', '紅十字會', '康泰', '四湖鄉立', '安得寶', '承鑫', '正唯', '庭安', '永安', '伯欣', '星奇', '守護寧', '慈暉', '平安', '臺西', '太舜', '安喬'];
 const isLelin = u => /樂臨/.test(u || '');
+// 季報的居家單位：同一間不同名字的併成一欄（祥賀＝平安、紅十字＝紅十字會）
+const Q_ALIAS = { 祥賀: '平安', 紅十字: '紅十字會' };
+const qUnit = u => Q_ALIAS[u] || u;
+const qMerge = o => { if (!o) return o; const r = {}; for (const [k, v] of Object.entries(o)) { const u = qUnit(k); r[u] = (r[u] || 0) + (+v || 0); } return r; };
 const qShortUnits = (e, c, db) => caseUnits(e, c, (raw, k) => unitShort(db.resolveUnit(raw), k, db.units));
 const qDeptOf = us => Object.fromEntries(QDEPTS.map(([n, ks]) => [n, ks.some(k => isLelin(us[k])) ? 1 : 0]));
 // 一個月（系統算）：只算當月新案；轉介樂臨各部門＝新案用到樂臨那個部門；轉介友單位＝新案的居家服務單位
@@ -3172,7 +3177,7 @@ function quarterMonth(mk, db) {
     const c = db.cases.get(e.caseId); if (!c) continue;
     const us = qShortUnits(e, c, db), d = qDeptOf(us);
     for (const k in d) dept[k] += d[k];
-    const h = us.home; if (h && h !== '（未填單位）') home[h] = (home[h] || 0) + 1;
+    const h = qUnit(us.home); if (h && h !== '（未填單位）') home[h] = (home[h] || 0) + 1;
   }
   return { dept, home };
 }
@@ -3188,9 +3193,12 @@ function quarterYear(year, db, qh, ah, upTo) {
   const months = Array.from({ length: 12 }, (_, i) => `${year}-${pad(i + 1)}`), A = annualBook(year, db, ah, upTo).data, H = (qh && qh.m) || {};
   const rows = months.map((mk, i) => {
     if (mk > upTo) return null;
-    const h = H[mk.slice(5)], useH = h && mk < SYSTEM_FROM, a = A[i], sys = db.events.some(e => e.month === mk) ? quarterMonth(mk, db) : null;
-    const pick = (k, alt) => useH && h[k] ? h[k] : alt;
-    const r = { newG: pick('newG', a && a.newGender), totG: pick('totG', a && a.genderWith), dept: pick('dept', sys && sys.dept), home: pick('home', sys && sys.home), src: useH ? '舊檔' : sys ? '系統' : a ? '舊檔' : '' };
+    // 11 月以前（含 10 月）一律用匯入的：季報舊檔，性別人數沒有的話用「5.數據統計」匯入的；11 月起才用系統算
+    const h = H[mk.slice(5)] || {}, old = mk < SYSTEM_FROM, a = A[i], sys = !old && db.events.some(e => e.month === mk) ? quarterMonth(mk, db) : null;
+    const aOld = a && a.src === '匯入' ? a : null;
+    const r = old
+      ? { newG: h.newG || (aOld && aOld.newGender), totG: h.totG || (aOld && aOld.genderWith), dept: h.dept || null, home: qMerge(h.home) || null, src: '匯入' }
+      : { newG: a && a.newGender, totG: a && a.genderWith, dept: sys && sys.dept, home: qMerge(sys && sys.home), src: '系統' };
     return r.newG || r.totG || r.dept || r.home ? r : null;
   });
   // 各部門個案統計：12 月（還沒到就用最後一個有資料的月份）
@@ -4894,27 +4902,34 @@ function quarterCalc(year, db) {
   const Y = quarterYear(year, db, db.kv['quarter:' + year], (db.kv['stat:annual'] || {}).months || {}, upTo);
   // 歷年：以前的從舊檔，115 年起每年用系統算的
   const H = db.kv.quarterHist || { units: [], rows: {} }, hist = [];
-  for (const ym of Object.keys(H.rows || {}).sort()) if (ym < `${BILL_YEAR_FROM}-01`) hist.push([ym, H.rows[ym]]);
-  for (let y = BILL_YEAR_FROM; y < year; y++) { const Z = quarterYear(y, db, db.kv['quarter:' + y], (db.kv['stat:annual'] || {}).months || {}, `${y}-12`); Z.months.forEach((mk, i) => hist.push([mk, (Z.rows[i] && Z.rows[i].home) || (H.rows || {})[mk] || {}])); }
+  for (const ym of Object.keys(H.rows || {}).sort()) if (ym < `${BILL_YEAR_FROM}-01`) hist.push([ym, qMerge(H.rows[ym])]);
+  for (let y = BILL_YEAR_FROM; y < year; y++) { const Z = quarterYear(y, db, db.kv['quarter:' + y], (db.kv['stat:annual'] || {}).months || {}, `${y}-12`); Z.months.forEach((mk, i) => hist.push([mk, (Z.rows[i] && Z.rows[i].home) || qMerge((H.rows || {})[mk]) || {}])); }
   const units = [...Y.units]; for (const [, o] of hist) for (const u of Object.keys(o || {})) if (!units.includes(u)) units.push(u);
   const lastM = Y.rows.reduce((a, r, i) => r ? i + 1 : a, 0);
   return { ...Y, hist, units, lastM, bill: (db.kv['billFinal:' + year] || {}).m || {} };
 }
-// q＝1～4 匯出那一季；q＝0 匯出整年（圖表改成 1～12 月）
-async function exportQuarter(year, q, db, Q) {
-  const full = !q, qx = q || Math.max(1, Math.ceil((Q.lastM || 12) / 3));
+// 匯出 m1～m2 月：範圍外的月份留白，圖表也都只畫這幾個月
+const expandSer = (cx, from, rows) => { const sers = cx.match(/<c:ser>[\s\S]*?<\/c:ser>/g) || []; if (!sers.length) return cx;
+  const out = rows.map((r, k) => { const j = k % sers.length, o = from[j]; let x = sers[j].replace(/<c:idx val="\d+"\/>/, `<c:idx val="${k}"/>`).replace(/<c:order val="\d+"\/>/, `<c:order val="${k}"/>`)
+    .replace(/<c:f>([^<]*)<\/c:f>/g, (m, f) => `<c:f>${f.replace(new RegExp('\\$' + o + '\\b', 'g'), '$' + r)}</c:f>`); if (k >= sers.length) x = x.replace(/<c:spPr>[\s\S]*?<\/c:spPr>/, ''); return x; });
+  let i = 0; return cx.replace(/<c:ser>[\s\S]*?<\/c:ser>/g, () => i++ === 0 ? out.join('') : ''); };
+async function exportQuarter(year, m1, m2, db, Q0) {
+  const inR = i => i + 1 >= m1 && i + 1 <= m2, rng = `${m1}-${m2} 月`;
+  const Q = { ...Q0, rows: Q0.rows.map((r, i) => inR(i) ? r : null), bill: Object.fromEntries(Object.entries(Q0.bill || {}).filter(([k]) => +k >= m1 && +k <= m2)) };
+  // 各部門個案統計：看範圍最後一個月的總表（整年＝12/31）
+  { const mk = `${year}-${pad(m2)}`; if (mk >= SYSTEM_FROM && db.events.some(e => e.month === mk)) Q.snap = { v: quarterSnap(mk, db), mk, src: '系統' }; }
   const yy = year - 1911, JSZip = (await import(JSZIP_URL)).default, zip = await JSZip.loadAsync(b64bytes(EXPORT_TPL.quarter));
   const S = async n => zip.file(`xl/worksheets/sheet${n}.xml`).async('string'), CH = async n => zip.file(`xl/charts/chart${n}.xml`).async('string');
   const put = (n, x) => zip.file(`xl/worksheets/sheet${n}.xml`, x), putC = (n, x) => zip.file(`xl/charts/chart${n}.xml`, x);
   const rowsOf = (r0, r1, f) => { const o = []; for (let r = r0; r <= r1; r++) o.push({ r, tr: r, vals: f(r) || [] }); return o; };
-  const qm = [qx * 3 - 2, qx * 3 - 1, qx * 3], endM = full ? 12 : Math.min(q * 3, 12), V = v => v === null || v === undefined ? '' : v;
+  const V = v => v === null || v === undefined ? '' : v, mRows = f => Array.from({ length: m2 - m1 + 1 }, (_, k) => f(m1 + k));
   const mapRows = (cx, map) => cx.replace(/<c:f>([^<]*)<\/c:f>/g, (m, f) => `<c:f>${f.replace(/\$(\d+)\b/g, (x, r) => map[r] ? '$' + map[r] : x)}</c:f>`);
   const D = QDEPTS.map(([n]) => n), lastDeptCol = colL(D.length);   // 原檔 B～F，多日照＝G、日喘＝H
   // 1. 新案人數
   put(1, fillTplSheet(await S(1), { extendTpl: true, keepTpl: true, rows: [
     ...rowsOf(3, 14, r => { const x = Q.rows[r - 3]; return x && x.newG ? [, x.newG.男, x.newG.女] : [, '', '']; }),
-    ...rowsOf(19, 30, r => { const x = Q.rows[r - 19]; return [, Q_EST, x && x.newG ? { f: `D${r - 16}` } : '']; }) ] }));
-  { const r0 = 3 + (qx - 1) * 3; putC(1, mapRows(await CH(1), full ? { 9: 3, 11: 14 } : { 9: r0, 10: r0 + 1, 11: r0 + 2 })); }
+    ...rowsOf(19, 30, r => { const x = Q.rows[r - 19]; return [, inR(r - 19) ? Q_EST : '', x && x.newG ? { f: `D${r - 16}` } : '']; }) ] }));
+  putC(1, mapRows(await CH(1), { 9: 2 + m1, 11: 2 + m2 }));
   // 2. 樂臨各部門個案統計（12/31 總表；還沒到年底就用最後一個月）
   { const sv = Q.snap ? D.map(k => Q.snap.v[k] || 0) : D.map(() => '');
     put(2, fillTplSheet(await S(2), { extendTpl: true, keepTpl: true, styleFor: (tr, c, T) => ((T.rows[tr] || { cells: {} }).cells[5] || {}).s, rows: [{ r: 1, tr: 1, vals: [, ...D] }, { r: 2, tr: 2, vals: ['總計', ...sv] }] }));
@@ -4926,13 +4941,12 @@ async function exportQuarter(year, q, db, Q) {
     rows.push({ r: 18, tr: 18, vals: ['總計', ...D.map((_, j) => ({ f: [5, 9, 13, 17].map(r => colL(j + 1) + r).join('+') }))] });
     rows.sort((a, b) => a.r - b.r);
     put(3, fillTplSheet(await S(3), { rows, styleFor: (tr, c, T) => ((T.rows[tr] || { cells: {} }).cells[5] || {}).s }));
-    const mr = qm.map(Q_MROW);
     putC(3, (await CH(3)).replaceAll('$F$', `$${lastDeptCol}$`));
-    putC(4, setChartTitle(mapRows((await CH(4)).replaceAll('$F$', `$${lastDeptCol}$`), { 13: full ? 18 : Q_QROW(q) }), full ? '1-12 月 轉介樂臨各部門' : `${qm[0]}-${qm[2]} 月 轉介樂臨各部門`));
-    putC(5, mapRows((await CH(5)).replaceAll('$F$', `$${lastDeptCol}$`), { 6: mr[0], 7: mr[1], 8: mr[2] })); }
+    putC(4, setChartTitle(mapRows((await CH(4)).replaceAll('$F$', `$${lastDeptCol}$`), { 13: 18 }), `${rng} 轉介樂臨各部門`));
+    putC(5, expandSer((await CH(5)).replaceAll('$F$', `$${lastDeptCol}$`), [6, 7, 8], mRows(Q_MROW))); }
   // 4. 個案總數（含結案）
   put(4, fillTplSheet(await S(4), { extendTpl: true, keepTpl: true, rows: rowsOf(2, 13, r => { const x = Q.rows[r - 2]; return x && x.totG ? [, x.totG.男, x.totG.女] : [, '', '']; }) }));
-  { const r0 = 2 + (qx - 1) * 3; putC(6, mapRows(await CH(6), full ? { 8: 2, 10: 13 } : { 8: r0, 9: r0 + 1, 10: r0 + 2 })); }
+  putC(6, mapRows(await CH(6), { 8: 1 + m1, 10: 1 + m2 }));
   // 5. 轉介友單位及樂臨比例（只看居家服務）
   const U = Q.units, LU = colL(U.length), uStyle = (tr, c, T) => ((T.rows[tr] || { cells: {} }).cells[Math.min(c, 17)] || {}).s;
   { const rows = [{ r: 1, tr: 1, vals: [, ...U] }];
@@ -4943,7 +4957,7 @@ async function exportQuarter(year, q, db, Q) {
     rows.push({ r: 23, tr: 23, vals: [, '樂臨', '友單位'] }, { r: 24, tr: 24, vals: ['總計', { f: 'B19' }, { f: 'C19' }] }, { r: 25, tr: 25, vals: ['比例', { f: 'B24/B26*100%' }, { f: 'C24/B26*100%' }] }, { r: 26, tr: 26, vals: [, { f: 'SUM(B24:C24)' }] });
     rows.sort((a, b) => a.r - b.r);
     put(5, fillTplSheet(await S(5), { rows, styleFor: uStyle, merges: [`C19:${LU}19`, 'B26:C26'] }));
-    for (const n of [7, 8]) { let cx = await CH(n); cx = /<c:pieChart>/.test(cx) ? setChartTitle(cx, `1-${endM} 月 - 轉介樂臨及友單位比例`) : setChartTitle(cx.replaceAll('$S$', `$${LU}$`), `1-${endM} 月轉介居家服務統計`); putC(n, cx); } }
+    for (const n of [7, 8]) { let cx = await CH(n); cx = /<c:pieChart>/.test(cx) ? setChartTitle(cx, `${rng} - 轉介樂臨及友單位比例`) : setChartTitle(cx.replaceAll('$S$', `$${LU}$`), `${rng}轉介居家服務統計`); putC(n, cx); } }
   // 6. 歷年轉介友單位及樂臨比例：以前的月份＋今年 12 個月，總計只加今年
   { const rows = [{ r: 1, tr: 1, vals: [, ...U] }], H = Q.hist; let r = 2;
     for (const [ym, o] of H) rows.push({ r: r++, tr: 2, vals: [`${+ym.slice(0, 4) - 1911}/${ym.slice(5)}`, ...U.map(u => (o || {})[u] || '')] });
@@ -4955,21 +4969,21 @@ async function exportQuarter(year, q, db, Q) {
     rows.push({ r: rh, tr: 59, vals: [, '樂臨', '友單位'] }, { r: rt, tr: 60, vals: ['總計', { f: `B${fr}` }, { f: `C${fr}` }] }, { r: rp, tr: 61, vals: ['比例', { f: `B${rt}/B${rs}*100%` }, { f: `C${rt}/B${rs}*100%` }] }, { r: rs, tr: 62, vals: [, { f: `SUM(B${rt}:C${rt})` }] });
     put(6, fillTplSheet((await S(6)).replace(/topLeftCell="[^"]*"/, `topLeftCell="A${Math.max(2, y0 - 2)}"`).replace(/sqref="C55:S55"/, 'sqref="A2"').replace(/activeCell="C55"/, 'activeCell="A2"'), { rows, styleFor: uStyle, merges: [`B${rs}:C${rs}`, `C${fr}:${LU}${fr}`] }));
     for (const n of [9, 10]) { let cx = await CH(n);
-      cx = /<c:pieChart>/.test(cx) ? setChartTitle(mapRows(cx, { 59: rh, 60: rt, 61: rp }), `${yy} 年 - 轉介樂臨及友單位比例`) : setChartTitle(mapRows(cx.replace(/\$R\$/g, `$${LU}$`), { 54: tot }), `${yy} 年 - 轉介樂臨及友單位 總計`);
+      cx = /<c:pieChart>/.test(cx) ? setChartTitle(mapRows(cx, { 59: rh, 60: rt, 61: rp }), `${yy} 年 ${rng} - 轉介樂臨及友單位比例`) : setChartTitle(mapRows(cx.replace(/\$R\$/g, `$${LU}$`), { 54: tot }), `${yy} 年 ${rng} - 轉介樂臨及友單位 總計`);
       putC(n, cx); } }
   // 7. 每月核銷
-  { const name = `${yy}年每月核銷`; put(7, fillBillYearXml(await S(7), Q.bill, name)); putC(11, billChartXml((await CH(11)).replaceAll("'115年每月核銷'", `'${name}'`), yy, billLastRow(Q.bill), 11)); }
+  { const name = `${yy}年每月核銷`; put(7, fillBillYearXml(await S(7), Q.bill, name)); putC(11, mapRows((await CH(11)).replaceAll("'115年每月核銷'", `'${name}'`).replace('<a:t>115</a:t>', `<a:t>${yy}</a:t>`), { 3: 2 + m1, 11: 2 + m2 })); }
   const names = ['新案人數', '樂臨各部門個案統計', '轉介樂臨各部門', '個案總數', '轉介友單位及樂臨比例', '歷年轉介友單位及樂臨比例', `${yy}年每月核銷`];
   let wb = await zip.file('xl/workbook.xml').async('string'); names.forEach((n, i) => { wb = wb.replace(`{{S${i + 1}}}`, xmlEsc(n)); });
   zip.file('xl/workbook.xml', wb); zip.remove('names.json');
-  downloadBlob(await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${yy}年-季報需要資料（${full ? '全年' : `第${q}季`}）.xlsx`);
+  downloadBlob(await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${yy}年-季報需要資料（${m1 === 1 && m2 === 12 ? '全年' : `${m1}-${m2}月`}）.xlsx`);
 }
 function QuarterView({ db, month, user, refresh, picker }) {
   const [year, setYear] = useState(Math.max(BILL_YEAR_FROM, +month.slice(0, 4))), yy = year - 1911;
   const [tab, setTab] = useState(() => { try { return localStorage.getItem('qTab') || Q_TABS[0]; } catch { return Q_TABS[0]; } });
   const pickTab = t => { setTab(t); try { localStorage.setItem('qTab', t); } catch { } };
   const Q = useMemo(() => quarterCalc(year, db), [db, year]);
-  const [q, setQ] = useState(-1), qq = q >= 0 ? q : Math.max(1, Math.ceil((Q.lastM || 3) / 3)), [busy, setBusy] = useState(false);
+  const [rg, setRg] = useState(null), m1 = rg ? rg[0] : 1, m2 = rg ? rg[1] : Math.max(1, Q.lastM || 12), [busy, setBusy] = useState(false);
   const importOld = async file => {
     if (!file) return; setBusy(true);
     try {
@@ -4985,7 +4999,7 @@ function QuarterView({ db, month, user, refresh, picker }) {
     } catch (e) { console.error(e); toast('帶入失敗：' + e.message, true); }
     setBusy(false);
   };
-  const doExport = async () => { setBusy(true); try { await exportQuarter(year, qq, db, Q); } catch (e) { console.error(e); toast('匯出失敗：' + e.message, true); } setBusy(false); };
+  const doExport = async () => { setBusy(true); try { await exportQuarter(year, m1, m2, db, Q); } catch (e) { console.error(e); toast('匯出失敗：' + e.message, true); } setBusy(false); };
   const mLabel = m => `${m}月`, src = i => Q.rows[i] ? html`<span class="sub" style="font-size:11px;margin-left:4px">${Q.rows[i].src}</span>` : '';
   const qRows = (valOf, cols) => { const out = []; for (let k = 1; k <= 4; k++) { for (let m = k * 3 - 2; m <= k * 3; m++) out.push(html`<tr><td>${mLabel(m)}${src(m - 1)}</td>${cols.map(c => html`<td class="num">${V0(valOf(m - 1, c))}</td>`)}</tr>`);
     out.push(html`<tr class="qsum"><td>${['第一季', '第二季', '第三季', '第四季'][k - 1]}</td>${cols.map(c => html`<td class="num">${[0, 1, 2].reduce((a, j) => a + (+valOf(k * 3 - 3 + j, c) || 0), 0)}</td>`)}</tr>`); }
@@ -5026,8 +5040,10 @@ function QuarterView({ db, month, user, refresh, picker }) {
       <span class="yrsel"><button class="btn light sm" disabled=${year <= BILL_YEAR_FROM} onClick=${() => setYear(Math.max(BILL_YEAR_FROM, year - 1))}>◀</button><b>${yy}年</b><button class="btn light sm" onClick=${() => setYear(year + 1)}>▶</button></span>
       <span class="grow"></span>
       <label class="btn light" style="cursor:pointer" title="從「季報需要資料」Excel 帶入以前的數字（11 月起一律用系統算）">${busy ? '處理中…' : '帶入舊檔'}<input type="file" accept=".xlsx,.xls" style="display:none" disabled=${busy} onChange=${e => { importOld(e.target.files[0]); e.target.value = ''; }} /></label>
-      <select class="inp" style="width:auto" value=${qq} onChange=${e => setQ(+e.target.value)}>${[1, 2, 3, 4].map(k => html`<option value=${k}>第${k}季（${k * 3 - 2}～${k * 3}月）</option>`)}<option value=${0}>全年（1～12月）</option></select>
-      <button class="btn" disabled=${busy} onClick=${doExport}>匯出 ${qq ? `第${qq}季` : '全年'}</button></div>
+      <span class="qrange">匯出
+        <select class="inp" value=${m1} onChange=${e => { const a = +e.target.value; setRg([a, Math.max(a, m2)]); }}>${Array.from({ length: 12 }, (_, i) => html`<option value=${i + 1}>${i + 1}月</option>`)}</select>到
+        <select class="inp" value=${m2} onChange=${e => { const b = +e.target.value; setRg([Math.min(m1, b), b]); }}>${Array.from({ length: 12 }, (_, i) => html`<option value=${i + 1}>${i + 1}月</option>`)}</select></span>
+      <button class="btn" disabled=${busy} onClick=${doExport}>匯出 ${m1}～${m2}月</button></div>
     <div class="trigbar qtabs">${Q_TABS.map(t => html`<button class=${tab === t ? 'on' : ''} onClick=${() => pickTab(t)}>${t === '每月核銷' ? `${yy}年每月核銷` : t}</button>`)}</div>
     ${tab === '每月核銷' ? body : html`<div class="card">${body}</div>`}
   </div>`;
