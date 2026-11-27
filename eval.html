@@ -3173,7 +3173,7 @@ function parseBillYearSheet(aoa) {
 const billAmtOf = o => o ? (o.a1 || 0) * 1700 + (o.a400 || 0) * 400 + (o.a360 || 0) * 360 : 0;
 
 // ---------- 季報需要資料（新案人數、個案總數、轉介樂臨各部門、樂臨各部門個案統計、轉介友單位及樂臨比例、歷年） ----------
-const QDEPTS = [['居家服務', ['home']], ['樂臨交通', ['traffic', 'ctraffic']], ['到宅沐浴車', ['bath']], ['居家喘息', ['resp']], ['居家護理所', ['prof']], ['日間照顧', ['day']], ['日間照顧喘息', ['dayresp']]];
+const QDEPTS = [['居家服務', ['home']], ['樂臨交通', ['traffic', 'ctraffic']], ['到宅沐浴車', ['bath']], ['居家喘息', ['resp']], ['專業服務', ['prof']], ['日間照顧', ['day']], ['日間照顧喘息', ['dayresp']]];
 const QUNITS0 = ['樂臨', '康安', '紅十字會', '康泰', '四湖鄉立', '安得寶', '承鑫', '正唯', '庭安', '永安', '伯欣', '星奇', '守護寧', '慈暉', '平安', '臺西', '太舜', '安喬'];
 const isLelin = u => /樂臨/.test(u || '');
 // 季報的居家單位：同一間不同名字的併成一欄（祥賀＝平安、紅十字＝紅十字會）
@@ -3220,11 +3220,12 @@ function quarterYear(year, db, qh, ah, upTo) {
   const rows = months.map((mk, i) => {
     if (mk > upTo) return null;
     // 9 月以前用匯入的：季報舊檔，性別人數沒有的話用「5.數據統計」匯入的；10 月起用系統算
-    const h = H[mk.slice(5)] || {}, old = mk < Q_SYSTEM_FROM, a = A[i], sys = !old && db.events.some(e => e.month === mk) ? quarterMonth(mk, db) : null;
+    const h = H[mk.slice(5)] || {}, old = mk < Q_SYSTEM_FROM, a = A[i], sys = db.events.some(e => e.month === mk) ? quarterMonth(mk, db) : null;
+    // 轉介樂臨各部門：每個月都用系統算（才點得出個案名單）
     const aOld = a && a.src === '匯入' ? a : null;
     const r = old
-      ? { newG: h.newG || (aOld && aOld.newGender), totG: h.totG || (aOld && aOld.genderWith), dept: h.dept || null, home: qMerge(h.home) || null, src: '匯入' }
-      : (() => { const am = sys ? annualMonth(mk, db) : a; return { newG: am && am.newGender, totG: am && am.genderWith, dept: sys && sys.dept, home: qMerge(sys && sys.home), src: '系統' }; })();
+      ? { newG: h.newG || (aOld && aOld.newGender), totG: h.totG || (aOld && aOld.genderWith), dept: (sys && sys.dept) || null, home: qMerge(h.home) || null, src: '匯入', deptSrc: sys ? '系統' : '' }
+      : (() => { const am = sys ? annualMonth(mk, db) : a; return { newG: am && am.newGender, totG: am && am.genderWith, dept: sys && sys.dept, home: qMerge(sys && sys.home), src: '系統', deptSrc: sys ? '系統' : '' }; })();
     return r.newG || r.totG || r.dept || r.home ? r : null;
   });
   // 各部門個案統計：12 月（還沒到就用最後一個有資料的月份）
@@ -3243,7 +3244,7 @@ function parseQuarterBook(sheets, year) {
   let n = find(/^新案人數$/); if (n) for (const [mm, r] of monthRows(sheets[n])) if (num(r[1]) !== null || num(r[2]) !== null) put(mm, 'newG', { 男: num(r[1]) || 0, 女: num(r[2]) || 0 });
   n = find(/^個案總數$/); if (n) for (const [mm, r] of monthRows(sheets[n])) if (num(r[1]) !== null || num(r[2]) !== null) put(mm, 'totG', { 男: num(r[1]) || 0, 女: num(r[2]) || 0 });
   const byHead = (aoa, r, map) => { const h = (aoa[0] || []).map(x => String(x || '').replace(/\s+/g, '')), o = {}; let any = false; h.forEach((name, j) => { if (j && name) { const k = map(name); const v = num(r[j]); if (k && v !== null) { o[k] = (o[k] || 0) + v; any = true; } } }); return any ? o : null; };
-  const deptKey = name => { const n = name.replace(/[、,，]/g, ''), alias = { 日照: '日間照顧', 日喘: '日間照顧喘息', 日照喘息: '日間照顧喘息' }; if (alias[n]) return alias[n]; return (QDEPTS.find(([d]) => d === n) || QDEPTS.find(([d]) => !/^日間/.test(d) && n.includes(d.slice(0, 2))) || [])[0]; };
+  const deptKey = name => { const n = name.replace(/[、,，]/g, ''), alias = { 日照: '日間照顧', 日喘: '日間照顧喘息', 日照喘息: '日間照顧喘息', 居家護理所: '專業服務', 居護所: '專業服務' }; if (alias[n]) return alias[n]; return (QDEPTS.find(([d]) => d === n) || QDEPTS.find(([d]) => !/^日間/.test(d) && n.includes(d.slice(0, 2))) || [])[0]; };
   n = find(/^轉介樂臨各部門$/); if (n) for (const [mm, r] of monthRows(sheets[n])) { const d = byHead(sheets[n], r, deptKey); if (d) put(mm, 'dept', { ...Object.fromEntries(QDEPTS.map(([k]) => [k, 0])), ...d }); }
   n = find(/^樂臨各部門個案統計$/); if (n) { const r = sheets[n].find(r => String((r || [])[0] || '').trim() === '總計'); if (r) { const d = byHead(sheets[n], r, deptKey); if (d) out.snap = { ...Object.fromEntries(QDEPTS.map(([k]) => [k, 0])), ...d }; } }
   n = find(/^轉介友單位及樂臨比例$/); if (n) for (const [mm, r] of monthRows(sheets[n])) { const d = byHead(sheets[n], r, x => x); if (d) put(mm, 'home', Object.fromEntries(Object.entries(d).filter(([, v]) => v))); }
@@ -5091,7 +5092,7 @@ function QuarterView({ db, month, user, refresh, picker }) {
     setBusy(false);
   };
   const doExport = async () => { setBusy(true); try { await exportQuarter(year, m1, m2, db, Q); } catch (e) { console.error(e); toast('匯出失敗：' + e.message, true); } setBusy(false); };
-  const mLabel = m => `${m}月`, src = i => Q.rows[i] ? html`<span class="sub" style="font-size:11px;margin-left:4px">${Q.rows[i].src}</span>` : '';
+  const mLabel = m => `${m}月`, src = i => Q.rows[i] ? html`<span class="sub" style="font-size:11px;margin-left:4px">${tab === '轉介樂臨各部門' ? Q.rows[i].deptSrc : Q.rows[i].src}</span>` : '';
   const qRows = (valOf, cols) => { const out = []; for (let k = 1; k <= 4; k++) { for (let m = k * 3 - 2; m <= k * 3; m++) out.push(html`<tr><td>${mLabel(m)}${src(m - 1)}</td>${cols.map(c => html`<td class="num">${V0(valOf(m - 1, c))}</td>`)}</tr>`);
     out.push(html`<tr class="qsum"><td>${['第一季', '第二季', '第三季', '第四季'][k - 1]}</td>${cols.map(c => html`<td class="num">${[0, 1, 2].reduce((a, j) => a + (+valOf(k * 3 - 3 + j, c) || 0), 0)}</td>`)}</tr>`); }
     out.push(html`<tr class="tot"><td>總計</td>${cols.map(c => html`<td class="num"><b>${Q.rows.reduce((a, _, i) => a + (+valOf(i, c) || 0), 0)}</b></td>`)}</tr>`); return out; };
@@ -5111,7 +5112,7 @@ function QuarterView({ db, month, user, refresh, picker }) {
       <div class="sub" style="margin-top:6px">每月在案人數（含當月結案），跟「5.數據統計」的男女性別比例（含結案）同一份數字。</div>`;
   } else if (tab === '轉介樂臨各部門') {
     body = html`<table class="grid qtab"><thead><tr><th>月份</th>${D.map(d => html`<th class="num">${d}</th>`)}</tr></thead><tbody>${qRows((i, d) => Q.rows[i] && Q.rows[i].dept ? Q.rows[i].dept[d] || 0 : '', D)}</tbody></table>
-      <div class="sub" style="margin-top:6px">只算當月新案。居家服務、交通、沐浴車（BA09、BA09a）、居家喘息、居家護理所（專業服務）、日間照顧、日間照顧喘息（分開算），單位是樂臨的才算。</div>`;
+      <div class="sub" style="margin-top:6px">每個月都用系統算（點得出個案名單）；只算當月新案。居家服務、交通、沐浴車（BA09、BA09a）、居家喘息、專業服務、日間照顧、日間照顧喘息（分開算），單位是樂臨的才算。</div>`;
   } else if (tab === '樂臨各部門個案統計') {
     body = html`${Q.snap ? html`<table class="grid qtab"><thead><tr><th>地區</th>${D.map(d => html`<th class="num">${d}</th>`)}</tr></thead><tbody><tr><td>總計</td>${D.map(d => html`<td class="num"><b>${Q.snap.v[d] || 0}</b></td>`)}</tr></tbody></table>` : html`<div class="sub">還沒有資料</div>`}
       <div class="sub" style="margin-top:6px">${Q.snap ? (Q.snap.src === '舊檔' ? '數字來自帶入的舊檔。' : Q.snap.mk.endsWith('-12') ? `${yy}年 12 月總表（12/31）` : `還沒到年底，先用 ${rocMonth(Q.snap.mk)} 的總表`) : ''}：總表裡（不含當月結案）有用樂臨各部門的人數。</div>`;
@@ -5136,7 +5137,7 @@ function QuarterView({ db, month, user, refresh, picker }) {
   const ratio = (title, getO) => { let l = 0, a = 0; for (const o of getO()) { l += +(o || {})['樂臨'] || 0; a += qSum(o); } return html`<${QDonut} title=${title} parts=${[{ name: '樂臨', v: l, color: '#1f8a70' }, { name: '友單位', v: a - l, color: '#d48a1e' }]} />`; };
   const gs = (k, g) => sum(x => x && x[k] ? x[k][g] : 0), hasM = ix.filter(i => Q.rows[i]).length;
   // 點圖表：列出個案。新案用當月新案；在案用那個月總表。10 月以前是舊檔帶入的數字，沒有個案名單
-  const newCases = (d, months) => { const items = [], old = []; for (const m of months) { const mk = `${year}-${pad(m)}`; if (mk < Q_SYSTEM_FROM) { if (Q.rows[m - 1] && Q.rows[m - 1].dept && Q.rows[m - 1].dept[d]) old.push(m); continue; } if (!Q.rows[m - 1]) continue; for (const x of quarterDeptCases(mk, db, 'new')[d] || []) items.push({ ...x, mk }); }
+  const newCases = (d, months) => { const items = [], old = []; for (const m of months) { const mk = `${year}-${pad(m)}`; if (!Q.rows[m - 1] || !Q.rows[m - 1].dept) continue; for (const x of quarterDeptCases(mk, db, 'new')[d] || []) items.push({ ...x, mk }); }
     return { items, note: old.length ? `${old.map(m => m + '月').join('、')}是舊檔帶入的數字，系統裡沒有那幾個月的個案名單（10 月起才有）。` : '' }; };
   const showNew = (d, months, label) => { const r = newCases(d, months); setPick({ title: `${label} 轉介樂臨「${d}」的新案`, ...r }); };
   const showSnap = d => { if (!Q.snap) return; if (Q.snap.src !== '系統') return setPick({ title: `樂臨「${d}」`, items: [], note: '這是舊檔帶入的數字，沒有個案名單。' }); setPick({ title: `${rocMonth(Q.snap.mk)} 總表在案、有用樂臨「${d}」的個案`, items: quarterDeptCases(Q.snap.mk, db, 'snap')[d] || [], note: '「使用的單位」是個案資料上填的那個服務的單位，可以看是不是真的是樂臨。' }); };
