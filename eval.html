@@ -394,6 +394,7 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
 .qkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
 .qkpis>div{background:#fff;border:1px solid var(--line,#eadfcf);border-radius:16px;padding:14px 18px;display:flex;flex-direction:column;gap:2px}
 .qkpis span{font-size:13px;color:var(--sub)}.qkpis b{font-size:24px;color:#3d3a35;font-variant-numeric:tabular-nums}.qkpis em{font-style:normal;font-size:12px;color:var(--sub)}
+.qgrow .gup{color:#1f8a70;font-weight:700}.qgrow .gdn{color:#c2504a;font-weight:700}
 </style>
 </head>
 <body>
@@ -3166,7 +3167,7 @@ function parseBillYearSheet(aoa) {
 const billAmtOf = o => o ? (o.a1 || 0) * 1700 + (o.a400 || 0) * 400 + (o.a360 || 0) * 360 : 0;
 
 // ---------- 季報需要資料（新案人數、個案總數、轉介樂臨各部門、樂臨各部門個案統計、轉介友單位及樂臨比例、歷年） ----------
-const QDEPTS = [['居家服務', ['home']], ['樂臨交通', ['traffic', 'ctraffic']], ['到宅沐浴車', ['bath']], ['居家喘息', ['resp']], ['居家護理所', ['prof']], ['日照', ['day']], ['日喘', ['dayresp']]];
+const QDEPTS = [['居家服務', ['home']], ['樂臨交通', ['traffic', 'ctraffic']], ['到宅沐浴車', ['bath']], ['居家喘息', ['resp']], ['居家護理所', ['prof']], ['日間照顧', ['day']], ['日間照顧喘息', ['dayresp']]];
 const QUNITS0 = ['樂臨', '康安', '紅十字會', '康泰', '四湖鄉立', '安得寶', '承鑫', '正唯', '庭安', '永安', '伯欣', '星奇', '守護寧', '慈暉', '平安', '臺西', '太舜', '安喬'];
 const isLelin = u => /樂臨/.test(u || '');
 // 季報的居家單位：同一間不同名字的併成一欄（祥賀＝平安、紅十字＝紅十字會）
@@ -3224,7 +3225,7 @@ function parseQuarterBook(sheets, year) {
   let n = find(/^新案人數$/); if (n) for (const [mm, r] of monthRows(sheets[n])) if (num(r[1]) !== null || num(r[2]) !== null) put(mm, 'newG', { 男: num(r[1]) || 0, 女: num(r[2]) || 0 });
   n = find(/^個案總數$/); if (n) for (const [mm, r] of monthRows(sheets[n])) if (num(r[1]) !== null || num(r[2]) !== null) put(mm, 'totG', { 男: num(r[1]) || 0, 女: num(r[2]) || 0 });
   const byHead = (aoa, r, map) => { const h = (aoa[0] || []).map(x => String(x || '').replace(/\s+/g, '')), o = {}; let any = false; h.forEach((name, j) => { if (j && name) { const k = map(name); const v = num(r[j]); if (k && v !== null) { o[k] = (o[k] || 0) + v; any = true; } } }); return any ? o : null; };
-  const deptKey = name => (QDEPTS.find(([d]) => d.replace(/、/g, '') === name.replace(/[、,，]/g, '')) || QDEPTS.find(([d]) => name.includes(d.slice(0, 2))) || [])[0];
+  const deptKey = name => { const n = name.replace(/[、,，]/g, ''), alias = { 日照: '日間照顧', 日喘: '日間照顧喘息', 日照喘息: '日間照顧喘息' }; if (alias[n]) return alias[n]; return (QDEPTS.find(([d]) => d === n) || QDEPTS.find(([d]) => !/^日間/.test(d) && n.includes(d.slice(0, 2))) || [])[0]; };
   n = find(/^轉介樂臨各部門$/); if (n) for (const [mm, r] of monthRows(sheets[n])) { const d = byHead(sheets[n], r, deptKey); if (d) put(mm, 'dept', { ...Object.fromEntries(QDEPTS.map(([k]) => [k, 0])), ...d }); }
   n = find(/^樂臨各部門個案統計$/); if (n) { const r = sheets[n].find(r => String((r || [])[0] || '').trim() === '總計'); if (r) { const d = byHead(sheets[n], r, deptKey); if (d) out.snap = { ...Object.fromEntries(QDEPTS.map(([k]) => [k, 0])), ...d }; } }
   n = find(/^轉介友單位及樂臨比例$/); if (n) for (const [mm, r] of monthRows(sheets[n])) { const d = byHead(sheets[n], r, x => x); if (d) put(mm, 'home', Object.fromEntries(Object.entries(d).filter(([, v]) => v))); }
@@ -4739,7 +4740,9 @@ function BillRunView({ db, month, user, refresh, picker }) {
 // ================= 每月核銷（季報需要資料） =================
 // 每月跑完核銷，把核銷系統的最終清冊匯進來 → 算 AA01、AA02-400、AA02-360 人次和金額；匯出跟「115年每月核銷」工作表一樣（含折線圖）
 // 季報用的小圖（SVG）：line＝折線（看趨勢），stack＝堆疊長條（各類人數＋上面標總數）；一個 y 軸，滑過看當月數字
-function TrendChart({ labels, series, fmt = v => v, title, h = 240, stack = false, totalName = '總人數' }) {
+// group＝並排長條（同一類別各期並排，看成長）
+function TrendChart({ labels, series, fmt = v => v, title, h = 240, stack: stack0 = false, group = false, totalName = '總人數' }) {
+  const stack = stack0 || group;
   const [hi, setHi] = useState(-1), box = useRef(null), [W, setW] = useState(760);
   const all = series.flatMap(s => s.values.filter(v => v !== null && v !== undefined)), has = all.length > 0, gid = useMemo(() => 'g' + Math.random().toString(36).slice(2, 8), []);
   // 量容器寬度，字不會跟著放大縮小
@@ -4748,7 +4751,7 @@ function TrendChart({ labels, series, fmt = v => v, title, h = 240, stack = fals
   const narrow = W < 560, P = { l: narrow ? 50 : 64, r: 12, t: 22, b: 28 };   // 兩張圖月份對齊
   const n = labels.length, iw = W - P.l - P.r, ih = h - P.t - P.b;
   const totals = labels.map((_, i) => series.some(s => s.values[i] !== null && s.values[i] !== undefined) ? series.reduce((a, s) => a + (s.values[i] || 0), 0) : null);
-  const rawMax = stack ? Math.max(...totals.filter(v => v !== null)) : Math.max(...all);
+  const rawMax = stack && !group ? Math.max(...totals.filter(v => v !== null)) : Math.max(...all);
   const step = (() => { const r = rawMax / 4, p = Math.pow(10, Math.floor(Math.log10(r || 1))); return [1, 2, 2.5, 5, 10].map(m => m * p).find(x => x >= r) || p * 10; })();
   const max = Math.max(step, Math.ceil(rawMax / step) * step), ticks = Array.from({ length: Math.round(max / step) + 1 }, (_, i) => i * step);
   const slot = iw / n, x = i => P.l + slot * (i + 0.5), y = v => P.t + ih - (v / max) * ih;
@@ -4770,13 +4773,16 @@ function TrendChart({ labels, series, fmt = v => v, title, h = 240, stack = fals
   const bars = stack ? labels.map((_, i) => { let acc = 0; return series.map(s => { const v = s.values[i] || 0, y0 = y(acc), y1 = y(acc + v); acc += v; return v > 0 ? { s, y: y1, hgt: Math.max(0, y0 - y1 - (acc - v > 0 ? 2 : 0)) } : null; }).filter(Boolean); }) : [];
   const tipX = hi >= 0 ? x(hi) / W * 100 : 0;
   return html`<div class="tchart">${title && html`<div class="tch-t">${title}</div>`}
-    <div class="tch-leg">${(series.length > 1 || !stack) && series.map(s => html`<span><i style=${`background:${s.color};height:${stack ? 10 : s.width || 2}px;${stack ? 'width:10px;border-radius:2px' : ''}`}></i>${s.name}</span>`)}${stack && series.length > 1 && html`<span class="sub">長條上方數字＝${totalName}</span>`}</div>
+    <div class="tch-leg">${(series.length > 1 || !stack) && series.map(s => html`<span><i style=${`background:${s.color};height:${stack ? 10 : s.width || 2}px;${stack ? 'width:10px;border-radius:2px' : ''}`}></i>${s.name}</span>`)}${stack && !group && series.length > 1 && html`<span class="sub">長條上方數字＝${totalName}</span>`}</div>
     <div class="tch-box" ref=${box} onMouseLeave=${() => setHi(-1)}>
       <svg viewBox=${`0 0 ${W} ${h}`} width=${W} height=${h} style="display:block;max-width:100%" role="img" aria-label=${title || '圖表'}>
         ${ticks.map(t => html`<g><line x1=${P.l} x2=${W - P.r} y1=${y(t)} y2=${y(t)} stroke=${t === 0 ? '#d9cfbf' : '#efe8dc'} stroke-width="1" stroke-dasharray=${t === 0 ? '' : '3 4'} /><text x=${P.l - 8} y=${y(t) + 4} text-anchor="end" class="tch-ax">${fmt(t)}</text></g>`)}
         ${labels.map((l, i) => html`<text x=${x(i)} y=${h - 8} text-anchor="middle" class="tch-ax">${l}</text>`)}
         ${hi >= 0 && (stack ? html`<rect x=${P.l + slot * hi + 4} y=${P.t - 18} width=${slot - 8} height=${ih + 18} fill="#f6f1e8" rx="8" />` : html`<line x1=${x(hi)} x2=${x(hi)} y1=${P.t} y2=${P.t + ih} stroke="#b9ad99" stroke-width="1" stroke-dasharray="3 3" />`)}
-        ${stack ? bars.map((segs, i) => html`<g style=${`transition:opacity .15s;opacity:${hi >= 0 && hi !== i ? .45 : 1}`}>${segs.map((g, j) => j === segs.length - 1 ? html`<path d=${topRound(x(i) - bw / 2, g.y, bw, g.hgt, 6)} fill=${g.s.color} />` : html`<rect x=${x(i) - bw / 2} y=${g.y} width=${bw} height=${g.hgt} fill=${g.s.color} />`)}
+        ${group ? labels.map((_, i) => { const k = series.length, gw = Math.min(slot * 0.82, k * 30), bw2 = gw / k;
+            return html`<g style=${`transition:opacity .15s;opacity:${hi >= 0 && hi !== i ? .45 : 1}`}>${series.map((s, j) => { const v = s.values[i]; if (v === null || v === undefined) return null; const x0 = x(i) - gw / 2 + j * bw2 + 1.5, w = Math.max(2, bw2 - 3), hh = Math.max(0, y(0) - y(v));
+              return html`<g>${hh > 0 && html`<path d=${topRound(x0, y(v), w, hh, 4)} fill=${s.color} />`}${!narrow && html`<text x=${x0 + w / 2} y=${y(v) - 5} text-anchor="middle" class="tch-ax" style="font-size:10px">${fmt(v)}</text>`}</g>`; })}</g>`; })
+          : stack ? bars.map((segs, i) => html`<g style=${`transition:opacity .15s;opacity:${hi >= 0 && hi !== i ? .45 : 1}`}>${segs.map((g, j) => j === segs.length - 1 ? html`<path d=${topRound(x(i) - bw / 2, g.y, bw, g.hgt, 6)} fill=${g.s.color} />` : html`<rect x=${x(i) - bw / 2} y=${g.y} width=${bw} height=${g.hgt} fill=${g.s.color} />`)}
             ${totals[i] !== null && html`<text x=${x(i)} y=${y(totals[i]) - 7} text-anchor="middle" class="tch-tot" style=${narrow ? 'font-size:9.5px' : ''}>${fmt(totals[i])}</text>`}</g>`)
           : html`<defs>${series.map((s, k) => html`<linearGradient id=${gid + k} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color=${s.color} stop-opacity=".22" /><stop offset="1" stop-color=${s.color} stop-opacity="0" /></linearGradient>`)}</defs>
             ${series.length === 1 && html`<path d=${area(series[0].values)} fill=${`url(#${gid}0)`} />`}
@@ -4788,7 +4794,7 @@ function TrendChart({ labels, series, fmt = v => v, title, h = 240, stack = fals
       </svg>
       ${hi >= 0 && html`<div class="tch-tip" style=${`left:${tipX}%;${tipX > 60 ? 'transform:translateX(calc(-100% - 12px))' : 'transform:translateX(12px)'}`}><b>${labels[hi]}</b>
         ${series.map(s => html`<div><i style=${`background:${s.color}`}></i>${s.name}<span>${s.values[hi] === null || s.values[hi] === undefined ? '—' : fmt(s.values[hi])}</span></div>`)}
-        ${stack && series.length > 1 && html`<div class="tt-tot">${totalName}<span>${totals[hi] === null ? '—' : fmt(totals[hi])}</span></div>`}</div>`}
+        ${stack && !group && series.length > 1 && html`<div class="tt-tot">${totalName}<span>${totals[hi] === null ? '—' : fmt(totals[hi])}</span></div>`}</div>`}
     </div></div>`;
 }
 // 「每月核銷」工作表：把人次填進原檔的三個表（直式、橫式、明細）
@@ -4948,7 +4954,7 @@ async function exportQuarter(year, m1, m2, db, Q0) {
   const rowsOf = (r0, r1, f) => { const o = []; for (let r = r0; r <= r1; r++) o.push({ r, tr: r, vals: f(r) || [] }); return o; };
   const V = v => v === null || v === undefined ? '' : v, mRows = f => Array.from({ length: m2 - m1 + 1 }, (_, k) => f(m1 + k));
   const mapRows = (cx, map) => cx.replace(/<c:f>([^<]*)<\/c:f>/g, (m, f) => `<c:f>${f.replace(/\$(\d+)\b/g, (x, r) => map[r] ? '$' + map[r] : x)}</c:f>`);
-  const D = QDEPTS.map(([n]) => n), lastDeptCol = colL(D.length);   // 原檔 B～F，多日照＝G、日喘＝H
+  const D = QDEPTS.map(([n]) => n), lastDeptCol = colL(D.length);   // 原檔 B～F，多日間照顧＝G、日間照顧喘息＝H
   // 1. 新案人數
   put(1, fillTplSheet(await S(1), { extendTpl: true, keepTpl: true, rows: [
     ...rowsOf(3, 14, r => { const x = Q.rows[r - 3]; return x && x.newG ? [, x.newG.男, x.newG.女] : [, '', '']; }),
@@ -4956,7 +4962,7 @@ async function exportQuarter(year, m1, m2, db, Q0) {
   putC(1, mapRows(await CH(1), { 9: 2 + m1, 11: 2 + m2 }));
   // 2. 樂臨各部門個案統計（12/31 總表；還沒到年底就用最後一個月）
   { const sv = Q.snap ? D.map(k => Q.snap.v[k] || 0) : D.map(() => '');
-    put(2, fillTplSheet(await S(2), { keepTpl: true, colsXml: `<cols><col min="1" max="1" width="10" customWidth="1"/><col min="2" max="${D.length + 1}" width="13" customWidth="1"/></cols>`, styleFor: (tr, c, T) => ((T.rows[tr] || { cells: {} }).cells[5] || {}).s, rows: [{ r: 1, tr: 1, vals: [, ...D] }, { r: 2, tr: 2, vals: ['總計', ...sv] }] }));
+    put(2, fillTplSheet(await S(2), { keepTpl: true, colsXml: `<cols><col min="1" max="1" width="10" customWidth="1"/><col min="2" max="${D.length + 1}" width="16" customWidth="1"/></cols>`, styleFor: (tr, c, T) => ((T.rows[tr] || { cells: {} }).cells[5] || {}).s, rows: [{ r: 1, tr: 1, vals: [, ...D] }, { r: 2, tr: 2, vals: ['總計', ...sv] }] }));
     putC(2, (await CH(2)).replaceAll('$F$', `$${lastDeptCol}$`)); }
   // 3. 轉介樂臨各部門（只算當月新案）
   { const rows = [{ r: 1, tr: 1, vals: ['地區', ...D] }];
@@ -4964,7 +4970,7 @@ async function exportQuarter(year, m1, m2, db, Q0) {
     for (let k = 1; k <= 4; k++) { const r = Q_QROW(k), a = Q_MROW(k * 3 - 2), b = Q_MROW(k * 3); rows.push({ r, tr: r, vals: [['第一季', '第二季', '第三季', '第四季'][k - 1], ...D.map((_, j) => ({ f: `SUM(${colL(j + 1)}${a}:${colL(j + 1)}${b})` }))] }); }
     rows.push({ r: 18, tr: 18, vals: ['總計', ...D.map((_, j) => ({ f: [5, 9, 13, 17].map(r => colL(j + 1) + r).join('+') }))] });
     rows.sort((a, b) => a.r - b.r);
-    put(3, fillTplSheet(await S(3), { rows, styleFor: (tr, c, T) => ((T.rows[tr] || { cells: {} }).cells[5] || {}).s }));
+    put(3, fillTplSheet(await S(3), { rows, colsXml: '<cols><col min="1" max="1" width="14.125" customWidth="1"/><col min="2" max="2" width="14.875" customWidth="1"/><col min="3" max="3" width="15.375" customWidth="1"/><col min="4" max="4" width="15.5" customWidth="1"/><col min="5" max="5" width="18.375" customWidth="1"/><col min="6" max="6" width="17.375" customWidth="1"/><col min="7" max="8" width="17.5" customWidth="1"/></cols>', styleFor: (tr, c, T) => ((T.rows[tr] || { cells: {} }).cells[5] || {}).s }));
     putC(3, (await CH(3)).replaceAll('$F$', `$${lastDeptCol}$`));
     putC(4, setChartTitle(mapRows((await CH(4)).replaceAll('$F$', `$${lastDeptCol}$`), { 13: 18 }), `${rng} 轉介樂臨各部門`));
     putC(5, expandSer((await CH(5)).replaceAll('$F$', `$${lastDeptCol}$`), [6, 7, 8], mRows(Q_MROW))); }
@@ -5007,6 +5013,7 @@ async function exportQuarter(year, m1, m2, db, Q0) {
 const Q_PAL = ['#3d7ab8', '#d48a1e', '#1f8a70', '#c2504a', '#8f5fa8', '#7a9a2e', '#c7708f'];   // 跟網站搭的大地色，已檢查色弱分得出來
 const Q_SEX = { 男: '#3d7ab8', 女: '#c7708f' };
 const Q_ONE = '#1f8a70';
+const Q_QCOL = ['#bfe0d3', '#7cc2a6', '#2f9a78', '#17604b'];   // 第一～四季：同一個綠色由淺到深（看得出先後）
 // 圖表上方的重點數字
 const QKpis = ({ items }) => html`<div class="qkpis">${items.filter(Boolean).map(([k, v, sub]) => html`<div><span>${k}</span><b>${v}</b>${sub && html`<em>${sub}</em>`}</div>`)}</div>`;
 // 環圈圖：樂臨 vs 友單位
@@ -5066,7 +5073,7 @@ function QuarterView({ db, month, user, refresh, picker }) {
       <div class="sub" style="margin-top:6px">每月在案人數（含當月結案），跟「5.數據統計」的男女性別比例（含結案）同一份數字。</div>`;
   } else if (tab === '轉介樂臨各部門') {
     body = html`<table class="grid qtab"><thead><tr><th>月份</th>${D.map(d => html`<th class="num">${d}</th>`)}</tr></thead><tbody>${qRows((i, d) => Q.rows[i] && Q.rows[i].dept ? Q.rows[i].dept[d] || 0 : '', D)}</tbody></table>
-      <div class="sub" style="margin-top:6px">只算當月新案。居家服務、交通、沐浴車（BA09、BA09a）、居家喘息、居家護理所（專業服務）、日照、日喘（分開算），單位是樂臨的才算。</div>`;
+      <div class="sub" style="margin-top:6px">只算當月新案。居家服務、交通、沐浴車（BA09、BA09a）、居家喘息、居家護理所（專業服務）、日間照顧、日間照顧喘息（分開算），單位是樂臨的才算。</div>`;
   } else if (tab === '樂臨各部門個案統計') {
     body = html`${Q.snap ? html`<table class="grid qtab"><thead><tr><th>地區</th>${D.map(d => html`<th class="num">${d}</th>`)}</tr></thead><tbody><tr><td>總計</td>${D.map(d => html`<td class="num"><b>${Q.snap.v[d] || 0}</b></td>`)}</tr></tbody></table>` : html`<div class="sub">還沒有資料</div>`}
       <div class="sub" style="margin-top:6px">${Q.snap ? (Q.snap.src === '舊檔' ? '數字來自帶入的舊檔。' : Q.snap.mk.endsWith('-12') ? `${yy}年 12 月總表（12/31）` : `還沒到年底，先用 ${rocMonth(Q.snap.mk)} 的總表`) : ''}：總表裡（不含當月結案）有用樂臨各部門的人數。</div>`;
@@ -5090,6 +5097,12 @@ function QuarterView({ db, month, user, refresh, picker }) {
     return html`<${TrendChart} stack title=${title} labels=${us} h=${260} series=${[{ name: '人數', color: Q_ONE, values: us.map(u => tot[u]) }]} />`; };
   const ratio = (title, getO) => { let l = 0, a = 0; for (const o of getO()) { l += +(o || {})['樂臨'] || 0; a += qSum(o); } return html`<${QDonut} title=${title} parts=${[{ name: '樂臨', v: l, color: '#1f8a70' }, { name: '友單位', v: a - l, color: '#d48a1e' }]} />`; };
   const gs = (k, g) => sum(x => x && x[k] ? x[k][g] : 0), hasM = ix.filter(i => Q.rows[i]).length;
+  // 各部門每季人數＋跟上一季比（增減幾人、幾 %）
+  const qGrowth = () => { const qv = (d, qq) => { const ms = [0, 1, 2].map(j => qq * 3 + j); return ms.some(i => Q.rows[i] && Q.rows[i].dept) ? ms.reduce((a, i) => a + ((Q.rows[i] && Q.rows[i].dept && Q.rows[i].dept[d]) || 0), 0) : null; };
+    const lastQ = [3, 2, 1, 0].find(qq => D.some(d => qv(d, qq) !== null)); if (lastQ === undefined) return '';
+    const arrow = (a, b) => { if (a === null || b === null) return html`<span class="sub">—</span>`; const df = b - a; return html`<span class=${df > 0 ? 'gup' : df < 0 ? 'gdn' : 'sub'}>${df > 0 ? '▲' : df < 0 ? '▼' : '－'} ${Math.abs(df)}${a ? `（${df > 0 ? '+' : df < 0 ? '-' : ''}${Math.round(Math.abs(df) / a * 100)}%）` : ''}</span>`; };
+    return html`<div class="tchart"><div class="tch-t">各部門每季人數${lastQ > 0 ? `・第${['一', '二', '三', '四'][lastQ]}季比上一季` : ''}${(() => { const n = [0, 1, 2].filter(j => Q.rows[lastQ * 3 + j] && Q.rows[lastQ * 3 + j].dept).length; return n < 3 ? html`<span class="sub" style="font-weight:400;margin-left:8px">（第${['一', '二', '三', '四'][lastQ]}季目前只有 ${n} 個月，還沒結束）</span>` : ''; })()}</div><div class="tw"><table class="grid qtab qgrow"><thead><tr><th>部門</th>${['第一季', '第二季', '第三季', '第四季'].map(t => html`<th class="num">${t}</th>`)}${lastQ > 0 && html`<th class="num">比上一季</th>`}</tr></thead>
+      <tbody>${D.map(d => html`<tr><td>${d}</td>${[0, 1, 2, 3].map(qq => html`<td class="num">${qv(d, qq) === null ? html`<span class="sub">—</span>` : qv(d, qq)}</td>`)}${lastQ > 0 && html`<td class="num">${arrow(qv(d, lastQ - 1), qv(d, lastQ))}</td>`}</tr>`)}</tbody></table></div></div>`; };
   const homeT = ix.reduce((a, i) => a + qSum(Q.rows[i] && Q.rows[i].home), 0), lelT = ix.reduce((a, i) => a + ((Q.rows[i] && Q.rows[i].home && Q.rows[i].home['樂臨']) || 0), 0);
   const deptT = D.map(d => [d, sum(x => x && x.dept ? x.dept[d] : 0)]).sort((a, b) => b[1] - a[1]);
   const kpi = tab === '新案人數' ? [[`${rng} 新案`, gs('newG', '男') + gs('newG', '女') + ' 人', `男 ${gs('newG', '男')}・女 ${gs('newG', '女')}`], ['每月平均', hasM ? Math.round((gs('newG', '男') + gs('newG', '女')) / hasM) + ' 人' : '—', `預估 ${Q_EST} 人`], ['達成率', hasM ? Math.round((gs('newG', '男') + gs('newG', '女')) / (Q_EST * hasM) * 100) + '%' : '—', `${hasM} 個月`]]
@@ -5104,7 +5117,8 @@ function QuarterView({ db, month, user, refresh, picker }) {
     : tab === '轉介樂臨各部門' ? html`
         <${TrendChart} stack title=${`${rng} 轉介樂臨各部門（合計）`} labels=${D} h=${240} series=${[{ name: '人數', color: Q_ONE, values: D.map(d => sum(x => x && x.dept ? x.dept[d] : 0)) }]} />
         <${TrendChart} stack title=${`${rng} 每月轉介樂臨各部門`} labels=${mL} h=${260} totalName="合計" series=${D.map((d, k) => ({ name: d, color: Q_PAL[k % Q_PAL.length], values: ix.map(i => Q.rows[i] && Q.rows[i].dept ? Q.rows[i].dept[d] || 0 : null) }))} />
-        <${TrendChart} stack title="成長對比（每季）" labels=${['第一季', '第二季', '第三季', '第四季']} h=${240} totalName="合計" series=${D.map((d, k) => ({ name: d, color: Q_PAL[k % Q_PAL.length], values: [0, 1, 2, 3].map(qq => { const ms = [0, 1, 2].map(j => qq * 3 + j); return ms.some(i => Q.rows[i] && Q.rows[i].dept) ? ms.reduce((a, i) => a + ((Q.rows[i] && Q.rows[i].dept && Q.rows[i].dept[d]) || 0), 0) : null; }) }))} />`
+        <${TrendChart} group title="成長對比（各部門每季）" labels=${D.filter(d => Q.rows.some(r => r && r.dept && r.dept[d]))} h=${280} series=${['第一季', '第二季', '第三季', '第四季'].map((nm, qq) => ({ name: nm, color: Q_QCOL[qq], values: D.filter(d => Q.rows.some(r => r && r.dept && r.dept[d])).map(d => { const ms = [0, 1, 2].map(j => qq * 3 + j); return ms.some(i => Q.rows[i] && Q.rows[i].dept) ? ms.reduce((a, i) => a + ((Q.rows[i] && Q.rows[i].dept && Q.rows[i].dept[d]) || 0), 0) : null; }) }))} />
+        ${qGrowth()}`
     : tab === '轉介友單位及樂臨比例' ? html`<div class="tch-two">${ratio(`${rng} 轉介樂臨及友單位比例`, () => ix.map(i => Q.rows[i] && Q.rows[i].home))}${unitBars(`${rng} 轉介居家服務統計`, () => ix.map(i => Q.rows[i] && Q.rows[i].home))}</div>`
     : tab === '歷年轉介友單位及樂臨比例' ? html`<div class="tch-two">${ratio(`${yy} 年 ${rng} 轉介樂臨及友單位比例`, () => ix.map(i => Q.rows[i] && Q.rows[i].home))}${unitBars(`${yy} 年 ${rng} 轉介樂臨及友單位 總計`, () => ix.map(i => Q.rows[i] && Q.rows[i].home))}</div>`
     : null;
