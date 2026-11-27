@@ -395,6 +395,12 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
 .qkpis>div{background:#fff;border:1px solid var(--line,#eadfcf);border-radius:16px;padding:14px 18px;display:flex;flex-direction:column;gap:2px}
 .qkpis span{font-size:13px;color:var(--sub)}.qkpis b{font-size:24px;color:#3d3a35;font-variant-numeric:tabular-nums}.qkpis em{font-style:normal;font-size:12px;color:var(--sub)}
 .qgrow .gup{color:#1f8a70;font-weight:700}.qgrow .gdn{color:#c2504a;font-weight:700}
+.qcl{border-color:#1f8a70}.qcl-h{display:flex;align-items:center;gap:10px;margin-bottom:6px}.qcl tr.click{cursor:pointer}.qcl tr.click:hover td{background:#f4f8f1}
+.qheat{border-collapse:separate;border-spacing:3px;width:100%;font-variant-numeric:tabular-nums}
+.qheat th{font-size:12px;color:var(--sub);font-weight:600;padding:4px 6px;text-align:center;white-space:nowrap}.qheat tbody th{text-align:left;color:#3d3a35}
+.qheat td{text-align:center;padding:8px 4px;border-radius:7px;font-weight:600;min-width:38px;font-size:13px}
+.qheat td.pk{cursor:pointer}.qheat td.pk:hover{outline:2px solid #3d3a35;outline-offset:-2px}.qheat td.na{background:repeating-linear-gradient(45deg,#f6f2ea,#f6f2ea 4px,#fff 4px,#fff 8px)!important}
+.qheat td.tot,.qheat tr.sum td{background:#f3eee5!important;color:#3d3a35!important}
 </style>
 </head>
 <body>
@@ -3196,6 +3202,18 @@ function quarterSnap(mk, db) {
   for (const id of S.latest) { const c = db.cases.get(id); if (!c) continue; const d = qDeptOf(qShortUnits(evOf.get(id), c, db)); for (const k in d) out[k] += d[k]; }
   return out;
 }
+// 點進去看是哪些個案：{ 部門: [{ id, unit 那個部門用的單位全名 }] }；kind＝'snap'（總表在案）或 'new'（當月新案）
+function quarterDeptCases(mk, db, kind) {
+  const S = monthSets(mk, db), out = Object.fromEntries(QDEPTS.map(([n]) => [n, []])), evOf = new Map();
+  for (const e of db.events) if (e.month === mk) evOf.set(e.caseId, e);
+  const ids = kind === 'new' ? [...new Set(S.newEvents.map(e => e.caseId))] : S.latest;
+  for (const id of ids) {
+    const c = db.cases.get(id); if (!c) continue;
+    const e = evOf.get(id), sh = qShortUnits(e, c, db), full = caseUnits(e, c, raw => db.resolveUnit(raw));
+    for (const [n, ks] of QDEPTS) { const k = ks.find(k => isLelin(sh[k])); if (k) out[n].push({ id, unit: full[k] || sh[k], cat: (CAT[k] || {}).label || k }); }
+  }
+  return out;
+}
 // 一整年：11 月以前有帶入舊檔的月份用舊檔；性別人數跟「5.數據統計」同一份（新案＝新案執行效益，個案總數＝含結案）
 function quarterYear(year, db, qh, ah, upTo) {
   const months = Array.from({ length: 12 }, (_, i) => `${year}-${pad(i + 1)}`), A = annualBook(year, db, ah, upTo).data, H = (qh && qh.m) || {};
@@ -4741,7 +4759,7 @@ function BillRunView({ db, month, user, refresh, picker }) {
 // 每月跑完核銷，把核銷系統的最終清冊匯進來 → 算 AA01、AA02-400、AA02-360 人次和金額；匯出跟「115年每月核銷」工作表一樣（含折線圖）
 // 季報用的小圖（SVG）：line＝折線（看趨勢），stack＝堆疊長條（各類人數＋上面標總數）；一個 y 軸，滑過看當月數字
 // group＝並排長條（同一類別各期並排，看成長）
-function TrendChart({ labels, series, fmt = v => v, title, h = 240, stack: stack0 = false, group = false, totalName = '總人數' }) {
+function TrendChart({ labels, series, fmt = v => v, title, h = 240, stack: stack0 = false, group = false, totalName = '總人數', onPick, pickHint }) {
   const stack = stack0 || group;
   const [hi, setHi] = useState(-1), box = useRef(null), [W, setW] = useState(760);
   const all = series.flatMap(s => s.values.filter(v => v !== null && v !== undefined)), has = all.length > 0, gid = useMemo(() => 'g' + Math.random().toString(36).slice(2, 8), []);
@@ -4774,7 +4792,7 @@ function TrendChart({ labels, series, fmt = v => v, title, h = 240, stack: stack
   const tipX = hi >= 0 ? x(hi) / W * 100 : 0;
   return html`<div class="tchart">${title && html`<div class="tch-t">${title}</div>`}
     <div class="tch-leg">${(series.length > 1 || !stack) && series.map(s => html`<span><i style=${`background:${s.color};height:${stack ? 10 : s.width || 2}px;${stack ? 'width:10px;border-radius:2px' : ''}`}></i>${s.name}</span>`)}${stack && !group && series.length > 1 && html`<span class="sub">長條上方數字＝${totalName}</span>`}</div>
-    <div class="tch-box" ref=${box} onMouseLeave=${() => setHi(-1)}>
+    ${onPick && html`<div class="sub" style="font-size:12px;margin:-2px 0 4px">${pickHint || '點長條可以看是哪些個案'}</div>`}<div class="tch-box" ref=${box} onMouseLeave=${() => setHi(-1)}>
       <svg viewBox=${`0 0 ${W} ${h}`} width=${W} height=${h} style="display:block;max-width:100%" role="img" aria-label=${title || '圖表'}>
         ${ticks.map(t => html`<g><line x1=${P.l} x2=${W - P.r} y1=${y(t)} y2=${y(t)} stroke=${t === 0 ? '#d9cfbf' : '#efe8dc'} stroke-width="1" stroke-dasharray=${t === 0 ? '' : '3 4'} /><text x=${P.l - 8} y=${y(t) + 4} text-anchor="end" class="tch-ax">${fmt(t)}</text></g>`)}
         ${labels.map((l, i) => html`<text x=${x(i)} y=${h - 8} text-anchor="middle" class="tch-ax">${l}</text>`)}
@@ -4790,7 +4808,9 @@ function TrendChart({ labels, series, fmt = v => v, title, h = 240, stack: stack
             ${series.map(s => s.values.map((v, i) => v === null || v === undefined ? null : html`<circle cx=${x(i)} cy=${y(v)} r=${hi === i ? 5.5 : 4} fill="#fff" stroke=${s.color} stroke-width="2.5" />`))}
             ${series.length === 1 && !narrow && series[0].values.map((v, i) => v === null || v === undefined ? null : html`<text x=${x(i)} y=${y(v) - 10} text-anchor="middle" class="tch-tot">${fmt(v)}</text>`)}
             ${ends.map(e => html`<text x=${x(e.i) + 10} y=${e.yy + 4} class="tch-end">${series[e.k].name} ${fmt(series[e.k].values[e.i])}</text>`)}`}
-        ${labels.map((_, i) => html`<rect x=${P.l + slot * i} y=${P.t} width=${slot} height=${ih} fill="transparent" onMouseEnter=${() => setHi(i)} onClick=${() => setHi(i)} />`)}
+        ${labels.map((_, i) => html`<rect x=${P.l + slot * i} y=${P.t - 18} width=${slot} height=${ih + 18} fill="transparent" style=${onPick ? 'cursor:pointer' : ''} onMouseEnter=${() => setHi(i)} onClick=${e => { setHi(i); if (!onPick) return;
+          if (group) { const k = series.length, gw = Math.min(slot * 0.82, k * 30), bw2 = gw / k, sv = e.currentTarget.ownerSVGElement.getBoundingClientRect(), px = (e.clientX - sv.left) * (W / sv.width), j = Math.floor((px - (x(i) - gw / 2)) / bw2); onPick(i, j >= 0 && j < k ? j : null); }
+          else onPick(i); }} />`)}
       </svg>
       ${hi >= 0 && html`<div class="tch-tip" style=${`left:${tipX}%;${tipX > 60 ? 'transform:translateX(calc(-100% - 12px))' : 'transform:translateX(12px)'}`}><b>${labels[hi]}</b>
         ${series.map(s => html`<div><i style=${`background:${s.color}`}></i>${s.name}<span>${s.values[hi] === null || s.values[hi] === undefined ? '—' : fmt(s.values[hi])}</span></div>`)}
@@ -4896,9 +4916,9 @@ function BillYearView({ db, month, user, refresh, picker, yearIn, embedded }) {
     </div>
     <div class="tch-grid" style="margin-top:14px">
       <${TrendChart} title=${`${yy}年每月核銷人數`} stack labels=${ms.map(k => +k + '月')} h=${280} series=${[
-        { name: 'AA01', color: '#1f8a70', values: ms.map(k => data[k] ? data[k].a1 || 0 : null) },
-        { name: 'AA02-400', color: '#d48a1e', values: ms.map(k => data[k] ? data[k].a400 || 0 : null) },
-        { name: 'AA02-360', color: '#c2504a', values: ms.map(k => data[k] ? data[k].a360 || 0 : null) }]} />
+        { name: 'AA01', color: '#2f6f5e', values: ms.map(k => data[k] ? data[k].a1 || 0 : null) },
+        { name: 'AA02-400', color: '#9cc7b4', values: ms.map(k => data[k] ? data[k].a400 || 0 : null) },
+        { name: 'AA02-360', color: '#d9a75f', values: ms.map(k => data[k] ? data[k].a360 || 0 : null) }]} />
       <${TrendChart} title=${`${yy}年每月核銷金額`} labels=${ms.map(k => +k + '月')} h=${220} fmt=${v => money(v)} series=${[{ name: '金額', color: '#1f8a70', width: 2.5, values: ms.map(k => data[k] ? billAmtOf(data[k]) : null) }]} />
     </div>
   </div>`;
@@ -4915,7 +4935,7 @@ function quarterCalc(year, db) {
   const Y = quarterYear(year, db, db.kv['quarter:' + year], (db.kv['stat:annual'] || {}).months || {}, upTo);
   // 歷年：以前的從舊檔，115 年起每年用系統算的
   const H = db.kv.quarterHist || { units: [], rows: {} }, hist = [];
-  for (const ym of Object.keys(H.rows || {}).sort()) if (ym < `${BILL_YEAR_FROM}-01`) hist.push([ym, qMerge(H.rows[ym])]);
+     // 歷年只從 115 年開始，以前的不顯示
   for (let y = BILL_YEAR_FROM; y < year; y++) { const Z = quarterYear(y, db, db.kv['quarter:' + y], (db.kv['stat:annual'] || {}).months || {}, `${y}-12`); Z.months.forEach((mk, i) => hist.push([mk, (Z.rows[i] && Z.rows[i].home) || qMerge((H.rows || {})[mk]) || {}])); }
   const units = [...Y.units]; for (const [, o] of hist) for (const u of Object.keys(o || {})) if (!units.includes(u)) units.push(u);
   const lastM = Y.rows.reduce((a, r, i) => r ? i + 1 : a, 0);
@@ -5031,10 +5051,28 @@ function QDonut({ title, parts }) {
       <div class="dn-leg">${parts.map(p => html`<div><i style=${`background:${p.color}`}></i>${p.name}<b>${p.v}</b><span>${(p.v / tot * 100).toFixed(1)}%</span></div>`)}</div></div>`
       : html`<div class="sub" style="padding:12px 0">還沒有資料</div>`}</div>`;
 }
+// 點圖表後列出個案（可以點名字打開個案資料）
+function QCaseList({ db, title, items, note, onClose, openCase }) {
+  return html`<div class="tchart qcl"><div class="qcl-h"><b>${title}</b><span class="sub">${items.length} 人</span><span class="grow"></span><button class="btn light sm" onClick=${onClose}>關閉</button></div>
+    ${note && html`<div class="sub" style="margin:4px 0 8px">${note}</div>`}
+    ${items.length ? html`<div class="tw" style="max-height:360px"><table class="grid qtab"><thead><tr><th>#</th><th>個案編號</th><th>姓名</th><th>月份</th><th>使用的單位</th></tr></thead><tbody>
+      ${items.map((x, n) => { const c = db.cases.get(x.id) || {}; return html`<tr class="click" onClick=${() => openCase(x.id)}><td>${n + 1}</td><td>${c.caseNo || ''}</td><td><b>${c.name || ''}</b></td><td>${x.mk ? `${+x.mk.slice(5)}月` : ''}</td><td>${x.cat ? html`<span class="sub">${x.cat}：</span>` : ''}${x.unit || ''}</td></tr>`; })}</tbody></table></div>`
+      : html`<div class="sub" style="padding:8px 0">沒有個案</div>`}</div>`;
+}
+// 熱度表：列＝部門、欄＝月份，數字越多顏色越深；點格子看個案
+function QHeat({ title, rows, cols, val, onPick, hint }) {
+  const max = Math.max(1, ...rows.flatMap(r => cols.map(c => +val(r, c) || 0)));
+  const bg = v => { if (!v) return '#faf7f1'; const t = 0.18 + 0.82 * (v / max); return `rgba(31,138,112,${t.toFixed(2)})`; };
+  return html`<div class="tchart">${title && html`<div class="tch-t">${title}</div>`}${hint && html`<div class="sub" style="font-size:12px;margin:-2px 0 6px">${hint}</div>`}
+    <div class="tw"><table class="qheat"><thead><tr><th></th>${cols.map(c => html`<th>${c.label}</th>`)}<th>合計</th></tr></thead><tbody>
+      ${rows.map(r => { const tot = cols.reduce((a, c) => a + (+val(r, c) || 0), 0); return html`<tr><th>${r}</th>${cols.map(c => { const v = val(r, c); return html`<td style=${`background:${bg(+v || 0)};color:${(+v || 0) / max > 0.55 ? '#fff' : '#3d3a35'}`} class=${v === null || v === undefined ? 'na' : onPick && +v ? 'pk' : ''} title=${`${r} ${c.label}：${v ?? '—'}`} onClick=${() => onPick && +v && onPick(r, c)}>${v === null || v === undefined ? '' : v || ''}</td>`; })}<td class="tot">${tot}</td></tr>`; })}
+      <tr class="sum"><th>合計</th>${cols.map(c => { const has = rows.some(r => val(r, c) !== null && val(r, c) !== undefined); return html`<td>${has ? rows.reduce((a, r) => a + (+val(r, c) || 0), 0) : ''}</td>`; })}<td class="tot">${rows.reduce((a, r) => a + cols.reduce((b, c) => b + (+val(r, c) || 0), 0), 0)}</td></tr></tbody></table></div></div>`;
+}
 function QuarterView({ db, month, user, refresh, picker }) {
   const [year, setYear] = useState(Math.max(BILL_YEAR_FROM, +month.slice(0, 4))), yy = year - 1911;
   const [tab, setTab] = useState(() => { try { return localStorage.getItem('qTab') || Q_TABS[0]; } catch { return Q_TABS[0]; } });
-  const pickTab = t => { setTab(t); try { localStorage.setItem('qTab', t); } catch { } };
+  const pickTab = t => { setTab(t); setPick(null); try { localStorage.setItem('qTab', t); } catch { } };
+  const [pick, setPick] = useState(null), [edit, setEdit] = useState(null);
   const Q = useMemo(() => quarterCalc(year, db), [db, year]);
   const [rg, setRg] = useState(null), m1 = rg ? rg[0] : 1, m2 = rg ? rg[1] : Math.max(1, Q.lastM || 12), [busy, setBusy] = useState(false);
   const importOld = async file => {
@@ -5083,7 +5121,7 @@ function QuarterView({ db, month, user, refresh, picker }) {
       <div class="tw"><table class="grid qtab"><thead><tr><th>月份</th>${U.map(u => html`<th class="num">${u}</th>`)}</tr></thead><tbody>${qRows((i, u) => Q.rows[i] && Q.rows[i].home ? Q.rows[i].home[u] || '' : '', U)}</tbody></table></div>`;
   } else if (tab === '歷年轉介友單位及樂臨比例') {
     const U = Q.units, all = [...Q.hist.map(([ym, o]) => [ym, o, '']), ...Q.rows.map((x, i) => [`${year}-${pad(i + 1)}`, x && x.home, x ? x.src : ''])];
-    body = html`<div class="sub" style="margin-bottom:6px">${Q.hist.length ? `${rocMonth(Q.hist[0][0])} 起` : '115 年以前的月份要先按「帶入舊檔」'}；總計只加 ${yy} 年。</div>
+    body = html`<div class="sub" style="margin-bottom:6px">從 115 年起；總計只加 ${yy} 年。</div>
       <div class="tw" style="max-height:520px"><table class="grid qtab"><thead><tr><th>月份</th>${U.map(u => html`<th class="num">${u}</th>`)}</tr></thead><tbody>
       ${all.map(([ym, o]) => html`<tr class=${ym.startsWith(String(year)) ? 'cur' : ''}><td>${+ym.slice(0, 4) - 1911}/${ym.slice(5)}</td>${U.map(u => html`<td class="num">${(o || {})[u] || ''}</td>`)}</tr>`)}
       <tr class="tot"><td>${yy}年總計</td>${U.map(u => html`<td class="num"><b>${Q.rows.reduce((a, x) => a + ((x && x.home && x.home[u]) || 0), 0)}</b></td>`)}</tr></tbody></table></div>`;
@@ -5097,6 +5135,11 @@ function QuarterView({ db, month, user, refresh, picker }) {
     return html`<${TrendChart} stack title=${title} labels=${us} h=${260} series=${[{ name: '人數', color: Q_ONE, values: us.map(u => tot[u]) }]} />`; };
   const ratio = (title, getO) => { let l = 0, a = 0; for (const o of getO()) { l += +(o || {})['樂臨'] || 0; a += qSum(o); } return html`<${QDonut} title=${title} parts=${[{ name: '樂臨', v: l, color: '#1f8a70' }, { name: '友單位', v: a - l, color: '#d48a1e' }]} />`; };
   const gs = (k, g) => sum(x => x && x[k] ? x[k][g] : 0), hasM = ix.filter(i => Q.rows[i]).length;
+  // 點圖表：列出個案。新案用當月新案；在案用那個月總表。10 月以前是舊檔帶入的數字，沒有個案名單
+  const newCases = (d, months) => { const items = [], old = []; for (const m of months) { const mk = `${year}-${pad(m)}`; if (mk < Q_SYSTEM_FROM) { if (Q.rows[m - 1] && Q.rows[m - 1].dept && Q.rows[m - 1].dept[d]) old.push(m); continue; } if (!Q.rows[m - 1]) continue; for (const x of quarterDeptCases(mk, db, 'new')[d] || []) items.push({ ...x, mk }); }
+    return { items, note: old.length ? `${old.map(m => m + '月').join('、')}是舊檔帶入的數字，系統裡沒有那幾個月的個案名單（10 月起才有）。` : '' }; };
+  const showNew = (d, months, label) => { const r = newCases(d, months); setPick({ title: `${label} 轉介樂臨「${d}」的新案`, ...r }); };
+  const showSnap = d => { if (!Q.snap) return; if (Q.snap.src !== '系統') return setPick({ title: `樂臨「${d}」`, items: [], note: '這是舊檔帶入的數字，沒有個案名單。' }); setPick({ title: `${rocMonth(Q.snap.mk)} 總表在案、有用樂臨「${d}」的個案`, items: quarterDeptCases(Q.snap.mk, db, 'snap')[d] || [], note: '「使用的單位」是個案資料上填的那個服務的單位，可以看是不是真的是樂臨。' }); };
   // 各部門每季人數＋跟上一季比（增減幾人、幾 %）
   const qGrowth = () => { const qv = (d, qq) => { const ms = [0, 1, 2].map(j => qq * 3 + j); return ms.some(i => Q.rows[i] && Q.rows[i].dept) ? ms.reduce((a, i) => a + ((Q.rows[i] && Q.rows[i].dept && Q.rows[i].dept[d]) || 0), 0) : null; };
     const lastQ = [3, 2, 1, 0].find(qq => D.some(d => qv(d, qq) !== null)); if (lastQ === undefined) return '';
@@ -5106,18 +5149,19 @@ function QuarterView({ db, month, user, refresh, picker }) {
   const homeT = ix.reduce((a, i) => a + qSum(Q.rows[i] && Q.rows[i].home), 0), lelT = ix.reduce((a, i) => a + ((Q.rows[i] && Q.rows[i].home && Q.rows[i].home['樂臨']) || 0), 0);
   const deptT = D.map(d => [d, sum(x => x && x.dept ? x.dept[d] : 0)]).sort((a, b) => b[1] - a[1]);
   const kpi = tab === '新案人數' ? [[`${rng} 新案`, gs('newG', '男') + gs('newG', '女') + ' 人', `男 ${gs('newG', '男')}・女 ${gs('newG', '女')}`], ['每月平均', hasM ? Math.round((gs('newG', '男') + gs('newG', '女')) / hasM) + ' 人' : '—', `預估 ${Q_EST} 人`], ['達成率', hasM ? Math.round((gs('newG', '男') + gs('newG', '女')) / (Q_EST * hasM) * 100) + '%' : '—', `${hasM} 個月`]]
-    : tab === '個案總數' ? (() => { const last = [...ix].reverse().find(i => Q.rows[i] && Q.rows[i].totG); const g = last !== undefined ? Q.rows[last].totG : null; return [[last !== undefined ? `${last + 1}月 在案` : '在案', g ? gT(g) + ' 人' : '—', g ? `男 ${g.男}・女 ${g.女}` : ''], ['女性比例', g && gT(g) ? Math.round(g.女 / gT(g) * 100) + '%' : '—']]; })()
+    : tab === '個案總數' ? (() => { const has = ix.filter(i => Q.rows[i] && Q.rows[i].totG), last = has[has.length - 1], prev = has[has.length - 2], g = last !== undefined ? Q.rows[last].totG : null, d = g && prev !== undefined ? gT(g) - gT(Q.rows[prev].totG) : null, avg = has.length ? Math.round(has.reduce((a, i) => a + gT(Q.rows[i].totG), 0) / has.length) : null;
+        return [[last !== undefined ? `${last + 1}月 在案` : '在案', g ? gT(g) + ' 人' : '—', g ? `男 ${g.男}・女 ${g.女}` : ''], ['比上個月', d === null ? '—' : (d > 0 ? '+' : '') + d + ' 人', prev !== undefined ? `${prev + 1}月 ${gT(Q.rows[prev].totG)} 人` : ''], [`${rng} 平均`, avg === null ? '—' : avg + ' 人', `最多 ${has.length ? Math.max(...has.map(i => gT(Q.rows[i].totG))) : 0}・最少 ${has.length ? Math.min(...has.map(i => gT(Q.rows[i].totG))) : 0}`]]; })()
     : tab === '轉介樂臨各部門' ? [[`${rng} 轉介樂臨`, D.reduce((a, d) => a + sum(x => x && x.dept ? x.dept[d] : 0), 0) + ' 人次'], ['最多', deptT[0] && deptT[0][1] ? deptT[0][0] : '—', deptT[0] && deptT[0][1] ? deptT[0][1] + ' 人' : ''], ['第二', deptT[1] && deptT[1][1] ? deptT[1][0] : '—', deptT[1] && deptT[1][1] ? deptT[1][1] + ' 人' : '']]
     : tab === '樂臨各部門個案統計' && Q.snap ? [['用樂臨服務', D.reduce((a, d) => a + (Q.snap.v[d] || 0), 0) + ' 人次', Q.snap.mk ? rocMonth(Q.snap.mk) : '']]
     : /轉介友單位/.test(tab) ? [[`${rng} 轉介居家`, homeT + ' 人'], ['樂臨', lelT + ' 人', homeT ? (lelT / homeT * 100).toFixed(1) + '%' : ''], ['友單位', homeT - lelT + ' 人', homeT ? ((homeT - lelT) / homeT * 100).toFixed(1) + '%' : '']]
     : null;
   const charts0 = tab === '新案人數' ? sexStack('newG', `${yy}年 ${rng} 新案人數`)
     : tab === '個案總數' ? sexStack('totG', `${yy}年 ${rng} 個案總人數`)
-    : tab === '樂臨各部門個案統計' ? (Q.snap && html`<${TrendChart} stack title="樂臨各部門 個案總統計" labels=${D} h=${260} series=${[{ name: '人數', color: Q_ONE, values: D.map(d => Q.snap.v[d] || 0) }]} />`)
+    : tab === '樂臨各部門個案統計' ? (Q.snap && html`<${TrendChart} stack title="樂臨各部門 個案總統計" labels=${D} h=${260} onPick=${i => showSnap(D[i])} series=${[{ name: '人數', color: Q_ONE, values: D.map(d => Q.snap.v[d] || 0) }]} />`)
     : tab === '轉介樂臨各部門' ? html`
-        <${TrendChart} stack title=${`${rng} 轉介樂臨各部門（合計）`} labels=${D} h=${240} series=${[{ name: '人數', color: Q_ONE, values: D.map(d => sum(x => x && x.dept ? x.dept[d] : 0)) }]} />
-        <${TrendChart} stack title=${`${rng} 每月轉介樂臨各部門`} labels=${mL} h=${260} totalName="合計" series=${D.map((d, k) => ({ name: d, color: Q_PAL[k % Q_PAL.length], values: ix.map(i => Q.rows[i] && Q.rows[i].dept ? Q.rows[i].dept[d] || 0 : null) }))} />
-        <${TrendChart} group title="成長對比（各部門每季）" labels=${D.filter(d => Q.rows.some(r => r && r.dept && r.dept[d]))} h=${280} series=${['第一季', '第二季', '第三季', '第四季'].map((nm, qq) => ({ name: nm, color: Q_QCOL[qq], values: D.filter(d => Q.rows.some(r => r && r.dept && r.dept[d])).map(d => { const ms = [0, 1, 2].map(j => qq * 3 + j); return ms.some(i => Q.rows[i] && Q.rows[i].dept) ? ms.reduce((a, i) => a + ((Q.rows[i] && Q.rows[i].dept && Q.rows[i].dept[d]) || 0), 0) : null; }) }))} />
+        <${TrendChart} stack title=${`${rng} 轉介樂臨各部門（合計）`} labels=${D} h=${240} onPick=${i => showNew(D[i], ix.map(i => i + 1), rng)} series=${[{ name: '人數', color: Q_ONE, values: D.map(d => sum(x => x && x.dept ? x.dept[d] : 0)) }]} />
+        <${QHeat} title=${`${rng} 每月轉介樂臨各部門`} hint="顏色越深人數越多；點有數字的格子可以看是哪些個案" rows=${D} cols=${ix.map(i => ({ label: `${i + 1}月`, i }))} val=${(d, c) => Q.rows[c.i] && Q.rows[c.i].dept ? Q.rows[c.i].dept[d] || 0 : null} onPick=${(d, c) => showNew(d, [c.i + 1], `${c.i + 1}月`)} />
+        <${TrendChart} group title="成長對比（各部門每季）" pickHint="點某一季的長條可以看是哪些個案" onPick=${(i, j) => { const dl = D.filter(d => Q.rows.some(r => r && r.dept && r.dept[d])); if (j === null) return; showNew(dl[i], [j * 3 + 1, j * 3 + 2, j * 3 + 3], ['第一季', '第二季', '第三季', '第四季'][j]); }} labels=${D.filter(d => Q.rows.some(r => r && r.dept && r.dept[d]))} h=${280} series=${['第一季', '第二季', '第三季', '第四季'].map((nm, qq) => ({ name: nm, color: Q_QCOL[qq], values: D.filter(d => Q.rows.some(r => r && r.dept && r.dept[d])).map(d => { const ms = [0, 1, 2].map(j => qq * 3 + j); return ms.some(i => Q.rows[i] && Q.rows[i].dept) ? ms.reduce((a, i) => a + ((Q.rows[i] && Q.rows[i].dept && Q.rows[i].dept[d]) || 0), 0) : null; }) }))} />
         ${qGrowth()}`
     : tab === '轉介友單位及樂臨比例' ? html`<div class="tch-two">${ratio(`${rng} 轉介樂臨及友單位比例`, () => ix.map(i => Q.rows[i] && Q.rows[i].home))}${unitBars(`${rng} 轉介居家服務統計`, () => ix.map(i => Q.rows[i] && Q.rows[i].home))}</div>`
     : tab === '歷年轉介友單位及樂臨比例' ? html`<div class="tch-two">${ratio(`${yy} 年 ${rng} 轉介樂臨及友單位比例`, () => ix.map(i => Q.rows[i] && Q.rows[i].home))}${unitBars(`${yy} 年 ${rng} 轉介樂臨及友單位 總計`, () => ix.map(i => Q.rows[i] && Q.rows[i].home))}</div>`
@@ -5134,7 +5178,9 @@ function QuarterView({ db, month, user, refresh, picker }) {
       <button class="btn" disabled=${busy} onClick=${doExport}>匯出 ${m1}～${m2}月</button></div>
     <div class="trigbar qtabs">${Q_TABS.map(t => html`<button class=${tab === t ? 'on' : ''} onClick=${() => pickTab(t)}>${t === '每月核銷' ? `${yy}年每月核銷` : t}</button>`)}</div>
     ${tab === '每月核銷' ? body : html`<div class="card">${body}</div>`}
+    ${pick && html`<div style="margin-top:14px"><${QCaseList} db=${db} ...${pick} onClose=${() => setPick(null)} openCase=${id => setEdit(id)} /></div>`}
     ${charts && html`<div class="tch-grid" style="margin-top:14px">${charts}</div>`}
+    ${edit && html`<${CaseEditor} key=${'q' + edit} db=${db} month=${month} user=${user} id=${edit} onClose=${() => setEdit(null)} refresh=${refresh} />`}
   </div>`;
 }
 // ================= 儀表板 =================
