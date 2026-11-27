@@ -414,7 +414,7 @@ textarea.inp.codes{width:100%;resize:vertical;field-sizing:content;min-height:38
 </script>
 <script type="module">
 import { ConvexClient, ConvexHttpClient } from "https://esm.sh/convex@1.46.0/browser";
-import { html, render, useState, useEffect, useMemo, useRef } from "https://unpkg.com/htm@3.1.1/preact/standalone.module.js";
+import { html, render, useState, useEffect, useMemo, useRef, Component } from "https://unpkg.com/htm@3.1.1/preact/standalone.module.js";
 import * as XLSX from "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
 
 // ★ 部署後把這裡換成新 Convex 專案的網址（eval-backend 資料夾 .env.local 裡的 CONVEX_URL）
@@ -6396,18 +6396,32 @@ function App() {
       <button class="btn light" disabled=${loading} onClick=${refresh}>${loading ? '同步中…' : '重新整理'}</button>
       <span class="sub uname">${user}</span><button class="btn sm gray" onClick=${logout} title="登出並清除這台電腦的暫存資料">登出</button>
     </div>
-    ${!db ? html`<div class="empty">第一次開啟，正在下載資料…</div>`
+    <${ErrBox} key=${tab} onHome=${() => setTab('summary')}>${!db ? html`<div class="empty">第一次開啟，正在下載資料…</div>`
       : tab === 'summary' ? html`<${SummaryView} db=${db} month=${month} user=${user} refresh=${refresh} />`
       : tab === 'dash' ? html`<${DashboardView} db=${db} month=${month} user=${user} refresh=${refresh} />`
       : tab === 'report' ? html`<${ReportView} db=${db} month=${month} user=${user} refresh=${refresh} />`
       : tab === 'stats' ? html`<${StatsView} db=${db} month=${month} />`
       : tab === 'import' ? html`<${ImportView} db=${db} month=${month} user=${user} refresh=${refresh} />`
       : tab === 'region' ? html`<${RegionView} db=${db} month=${month} user=${user} refresh=${refresh} />`
-      : html`<div class="page"><${ManagersCard} db=${db} user=${user} refresh=${refresh} /><${ContactNormCard} db=${db} user=${user} refresh=${refresh} /><${HolidaysCard} db=${db} user=${user} refresh=${refresh} /><${UnitsCard} db=${db} user=${user} refresh=${refresh} /></div>`}
+      : html`<div class="page"><${ManagersCard} db=${db} user=${user} refresh=${refresh} /><${ContactNormCard} db=${db} user=${user} refresh=${refresh} /><${HolidaysCard} db=${db} user=${user} refresh=${refresh} /><${UnitsCard} db=${db} user=${user} refresh=${refresh} /></div>`}</${ErrBox}>
     ${db && tab !== 'summary' && readDraft() && html`<div class="toast" style="background:var(--org,#c47a1c);cursor:pointer;bottom:90px" onClick=${() => setTab('summary')}>「${readDraft().name}」還有資料沒儲存，點這裡回去繼續填</div>`}
-    ${db && html`<${FloatStats} db=${db} month=${month} />`}
+    ${db && html`<${ErrBox} quiet><${FloatStats} db=${db} month=${month} /></${ErrBox}>`}
     ${toastMsg && html`<div class="toast" style=${'background:' + (toastMsg.err ? 'var(--red)' : 'var(--green)')}>${toastMsg.msg}</div>`}
   </div>`;
+}
+// 畫面出錯時不要整頁當掉：顯示錯誤訊息，可以回總表（報表停在出錯的那一頁也會一併清掉）
+class ErrBox extends Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  componentDidCatch(err) { console.error(err); this.setState({ err }); }
+  render() {
+    const { err } = this.state;
+    if (!err) return this.props.children;
+    if (this.props.quiet) return null;
+    const reset = () => { try { localStorage.removeItem('rptKey'); localStorage.removeItem('qTab'); } catch { } this.setState({ err: null }); this.props.onHome && this.props.onHome(); };
+    return html`<div class="page"><div class="card" style="border-color:var(--red)"><b style="color:var(--red)">這個畫面出錯了</b>
+      <div class="sub" style="margin:8px 0">請把下面這段截圖給我：</div><pre style="white-space:pre-wrap;font-size:12px;background:#fff6f4;padding:10px;border-radius:8px">${String(err && (err.stack || err.message) || err).slice(0, 1200)}</pre>
+      <button class="btn" onClick=${reset}>回到總表</button></div></div>`;
+  }
 }
 // 方向鍵換格：在個案視窗（或其他表單）裡，↑↓ 跳到上／下一格，←→ 在游標已經在最前／最後時跳到左／右一格
 // （文字還在中間時 ←→ 照常移動游標；下拉選單用 ↑↓ 換格，要換選項請用滑鼠或 Alt+↓ 打開）
