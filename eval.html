@@ -2949,7 +2949,7 @@ function monthTimeliness(mk, db) {
       src = '系統';
       for (const r of rep.rows) {
         if (skipB(col, r)) continue;
-        const v = col.v(r); if (v === null || v === undefined || v === '') continue;
+        const v = col.v ? col.v(r) : editVal(col, r); if (v === null || v === undefined || v === '') continue;   // 可填欄位（例如 AA01 月數）沒有 v
         if (M.k === 'aa01') { n++; if (!r.k.over) ok++; continue; }
         if (typeof v !== 'number' || v < 0) continue;
         n++; if (v <= M.max) ok++;
@@ -4299,7 +4299,7 @@ function EvalReport({ db, month, user, refresh, rkey: key, picker }) {
         // 手機：一人一張卡，三個時效天數做成小方塊；點卡片展開，所有欄位直接在卡片裡填
         return html`<div key=${r.caseId} class=${'rcard' + (isOpen ? ' open' : '') + (st.some(x => x[1] === 't-warn') ? ' warn' : '')}>
           <div class="rc-h" onClick=${() => setOpen(isOpen ? null : r.caseId)}><span class="no">${r.i}</span><b>${r.c.name}</b><span class="sub">CMS ${cellText(colBy('CMS'), r)}</span><span class="grow"></span><span class="ar">${isOpen ? '▴' : '▾'}</span></div>
-          <div class="rc-m" style=${`grid-template-columns:repeat(${Math.max(1, CARD_COLS.length)},1fr)`} onClick=${() => setOpen(isOpen ? null : r.caseId)}>${CARD_COLS.map(h => { const c = colBy(h), v = c.v(r), msg = c.bad ? c.bad(r) : '', nb = skipB(c, r);
+          <div class="rc-m" style=${`grid-template-columns:repeat(${Math.max(1, CARD_COLS.length)},1fr)`} onClick=${() => setOpen(isOpen ? null : r.caseId)}>${CARD_COLS.map(h => { const c = colBy(h), v = c.v ? c.v(r) : editVal(c, r), msg = c.bad ? c.bad(r) : '', nb = skipB(c, r);
             return html`<div class=${'met' + (msg ? ' bad' : '') + (nb ? ' na' : '')}><span>${h.replace(/\((工作天|日曆天)\)/, '').replace('3天內完成率', '').replace('個管', '').replace('平均天數', '')}</span><b>${nb ? nb[0] : v === null || v === undefined || v === '' ? '—' : v}${nb || v === null || v === undefined || v === '' ? '' : html`<small>天</small>`}</b></div>`; })}</div>
           <div class="rc-s">${st.length ? st.map(([t, cls]) => html`<span class=${'tag ' + cls}>${t}</span>`) : html`<span class="tag t-new">準時</span>`}</div>
           ${isOpen && html`<div class="rc-d">${detailGroups.map(([g, cols]) => html`<div class="rc-g"><div class="dsh">${g}</div>${cols.map(c => html`<div class="rc-f" key=${r.caseId + c.h}><span class="lb">${colHead(c)}</span><span class="vl">${cellInner(c, r)}</span></div>`)}</div>`)}
