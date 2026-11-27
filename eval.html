@@ -3164,6 +3164,7 @@ const QDEPTS = [['居家服務', ['home']], ['樂臨交通', ['traffic', 'ctraff
 const QUNITS0 = ['樂臨', '康安', '紅十字會', '康泰', '四湖鄉立', '安得寶', '承鑫', '正唯', '庭安', '永安', '伯欣', '星奇', '守護寧', '慈暉', '平安', '臺西', '太舜', '安喬'];
 const isLelin = u => /樂臨/.test(u || '');
 // 季報的居家單位：同一間不同名字的併成一欄（祥賀＝平安、紅十字＝紅十字會）
+const Q_SYSTEM_FROM = '2026-10';   // 季報：10 月起用系統算（10 月舊檔沒統計到）
 const Q_ALIAS = { 祥賀: '平安', 紅十字: '紅十字會' };
 const qUnit = u => Q_ALIAS[u] || u;
 const qMerge = o => { if (!o) return o; const r = {}; for (const [k, v] of Object.entries(o)) { const u = qUnit(k); r[u] = (r[u] || 0) + (+v || 0); } return r; };
@@ -3193,17 +3194,17 @@ function quarterYear(year, db, qh, ah, upTo) {
   const months = Array.from({ length: 12 }, (_, i) => `${year}-${pad(i + 1)}`), A = annualBook(year, db, ah, upTo).data, H = (qh && qh.m) || {};
   const rows = months.map((mk, i) => {
     if (mk > upTo) return null;
-    // 11 月以前（含 10 月）一律用匯入的：季報舊檔，性別人數沒有的話用「5.數據統計」匯入的；11 月起才用系統算
-    const h = H[mk.slice(5)] || {}, old = mk < SYSTEM_FROM, a = A[i], sys = !old && db.events.some(e => e.month === mk) ? quarterMonth(mk, db) : null;
+    // 9 月以前用匯入的：季報舊檔，性別人數沒有的話用「5.數據統計」匯入的；10 月起用系統算
+    const h = H[mk.slice(5)] || {}, old = mk < Q_SYSTEM_FROM, a = A[i], sys = !old && db.events.some(e => e.month === mk) ? quarterMonth(mk, db) : null;
     const aOld = a && a.src === '匯入' ? a : null;
     const r = old
       ? { newG: h.newG || (aOld && aOld.newGender), totG: h.totG || (aOld && aOld.genderWith), dept: h.dept || null, home: qMerge(h.home) || null, src: '匯入' }
-      : { newG: a && a.newGender, totG: a && a.genderWith, dept: sys && sys.dept, home: qMerge(sys && sys.home), src: '系統' };
+      : (() => { const am = sys ? annualMonth(mk, db) : a; return { newG: am && am.newGender, totG: am && am.genderWith, dept: sys && sys.dept, home: qMerge(sys && sys.home), src: '系統' }; })();
     return r.newG || r.totG || r.dept || r.home ? r : null;
   });
   // 各部門個案統計：12 月（還沒到就用最後一個有資料的月份）
   const last = [...months].reverse().find(mk => mk <= upTo && db.events.some(e => e.month === mk));
-  const snap = qh && qh.snap && (!last || last < SYSTEM_FROM) ? { v: qh.snap, mk: `${year}-12`, src: '舊檔' } : last ? { v: quarterSnap(last, db), mk: last, src: '系統' } : null;
+  const snap = qh && qh.snap && (!last || last < Q_SYSTEM_FROM) ? { v: qh.snap, mk: `${year}-12`, src: '舊檔' } : last ? { v: quarterSnap(last, db), mk: last, src: '系統' } : null;
   const units = [...QUNITS0]; for (const r of rows) if (r && r.home) for (const u of Object.keys(r.home)) if (!units.includes(u)) units.push(u);
   return { months, rows, snap, units };
 }
@@ -4917,7 +4918,7 @@ async function exportQuarter(year, m1, m2, db, Q0) {
   const inR = i => i + 1 >= m1 && i + 1 <= m2, rng = `${m1}-${m2} 月`;
   const Q = { ...Q0, rows: Q0.rows.map((r, i) => inR(i) ? r : null), bill: Object.fromEntries(Object.entries(Q0.bill || {}).filter(([k]) => +k >= m1 && +k <= m2)) };
   // 各部門個案統計：看範圍最後一個月的總表（整年＝12/31）
-  { const mk = `${year}-${pad(m2)}`; if (mk >= SYSTEM_FROM && db.events.some(e => e.month === mk)) Q.snap = { v: quarterSnap(mk, db), mk, src: '系統' }; }
+  { const mk = `${year}-${pad(m2)}`; if (mk >= Q_SYSTEM_FROM && db.events.some(e => e.month === mk)) Q.snap = { v: quarterSnap(mk, db), mk, src: '系統' }; }
   const yy = year - 1911, JSZip = (await import(JSZIP_URL)).default, zip = await JSZip.loadAsync(b64bytes(EXPORT_TPL.quarter));
   const S = async n => zip.file(`xl/worksheets/sheet${n}.xml`).async('string'), CH = async n => zip.file(`xl/charts/chart${n}.xml`).async('string');
   const put = (n, x) => zip.file(`xl/worksheets/sheet${n}.xml`, x), putC = (n, x) => zip.file(`xl/charts/chart${n}.xml`, x);
@@ -4995,7 +4996,7 @@ function QuarterView({ db, month, user, refresh, picker }) {
       const bn = w.SheetNames.find(n => n.trim() === `${yy}年每月核銷`);
       if (bn) { const got = parseBillYearSheet(sheets[bn]); if (got && Object.keys(got).length) { const key = 'billFinal:' + year, cur = (db.kv[key] || {}).m || {}, m = { ...cur }; for (const [k, v] of Object.entries(got)) if (!m[k] || m[k].src === '舊檔') m[k] = { ...v, src: '舊檔', at: Date.now() }; await call('m', 'data:saveKv', { key, d: JSON.stringify({ m }), by: user }); done.push('每月核銷'); } }
       if (!done.length) throw new Error('看不出是「季報需要資料」的檔案');
-      await refresh(); toast('已帶入：' + done.join('、') + '（11 月起一律用系統算）');
+      await refresh(); toast('已帶入：' + done.join('、') + '（10 月起一律用系統算）');
     } catch (e) { console.error(e); toast('帶入失敗：' + e.message, true); }
     setBusy(false);
   };
@@ -5039,7 +5040,7 @@ function QuarterView({ db, month, user, refresh, picker }) {
     <div class="bar">${picker}
       <span class="yrsel"><button class="btn light sm" disabled=${year <= BILL_YEAR_FROM} onClick=${() => setYear(Math.max(BILL_YEAR_FROM, year - 1))}>◀</button><b>${yy}年</b><button class="btn light sm" onClick=${() => setYear(year + 1)}>▶</button></span>
       <span class="grow"></span>
-      <label class="btn light" style="cursor:pointer" title="從「季報需要資料」Excel 帶入以前的數字（11 月起一律用系統算）">${busy ? '處理中…' : '帶入舊檔'}<input type="file" accept=".xlsx,.xls" style="display:none" disabled=${busy} onChange=${e => { importOld(e.target.files[0]); e.target.value = ''; }} /></label>
+      <label class="btn light" style="cursor:pointer" title="從「季報需要資料」Excel 帶入以前的數字（10 月起一律用系統算）">${busy ? '處理中…' : '帶入舊檔'}<input type="file" accept=".xlsx,.xls" style="display:none" disabled=${busy} onChange=${e => { importOld(e.target.files[0]); e.target.value = ''; }} /></label>
       <span class="qrange">匯出
         <select class="inp" value=${m1} onChange=${e => { const a = +e.target.value; setRg([a, Math.max(a, m2)]); }}>${Array.from({ length: 12 }, (_, i) => html`<option value=${i + 1}>${i + 1}月</option>`)}</select>到
         <select class="inp" value=${m2} onChange=${e => { const b = +e.target.value; setRg([Math.min(m1, b), b]); }}>${Array.from({ length: 12 }, (_, i) => html`<option value=${i + 1}>${i + 1}月</option>`)}</select></span>
